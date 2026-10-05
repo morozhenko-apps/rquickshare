@@ -152,7 +152,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match event {
-            tauri::RunEvent::Ready { .. } => {
+            tauri::RunEvent::Ready => {
                 trace!("RunEvent::Ready");
                 if get_startminimized(app_handle) {
                     #[cfg(not(target_os = "macos"))]
