@@ -28,43 +28,55 @@ function openDownloadPicker() {
 </script>
 
 <template>
-	<div v-if="vm.settingsOpen" class="absolute z-10 w-full h-full flex justify-center items-center bg-black bg-opacity-25">
-		<div class="bg-white rounded-xl shadow-xl p-4 w-[24rem]">
-			<div class="flex flex-row justify-between items-center">
-				<h3 class="font-medium text-xl">
-					Settings
-				</h3>
-				<div class="btn px-3 rounded-xl active:scale-95 transition duration-150 ease-in-out" @click="emit('close')">
-					Close
+	<div v-if="vm.settingsOpen" class="modal-backdrop absolute inset-0 z-10 flex justify-center items-center p-6">
+		<div class="modal-card rounded-2xl p-5 w-[28rem] max-w-full">
+			<div class="flex flex-row justify-between items-center gap-4">
+				<div>
+					<h2 class="font-semibold text-xl">Settings</h2>
+					<p class="text-sm text-muted mt-1">General behavior and received files.</p>
 				</div>
+				<button type="button" class="btn btn-secondary" @click="emit('close')">
+					Close
+				</button>
 			</div>
-			<div class="py-4 flex flex-col">
-				<div class="form-control hover:bg-gray-500 hover:bg-opacity-10 rounded-xl p-3">
-					<label class="cursor-pointer flex flex-row justify-between items-center" @click="utils.setAutoStart(vm, !vm.autostart)">
-						<span class="label-text">Start on boot</span>
+
+			<div class="pt-5 flex flex-col gap-2">
+				<div class="setting-row rounded-xl p-3">
+					<label class="cursor-pointer flex flex-row justify-between items-center gap-4" @click="utils.setAutoStart(vm, !vm.autostart)">
+						<div>
+							<p class="font-medium">Start on boot</p>
+							<p class="text-xs text-muted mt-1">Launch Quick Share when you sign in.</p>
+						</div>
 						<input type="checkbox" :checked="vm.autostart" class="checkbox focus:outline-none">
 					</label>
 				</div>
-				<div class="form-control hover:bg-gray-500 hover:bg-opacity-10 rounded-xl p-3">
-					<label class="cursor-pointer flex flex-row justify-between items-center" @click="utils.setRealClose(vm, !vm.realclose)">
-						<span class="label-text">Keep running on close</span>
+
+				<div class="setting-row rounded-xl p-3">
+					<label class="cursor-pointer flex flex-row justify-between items-center gap-4" @click="utils.setRealClose(vm, !vm.realclose)">
+						<div>
+							<p class="font-medium">Keep running on close</p>
+							<p class="text-xs text-muted mt-1">Hide the window instead of stopping the service.</p>
+						</div>
 						<input type="checkbox" :checked="!vm.realclose" class="checkbox focus:outline-none">
 					</label>
 				</div>
-				<div class="form-control hover:bg-gray-500 hover:bg-opacity-10 rounded-xl p-3">
-					<label class="cursor-pointer flex flex-row justify-between items-center" @click="utils.setStartMinimized(vm, !vm.startminimized)">
-						<span class="label-text">Start minimized</span>
+
+				<div class="setting-row rounded-xl p-3">
+					<label class="cursor-pointer flex flex-row justify-between items-center gap-4" @click="utils.setStartMinimized(vm, !vm.startminimized)">
+						<div>
+							<p class="font-medium">Start minimized</p>
+							<p class="text-xs text-muted mt-1">Open directly in the background.</p>
+						</div>
 						<input type="checkbox" :checked="vm.startminimized" class="checkbox focus:outline-none">
 					</label>
 				</div>
-				<div class="form-control hover:bg-gray-500 hover:bg-opacity-10 rounded-xl p-3">
-					<label class="cursor-pointer flex flex-col items-start" @click="openDownloadPicker()">
-						<span class="">Change download folder</span>
-						<span class="overflow-hidden whitespace-nowrap text-ellipsis text-xs max-w-80">
-							> {{ vm.downloadPath ?? 'OS User\'s download folder' }}
-						</span>
-					</label>
-				</div>
+
+				<button type="button" class="setting-row rounded-xl p-3 text-left" @click="openDownloadPicker()">
+					<p class="font-medium">Download folder</p>
+					<p class="overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted mt-1">
+						{{ vm.downloadPath ?? 'OS user download folder' }}
+					</p>
+				</button>
 			</div>
 		</div>
 	</div>
