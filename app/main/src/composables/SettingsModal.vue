@@ -100,11 +100,11 @@ async function savePort() {
 					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
 							<p class="font-medium">
-							Start on boot
-						</p>
+								Start on boot
+							</p>
 							<p class="text-xs text-muted mt-1">
-							Launch Quick Share when you sign in.
-						</p>
+								Launch Quick Share when you sign in.
+							</p>
 						</div>
 						<input
 							type="checkbox"
@@ -118,11 +118,11 @@ async function savePort() {
 					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
 							<p class="font-medium">
-							Keep running on close
-						</p>
+								Keep running on close
+							</p>
 							<p class="text-xs text-muted mt-1">
-							Hide the window instead of stopping the service.
-						</p>
+								Hide the window instead of stopping the service.
+							</p>
 						</div>
 						<input
 							type="checkbox"
@@ -136,11 +136,11 @@ async function savePort() {
 					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
 							<p class="font-medium">
-							Start minimized
-						</p>
+								Start minimized
+							</p>
 							<p class="text-xs text-muted mt-1">
-							Open directly in the background.
-						</p>
+								Open directly in the background.
+							</p>
 						</div>
 						<input
 							type="checkbox"
@@ -163,8 +163,8 @@ async function savePort() {
 					<div class="flex items-start justify-between gap-4">
 						<div class="min-w-0 flex-1">
 							<p class="font-medium">
-							Listening port
-						</p>
+								Listening port
+							</p>
 							<p class="text-xs text-muted mt-1">
 								Leave empty for an automatic random port. A fixed port is useful when a firewall is enabled.
 							</p>

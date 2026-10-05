@@ -70,7 +70,9 @@ fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
     let mut components = Path::new(name).components();
     match (components.next(), components.next()) {
         (Some(Component::Normal(_)), None) => Ok(()),
-        _ => Err(anyhow!("Received file name is not a single safe path component")),
+        _ => Err(anyhow!(
+            "Received file name is not a single safe path component"
+        )),
     }
 }
 
@@ -893,11 +895,12 @@ impl InboundRequest {
                         file.size()
                     ));
                 }
-                if self.state.transferred_files.contains_key(&file.payload_id()) {
-                    return Err(anyhow!(
-                        "Duplicate file payload id: {}",
-                        file.payload_id()
-                    ));
+                if self
+                    .state
+                    .transferred_files
+                    .contains_key(&file.payload_id())
+                {
+                    return Err(anyhow!("Duplicate file payload id: {}", file.payload_id()));
                 }
 
                 info!("File name: {}", file_name);

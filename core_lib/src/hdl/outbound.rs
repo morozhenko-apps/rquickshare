@@ -709,8 +709,9 @@ impl OutboundRequest {
                             break candidate;
                         }
                     };
-                    let file_size = i64::try_from(fmetadata.size())
-                        .map_err(|_| anyhow!("File is too large to represent in the protocol: {f}"))?;
+                    let file_size = i64::try_from(fmetadata.size()).map_err(|_| {
+                        anyhow!("File is too large to represent in the protocol: {f}")
+                    })?;
                     let file_name = fname
                         .to_str()
                         .ok_or_else(|| anyhow!("File name is not valid UTF-8: {f}"))?
@@ -954,10 +955,7 @@ impl OutboundRequest {
             | sharing_nearby::connection_response_frame::Status::NotEnoughSpace
             | sharing_nearby::connection_response_frame::Status::UnsupportedAttachmentType
             | sharing_nearby::connection_response_frame::Status::TimedOut => {
-                warn!(
-                    "Cannot process: consent denied: {:?}",
-                    consent_status
-                );
+                warn!("Cannot process: consent denied: {:?}", consent_status);
                 self.update_state(
                     |e| {
                         e.state = State::Disconnected;
@@ -1301,7 +1299,6 @@ impl OutboundRequest {
         tokio::time::sleep(SANITY_DURATION).await;
     }
 }
-
 
 #[cfg(test)]
 mod security_tests {
