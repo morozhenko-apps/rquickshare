@@ -1,11 +1,10 @@
-name: Code quality - linting
+name: Code quality
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "dev" ]
   pull_request:
 
-# cancel ongoing jobs:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -14,28 +13,24 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  style_rust:
+  rust_format:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - directory: ./core_lib
-          - directory: ./app/main/src-tauri
+        directory:
+          - ./core_lib
+          - ./app/main/src-tauri
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
-      - run: |
-          cd ${{ matrix.directory }}
-          cargo fmt --all --check
+      - name: Check Rust formatting
+        working-directory: ${{ matrix.directory }}
+        run: cargo fmt --all --check
 
-  style_tauri:
+  frontend_quality:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - directory: ./app/main
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-protoc@v3
@@ -43,16 +38,26 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 9.7.0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: |
-          cd ${{ matrix.directory }}
-          pnpm install
-          pnpm lint
+          cache: pnpm
+          cache-dependency-path: app/main/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: ./app/main
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        working-directory: ./app/main
+        run: pnpm lint
+      - name: Type check
+        working-directory: ./app/main
+        run: pnpm ts-check
+      - name: Unit tests
+        working-directory: ./app/main
+        run: pnpm exec vitest run
 
-  clippy_check:
+  clippy:
     strategy:
       matrix:
         include:
@@ -74,23 +79,14 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Linux dependencies for U
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-      - name: Install Linux dependencies for U20.04
-        if: matrix.os == 'ubuntu-20.04'
-        run: |
-          sudo apt-get install -y libjavascriptcoregtk-4.0-dev libwebkit2gtk-4.0-dev
-
-      - name: Install Linux dependencies for U24.04
+      - name: Install Ubuntu 24.04 WebKit dependencies
         if: matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get install -y libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
-
-      - name: Clippy Check
-        run: |
-          cd ${{ matrix.directory }}
-          cargo clippy ${{ matrix.clippy_args }}
+      - name: Clippy
+        working-directory: ${{ matrix.directory }}
+        run: cargo clippy ${{ matrix.clippy_args }}
