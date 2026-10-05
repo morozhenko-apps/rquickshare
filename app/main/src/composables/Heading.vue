@@ -32,7 +32,7 @@ const emit = defineEmits(['openSettings']);
 				v-if="vm.new_version"
 				type="button"
 				class="status-chip status-chip--active"
-				@click="openUrl('https://github.com/Martichou/rquickshare/releases/latest')">
+				@click="openUrl('https://github.com/morozhenko-apps/rquickshare/releases/latest')">
 				Update v{{ vm.new_version }}
 			</button>
 			<span v-else class="status-chip">
