@@ -33,7 +33,10 @@ jobs:
           node-version: 24
       - name: Install pinned pnpm
         run: npm install --global pnpm@9.7.0
-      - name: Audit frontend lockfile
+      - name: Audit runtime dependencies
+        working-directory: ./app/main
+        run: pnpm audit --prod --audit-level high
+      - name: Audit full frontend toolchain
         working-directory: ./app/main
         run: pnpm audit --audit-level high
 
