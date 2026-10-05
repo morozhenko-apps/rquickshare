@@ -35,7 +35,9 @@ use crate::securemessage::{
     EcP256PublicKey, EncScheme, GenericPublicKey, Header, HeaderAndBody, PublicKeyType,
     SecureMessage, SigScheme,
 };
-use crate::sharing_nearby::{paired_key_result_frame, text_metadata};
+use crate::sharing_nearby::{
+    paired_key_result_frame, text_metadata, wifi_credentials_metadata::SecurityType,
+};
 use crate::utils::{
     encode_point, gen_ecdsa_keypair, gen_random, get_download_dir, hkdf_extract_expand,
     normalize_p256_coordinate, stream_read_exact, to_four_digit_string, DeviceType,
@@ -85,6 +87,47 @@ fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> 
     }
 
     usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
+}
+
+fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
+    if buffer.len() < 4 {
+        return Err(anyhow!(
+            "Wi-Fi password payload is too short: {} bytes",
+            buffer.len()
+        ));
+    }
+
+    if buffer[0] != 0x0A {
+        return Err(anyhow!(
+            "Unexpected Wi-Fi password payload prefix: 0x{:02x}",
+            buffer[0]
+        ));
+    }
+
+    let password_len = usize::from(buffer[1]);
+    let password_end = 2_usize
+        .checked_add(password_len)
+        .ok_or_else(|| anyhow!("Wi-Fi password length overflow"))?;
+    let trailer_end = password_end
+        .checked_add(2)
+        .ok_or_else(|| anyhow!("Wi-Fi password trailer overflow"))?;
+
+    if trailer_end > buffer.len() {
+        return Err(anyhow!(
+            "Wi-Fi password payload declares {password_len} bytes but only {} payload bytes are available",
+            buffer.len().saturating_sub(4)
+        ));
+    }
+
+    if buffer[password_end] != 0x10 {
+        return Err(anyhow!(
+            "Unexpected Wi-Fi password trailer marker: 0x{:02x}",
+            buffer[password_end]
+        ));
+    }
+
+    let password = std::str::from_utf8(&buffer[2..password_end])?;
+    Ok(password.to_owned())
 }
 
 #[derive(Debug)]
@@ -640,12 +683,10 @@ impl InboundRequest {
                                 }
 
                                 info!("Transfer finished");
-                                let end_index =
-                                    buffer.iter().position(|&b| b == 16).unwrap_or(buffer.len());
-                                let payload = std::str::from_utf8(&buffer[..end_index])?.to_owned();
 
                                 match text_payload {
                                     TextPayloadInfo::Url(_) => {
+                                        let payload = std::str::from_utf8(buffer)?.to_owned();
                                         self.update_state(
                                             |e| {
                                                 if let Some(tmd) = e.transfer_metadata.as_mut() {
@@ -658,6 +699,7 @@ impl InboundRequest {
                                         .await;
                                     }
                                     TextPayloadInfo::Text(_) => {
+                                        let payload = std::str::from_utf8(buffer)?.to_owned();
                                         self.update_state(
                                             |e| {
                                                 if let Some(tmd) = e.transfer_metadata.as_mut() {
@@ -669,12 +711,28 @@ impl InboundRequest {
                                         )
                                         .await;
                                     }
-                                    TextPayloadInfo::Wifi((_, ssid)) => {
+                                    TextPayloadInfo::Wifi {
+                                        ssid,
+                                        security_type,
+                                        ..
+                                    } => {
+                                        let password = match security_type {
+                                            SecurityType::Open => String::new(),
+                                            SecurityType::WpaPsk | SecurityType::Wep => {
+                                                parse_wifi_password_payload(buffer)?
+                                            }
+                                            SecurityType::UnknownSecurityType => {
+                                                return Err(anyhow!(
+                                                    "Unsupported Wi-Fi credential security type"
+                                                ));
+                                            }
+                                        };
+
                                         self.update_state(
                                             |e| {
                                                 if let Some(tmd) = e.transfer_metadata.as_mut() {
                                                     tmd.text_payload =
-                                                        Some(format!("{ssid}: {}", payload.trim()));
+                                                        Some(format!("{ssid}: {password}"));
                                                     tmd.text_type = Some(TextPayloadType::Wifi);
                                                 }
                                             },
@@ -1064,10 +1122,11 @@ impl InboundRequest {
 
             self.update_state(
                 |e| {
-                    e.text_payload = Some(TextPayloadInfo::Wifi((
-                        meta.payload_id(),
-                        meta.ssid().to_owned(),
-                    )));
+                    e.text_payload = Some(TextPayloadInfo::Wifi {
+                        payload_id: meta.payload_id(),
+                        ssid: meta.ssid().to_owned(),
+                        security_type: meta.security_type(),
+                    });
                     e.transfer_metadata = Some(metadata);
                 },
                 true,
@@ -1539,5 +1598,26 @@ mod security_tests {
         );
         assert!(checked_payload_buffer_size(-1).is_err());
         assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
+    }
+
+    #[test]
+    fn test_parse_wifi_password_payload_handles_16_byte_password() {
+        let password = b"1234567890abcdef";
+        let mut payload = vec![0x0A, password.len() as u8];
+        payload.extend_from_slice(password);
+        payload.extend_from_slice(&[0x10, 0x01]);
+
+        assert_eq!(
+            parse_wifi_password_payload(&payload).unwrap(),
+            "1234567890abcdef"
+        );
+    }
+
+    #[test]
+    fn test_parse_wifi_password_payload_rejects_malformed_frames() {
+        assert!(parse_wifi_password_payload(&[]).is_err());
+        assert!(parse_wifi_password_payload(&[0x09, 0, 0x10, 0]).is_err());
+        assert!(parse_wifi_password_payload(&[0x0A, 5, b'a', 0x10, 0]).is_err());
+        assert!(parse_wifi_password_payload(&[0x0A, 1, b'a', 0x11, 0]).is_err());
     }
 }
