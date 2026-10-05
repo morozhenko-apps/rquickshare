@@ -57,7 +57,7 @@ jobs:
             name: main
             target_path: app/main
             cache_directory: app/main/src-tauri/target
-          - os: macos-13
+          - os: macos-15-intel
             name: main
             target_path: app/main
             cache_directory: app/main/src-tauri/target
