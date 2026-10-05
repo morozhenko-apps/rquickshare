@@ -50,10 +50,6 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2.9.0
-        with:
-          cache-directories: "${{ github.workspace }}/${{ matrix.cache_directory }}"
-
       - name: Install Linux dependencies
         if: contains(matrix.os, 'macos') == false
         run: |
