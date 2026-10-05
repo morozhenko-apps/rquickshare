@@ -177,10 +177,7 @@ pub fn normalize_p256_coordinate(raw: &[u8]) -> Result<[u8; 32], anyhow::Error> 
     } else if raw.len() <= 32 {
         raw
     } else {
-        return Err(anyhow!(
-            "P-256 coordinate is too long: {} bytes",
-            raw.len()
-        ));
+        return Err(anyhow!("P-256 coordinate is too long: {} bytes", raw.len()));
     };
 
     let mut normalized = [0_u8; 32];
