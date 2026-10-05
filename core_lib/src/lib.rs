@@ -65,6 +65,9 @@ pub struct RQS {
     // Only used to send the info "a nearby device is sharing"
     ble_sender: broadcast::Sender<()>,
 
+    pub foreground_sender: watch::Sender<bool>,
+    foreground_receiver: watch::Receiver<bool>,
+
     port_number: Option<u32>,
 
     pub message_sender: broadcast::Sender<ChannelMessage>,
@@ -91,6 +94,7 @@ impl RQS {
         // Define default visibility as per the args inside the new()
         let (visibility_sender, visibility_receiver) = watch::channel(Visibility::Invisible);
         let _ = visibility_sender.send(visibility);
+        let (foreground_sender, foreground_receiver) = watch::channel(true);
 
         Self {
             tracker: None,
@@ -99,6 +103,8 @@ impl RQS {
             visibility_sender: Arc::new(Mutex::new(visibility_sender)),
             visibility_receiver,
             ble_sender,
+            foreground_sender,
+            foreground_receiver,
             port_number,
             message_sender,
         }
@@ -139,7 +145,8 @@ impl RQS {
             // Don't threat BleListener error as fatal, it's a nice to have.
             if let Ok(ble) = BleListener::new(self.ble_sender.clone()).await {
                 let ctk = ctoken.clone();
-                tracker.spawn(async move { ble.run(ctk).await });
+                let foreground_rx = self.foreground_receiver.clone();
+                tracker.spawn(async move { ble.run(ctk, foreground_rx).await });
             }
         }
 
@@ -153,6 +160,25 @@ impl RQS {
         )?;
         let ctk = ctoken.clone();
         tracker.spawn(async move { mdns.run(ctk).await });
+
+        #[cfg(all(feature = "experimental", target_os = "linux"))]
+        {
+            let visibility_rx = self.visibility_receiver.clone();
+            let ctk = ctoken.clone();
+            tracker.spawn(async move {
+                let blea = match BleAdvertiser::new(visibility_rx).await {
+                    Ok(advertiser) => advertiser,
+                    Err(error) => {
+                        error!("Couldn't init BleAdvertiser: {error}");
+                        return;
+                    }
+                };
+
+                if let Err(error) = blea.run(ctk).await {
+                    error!("BleAdvertiser stopped with error: {error}");
+                }
+            });
+        }
 
         tracker.close();
 
@@ -170,24 +196,6 @@ impl RQS {
 
         let ctk = CancellationToken::new();
         self.discovery_ctk = Some(ctk.clone());
-
-        #[cfg(all(feature = "experimental", target_os = "linux"))]
-        {
-            let ctk_blea = ctk.clone();
-            tracker.spawn(async move {
-                let blea = match BleAdvertiser::new().await {
-                    Ok(b) => b,
-                    Err(e) => {
-                        error!("Couldn't init BleAdvertiser: {}", e);
-                        return;
-                    }
-                };
-
-                if let Err(e) = blea.run(ctk_blea).await {
-                    error!("Couldn't start BleAdvertiser: {}", e);
-                }
-            });
-        }
 
         let discovery = MDnsDiscovery::new(sender)?;
         tracker.spawn(async move { discovery.run(ctk.clone()).await });
@@ -207,6 +215,10 @@ impl RQS {
             .lock()
             .unwrap()
             .send_modify(|state| *state = nv);
+    }
+
+    pub fn set_foreground(&self, foreground: bool) {
+        let _ = self.foreground_sender.send(foreground);
     }
 
     pub async fn stop(&mut self) {
