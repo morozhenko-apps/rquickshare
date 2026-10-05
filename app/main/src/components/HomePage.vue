@@ -1,144 +1,129 @@
 <template>
-	<div class="flex flex-col w-full h-full bg-green-50 max-w-full max-h-full overflow-hidden">
+	<div class="app-shell flex flex-col w-full h-full max-w-full max-h-full overflow-hidden">
 		<ToastNotification />
 		<SettingsModal :vm="vm" @close="settingsOpen = false" />
 
 		<Heading :vm="vm" :open-url="openUrl" @open-settings="settingsOpen = true" />
 
-		<div class="flex-1 flex flex-row">
+		<div class="flex-1 flex flex-row gap-4 px-5 pb-5 min-h-0">
 			<SideMenu :vm="vm" @invert-visibility="invertVisibility(vm)" @clear-sending="clearSending(vm)" />
 
-			<div class="flex-1 flex flex-col bg-white w-full max-w-full min-w-0 min-h-full rounded-tl-[3rem] p-12 h-1 overflow-y-scroll">
-				<ContentStatus :vm="vm" @outbound-payload="(el: OutboundPayload) => outboundPayload = el" @discovery-running="discoveryRunning = true;" />
+			<main class="app-content flex-1 flex flex-col w-full max-w-full min-w-0 min-h-0 rounded-3xl p-8 overflow-y-auto">
+				<ContentStatus
+					:vm="vm"
+					@outbound-payload="(el: OutboundPayload) => outboundPayload = el"
+					@discovery-running="discoveryRunning = true;" />
 
 				<div
-					v-for="item in displayedItems" :key="item.id" class="w-full rounded-3xl flex flex-row gap-6 p-4 mb-4 bg-green-100"
-					:class="{'cursor-pointer': item.endpoint}" @click="item.endpoint && sendInfo(vm, item.id)">
-					<!-- Loader and image of the device type & pin_code -->
+					v-for="item in displayedItems"
+					:key="item.id"
+					class="device-card w-full rounded-2xl flex flex-row gap-5 p-5 mb-3"
+					:data-clickable="Boolean(item.endpoint)"
+					:class="{'cursor-pointer': item.endpoint}"
+					@click="item.endpoint && sendInfo(vm, item.id)">
 					<ItemSide :item="item" />
 
-					<!-- Content and state of the transfer -->
 					<div class="flex-1 flex flex-col text-sm min-w-0" :class="{'justify-center': item.state === undefined}">
-						<h4 class="text-base font-medium">
-							{{ item.name }}
-						</h4>
+						<div class="flex items-center gap-2">
+							<h3 class="text-base font-semibold truncate">
+								{{ item.name }}
+							</h3>
+							<span v-if="item.state" class="status-chip">
+								{{ stateToDisplay(item.state) }}
+							</span>
+						</div>
 
 						<div v-if="item.state === 'WaitingForUserConsent'" class="flex-1 flex flex-col justify-between">
-							<p class="mt-4">
+							<p class="mt-3 text-muted">
 								Wants to share {{ item.files?.join(', ') ?? item.text_description ?? 'some file(s).' }}
 							</p>
-							<div class="flex flex-row justify-end gap-4 mt-1">
-								<p
-									@click.stop="sendCmd(vm, item.id, 'AcceptTransfer')" class="btn px-3
-									rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
-									Accept
-								</p>
-								<p
-									@click.stop="sendCmd(vm, item.id, 'RejectTransfer')" class="btn px-3
-									rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
+							<div class="flex flex-row justify-end gap-2 mt-3">
+								<button type="button" @click.stop="sendCmd(vm, item.id, 'RejectTransfer')" class="btn btn-secondary">
 									Decline
-								</p>
+								</button>
+								<button type="button" @click.stop="sendCmd(vm, item.id, 'AcceptTransfer')" class="btn btn-primary">
+									Accept
+								</button>
 							</div>
 						</div>
 
 						<div v-else-if="['SentIntroduction', 'SendingFiles', 'ReceivingFiles'].includes(item.state ?? 'Initial')">
-							<p class="mt-2" v-if="['SentIntroduction', 'SendingFiles'].includes(item.state ?? 'Initial')">
-								Sending...
+							<p class="mt-2 text-muted" v-if="['SentIntroduction', 'SendingFiles'].includes(item.state ?? 'Initial')">
+								Sending…
 							</p>
-							<p class="mt-2" v-else>
-								Receiving...
+							<p class="mt-2 text-muted" v-else>
+								Receiving…
 							</p>
-							<p v-for="f in item.files ?? []" :key="f" class="overflow-hidden whitespace-nowrap text-ellipsis">
+							<p v-for="f in item.files ?? []" :key="f" class="overflow-hidden whitespace-nowrap text-ellipsis mt-1">
 								{{ f }}
 							</p>
-							<div class="flex flex-row justify-end gap-4 mt-1">
-								<p
-									@click.stop="sendCmd(vm, item.id, 'CancelTransfer')" class="btn px-3
-									rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
+							<div class="flex flex-row justify-end gap-2 mt-3">
+								<button type="button" @click.stop="sendCmd(vm, item.id, 'CancelTransfer')" class="btn btn-secondary">
 									Cancel
-								</p>
+								</button>
 							</div>
 						</div>
 
 						<div v-else-if="item.state === 'Finished'">
-							<p class="mt-2">
-								Received <span v-if="item.text_type">text</span>
+							<p class="mt-2 text-muted">
+								Transfer completed<span v-if="item.text_type"> · text received</span>
 							</p>
 
-							<!-- If files -->
-							<p v-for="f in item.files ?? []" :key="f" class="overflow-hidden whitespace-nowrap text-ellipsis">
+							<p v-for="f in item.files ?? []" :key="f" class="overflow-hidden whitespace-nowrap text-ellipsis mt-1">
 								{{ f }}
 							</p>
-							<p v-if="item.files" class="mt-2 overflow-hidden whitespace-nowrap text-ellipsis">
-								<span v-if="item.files">Saved to </span>{{ item.destination }}
+							<p v-if="item.files" class="mt-2 overflow-hidden whitespace-nowrap text-ellipsis text-muted">
+								Saved to {{ item.destination }}
 							</p>
 
-							<!-- If text -->
-							<p v-if="item.text_type" class="!select-text cursor-text overflow-hidden whitespace-nowrap text-ellipsis">
+							<p v-if="item.text_type" class="!select-text cursor-text overflow-hidden whitespace-nowrap text-ellipsis mt-2">
 								{{ item.text_payload }}
 							</p>
 
-							<div class="flex flex-row justify-end gap-4 mt-1">
-								<p
+							<div class="flex flex-row justify-end gap-2 mt-3">
+								<button
 									v-if="item.destination || (item.text_type === 'Url' && item.text_payload)"
+									type="button"
 									@click.stop="openUrl(item.destination ?? item.text_payload!)"
-									class="btn px-3 rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
+									class="btn btn-secondary">
 									Open
-								</p>
-								<p
-									v-if="item.text_type && item.text_payload" @click.stop="writeToClipboard(item.text_payload)"
-									class="btn px-3 rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
+								</button>
+								<button
+									v-if="item.text_type && item.text_payload"
+									type="button"
+									@click.stop="writeToClipboard(item.text_payload)"
+									class="btn btn-secondary">
 									Copy
-								</p>
-								<p
-									@click.stop="removeRequest(vm, item.id)"
-									class="btn px-3 rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
+								</button>
+								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-secondary">
 									Clear
-								</p>
+								</button>
 							</div>
 						</div>
 
 						<div v-else-if="item.state === 'Cancelled'">
-							<p class="mt-2">
-								Transfer cancelled
-							</p>
-							<div class="flex flex-row justify-end gap-4 mt-1">
-								<p
-									@click.stop="removeRequest(vm, item.id)" class="btn px-3
-									rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
-									Clear
-								</p>
+							<p class="mt-2 text-muted">Transfer cancelled.</p>
+							<div class="flex flex-row justify-end mt-3">
+								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-secondary">Clear</button>
 							</div>
 						</div>
 
 						<div v-else-if="item.state === 'Rejected'">
-							<p class="mt-2">
-								Transfer rejected
-							</p>
-							<div class="flex flex-row justify-end gap-4 mt-1">
-								<p
-									@click.stop="removeRequest(vm, item.id)" class="btn px-3
-									rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
-									Clear
-								</p>
+							<p class="mt-2 text-muted">Transfer rejected.</p>
+							<div class="flex flex-row justify-end mt-3">
+								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-secondary">Clear</button>
 							</div>
 						</div>
 
 						<div v-else-if="item.state === 'Disconnected'">
-							<p class="mt-2">
-								Unexpected disconnection
-							</p>
-							<div class="flex flex-row justify-end gap-4 mt-1">
-								<p
-									@click.stop="removeRequest(vm, item.id)" class="btn px-3
-									rounded-xl active:scale-95 transition duration-150 ease-in-out shadow-none">
-									Clear
-								</p>
+							<p class="mt-2" style="color: var(--rqs-danger)">Unexpected disconnection.</p>
+							<div class="flex flex-row justify-end mt-3">
+								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-danger">Clear</button>
 							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			</main>
 		</div>
 	</div>
 </template>
