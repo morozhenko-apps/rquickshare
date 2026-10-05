@@ -1,4 +1,5 @@
-use std::collections::HashSet;\nuse std::fs::OpenOptions;
+use std::collections::HashSet;
+use std::fs::OpenOptions;
 use std::os::unix::fs::FileExt;
 use std::path::{Component, Path};
 use std::time::Duration;
