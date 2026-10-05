@@ -55,15 +55,15 @@ impl TcpServer {
                     break;
                 }
                 Some(i) = self.connect_receiver.recv() => {
-                    info!("{INNER_NAME}: connect_receiver: got {:?}", i);
+                    info!("{INNER_NAME}: outbound request queued for {}", i.addr);
                     if let Err(e) = self.connect(cctk, i).await {
-                        error!("{INNER_NAME}: error sending: {}", e.to_string());
+                        error!("{INNER_NAME}: error sending: {}", e);
                     }
                 }
                 r = self.tcp_listener.accept() => {
                     match r {
                         Ok((socket, remote_addr)) => {
-                            trace!("{INNER_NAME}: new client: {remote_addr}");
+                            info!("{INNER_NAME}: accepted inbound client from {remote_addr}");
                             let esender = self.sender.clone();
                             let csender = self.sender.clone();
 
@@ -74,9 +74,15 @@ impl TcpServer {
                                     match ir.handle().await {
                                         Ok(_) => {},
                                         Err(e) => match e.downcast_ref() {
-                                            Some(AppError::NotAnError) => break,
+                                            Some(AppError::NotAnError) => {
+                                                debug!("{INNER_NAME}: inbound session {remote_addr} completed");
+                                                break;
+                                            },
                                             None => {
                                                 if ir.state.state == State::Initial {
+                                                    warn!(
+                                                        "{INNER_NAME}: inbound client {remote_addr} failed during initial handshake: {e}"
+                                                    );
                                                     break;
                                                 }
 
@@ -88,7 +94,10 @@ impl TcpServer {
                                                         ..Default::default()
                                                     });
                                                 }
-                                                error!("{INNER_NAME}: error while handling client: {e} ({:?})", ir.state.state);
+                                                error!(
+                                                    "{INNER_NAME}: error while handling inbound client {remote_addr}: {e} ({:?})",
+                                                    ir.state.state
+                                                );
                                                 break;
                                             }
                                         },
@@ -97,7 +106,7 @@ impl TcpServer {
                             });
                         },
                         Err(err) => {
-                            error!("{INNER_NAME}: error accepting: {}", err);
+                            error!("{INNER_NAME}: error accepting: {err}");
                             break;
                         }
                     }
@@ -110,8 +119,9 @@ impl TcpServer {
 
     /// To be called inside a separate task if we want to handle concurrency
     pub async fn connect(&self, ctk: CancellationToken, si: SendInfo) -> Result<(), anyhow::Error> {
-        debug!("{INNER_NAME}: Connecting to: {}", si.addr);
+        info!("{INNER_NAME}: connecting to outbound peer {}", si.addr);
         let socket = TcpStream::connect(si.addr.clone()).await?;
+        info!("{INNER_NAME}: TCP connection established to {}", si.addr);
 
         let mut or = OutboundRequest::new(
             self.endpoint_id,
@@ -127,8 +137,10 @@ impl TcpServer {
 
         // Send connection request
         or.send_connection_request().await?;
+        debug!("{INNER_NAME}: connection request sent to {}", si.addr);
         // Send UKEY init
         or.send_ukey2_client_init().await?;
+        debug!("{INNER_NAME}: UKEY2 client init sent to {}", si.addr);
 
         loop {
             tokio::select! {
@@ -142,18 +154,26 @@ impl TcpServer {
                             Some(AppError::NotAnError) => break,
                             None => {
                                 if or.state.state == State::Initial {
+                                    warn!(
+                                        "{INNER_NAME}: outbound peer {} failed during initial handshake: {e}",
+                                        si.addr
+                                    );
                                     break;
                                 }
 
                                 if or.state.state != State::Finished && or.state.state != State::Cancelled {
                                     let _ = self.sender.clone().send(ChannelMessage {
-                                        id: si.addr,
+                                        id: si.addr.clone(),
                                         direction: ChannelDirection::LibToFront,
                                         state: Some(State::Disconnected),
                                         ..Default::default()
                                     });
                                 }
-                                error!("{INNER_NAME}: error while handling client: {e} ({:?})", or.state.state);
+                                error!(
+                                    "{INNER_NAME}: error while handling outbound peer {}: {e} ({:?})",
+                                    si.addr,
+                                    or.state.state
+                                );
                                 break;
                             }
                         }
