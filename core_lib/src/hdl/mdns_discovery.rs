@@ -58,6 +58,10 @@ impl MDnsDiscovery {
 
                                     let ip_hash = info.get_addresses_v4();
                                     if ip_hash.is_empty() {
+                                        debug!(
+                                            "MDnsDiscovery: dropping {} because it has no IPv4 address",
+                                            info.get_fullname()
+                                        );
                                         continue;
                                     }
 
@@ -68,41 +72,82 @@ impl MDnsDiscovery {
 
                                     // Check that the IP is not a "self IP"
                                     if !is_not_self_ip(ip) {
+                                        trace!(
+                                            "MDnsDiscovery: ignoring self service {} at {}",
+                                            info.get_fullname(),
+                                            ip
+                                        );
                                         continue;
                                     }
 
                                     // Decode the "n" text properties
                                     let n = match info.get_property("n") {
-                                        Some(_n) => _n,
-                                        None => continue,
+                                        Some(n) => n,
+                                        None => {
+                                            warn!(
+                                                "MDnsDiscovery: dropping {} at {}:{} because TXT n= is missing",
+                                                info.get_fullname(),
+                                                ip,
+                                                port
+                                            );
+                                            continue;
+                                        }
                                     };
+
+                                    info!(
+                                        "MDnsDiscovery: candidate fullname={} hostname={} ip={} port={} n_encoded_len={}",
+                                        info.get_fullname(),
+                                        info.get_hostname(),
+                                        ip,
+                                        port,
+                                        n.val_str().len()
+                                    );
 
                                     // Parse the endpoint info
                                     let (dt, dn) = match parse_mdns_endpoint_info(n.val_str()) {
                                         Ok(r) => r,
-                                        Err(_) => continue
+                                        Err(err) => {
+                                            warn!(
+                                                "MDnsDiscovery: dropping fullname={} hostname={} ip={} port={} because endpoint info parsing failed: {}",
+                                                info.get_fullname(),
+                                                info.get_hostname(),
+                                                ip,
+                                                port,
+                                                err
+                                            );
+                                            continue;
+                                        }
                                     };
 
                                     let ip_port = format!("{ip}:{port}");
                                     let fullname = info.get_fullname().to_string();
-                                    if TcpStream::connect(&ip_port).await.is_ok() {
-                                        let ei = EndpointInfo {
-                                            fullname: fullname.clone(),
-                                            id: ip_port,
-                                            name: Some(dn),
-                                            ip: Some(ip.to_string()),
-                                            port: Some(port.to_string()),
-                                            rtype: Some(dt),
-                                            present: Some(true),
-                                        };
-                                        info!("ServiceResolved: Resolved a new service: {:?}", ei);
-                                        cache.insert(fullname.clone(), ei.clone());
-                                        let _ = self.sender.send(ei);
+                                    match TcpStream::connect(&ip_port).await {
+                                        Ok(_) => {
+                                            let ei = EndpointInfo {
+                                                fullname: fullname.clone(),
+                                                id: ip_port,
+                                                name: Some(dn),
+                                                ip: Some(ip.to_string()),
+                                                port: Some(port.to_string()),
+                                                rtype: Some(dt),
+                                                present: Some(true),
+                                            };
+                                            info!("ServiceResolved: Resolved a new service: {:?}", ei);
+                                            cache.insert(fullname.clone(), ei.clone());
+                                            let _ = self.sender.send(ei);
+                                        }
+                                        Err(err) => {
+                                            warn!(
+                                                "MDnsDiscovery: service {} resolved at {} but TCP reachability check failed: {}",
+                                                fullname,
+                                                ip_port,
+                                                err
+                                            );
+                                        }
                                     }
                                 }
                                 ServiceEvent::ServiceRemoved(_, fullname) => {
                                     trace!("ServiceRemoved: checking if should remove {}", fullname);
-                                    // Only remove if it has not been seen in the last cleanup_threshold
                                     let should_remove = cache.get(&fullname).map(|ei| ei.id.clone());
 
                                     if let Some(id) = should_remove {
