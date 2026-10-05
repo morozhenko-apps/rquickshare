@@ -594,7 +594,12 @@ impl InboundRequest {
                             .or_insert_with(|| Vec::with_capacity(declared_size));
 
                         // Get the current length of the buffer, if it exists, without holding a mutable borrow.
-                        let buffer_len = self.state.payload_buffers.get(&payload_id).unwrap().len();
+                        let buffer_len = self
+                            .state
+                            .payload_buffers
+                            .get(&payload_id)
+                            .ok_or_else(|| anyhow!("Missing payload buffer for {payload_id}"))?
+                            .len();
                         if chunk.offset() != buffer_len as i64 {
                             self.state.payload_buffers.remove(&payload_id);
                             return Err(anyhow!(
@@ -627,16 +632,17 @@ impl InboundRequest {
                         if (chunk.flags() & 1) == 1 {
                             debug!("Chunk flags & 1 == 1 ?? End of data ??");
 
-                            if self.state.text_payload.is_some()
-                                && self.state.text_payload.as_ref().unwrap().get_i64_value()
-                                    == payload_id
-                            {
+                            if let Some(text_payload) = self.state.text_payload.clone() {
+                                if text_payload.get_i64_value() != payload_id {
+                                    continue;
+                                }
+
                                 info!("Transfer finished");
                                 let end_index =
                                     buffer.iter().position(|&b| b == 16).unwrap_or(buffer.len());
                                 let payload = std::str::from_utf8(&buffer[..end_index])?.to_owned();
 
-                                match self.state.text_payload.clone().unwrap() {
+                                match text_payload {
                                     TextPayloadInfo::Url(_) => {
                                         self.update_state(
                                             |e| {
