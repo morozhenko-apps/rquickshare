@@ -1,36 +1,277 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@100;300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    color-scheme: light;
+    --rqs-bg: #f4f7f5;
+    --rqs-surface: #ffffff;
+    --rqs-surface-muted: #eef3f0;
+    --rqs-surface-hover: #e7eeea;
+    --rqs-border: #d7e1db;
+    --rqs-text: #16211b;
+    --rqs-text-muted: #66736c;
+    --rqs-accent: #2f7d5a;
+    --rqs-accent-hover: #286b4d;
+    --rqs-accent-soft: #dff1e7;
+    --rqs-danger: #b84040;
+    --rqs-danger-soft: #f8e4e4;
+    --rqs-shadow: 0 18px 50px rgba(30, 48, 38, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
+        --rqs-bg: #101512;
+        --rqs-surface: #171d19;
+        --rqs-surface-muted: #202823;
+        --rqs-surface-hover: #27312b;
+        --rqs-border: #303a34;
+        --rqs-text: #eef4f0;
+        --rqs-text-muted: #a8b4ad;
+        --rqs-accent: #71c99a;
+        --rqs-accent-hover: #8bd8ad;
+        --rqs-accent-soft: #20382b;
+        --rqs-danger: #f08b8b;
+        --rqs-danger-soft: #3a2525;
+        --rqs-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+    }
+}
+
 @layer utilities {
-    /* Chrome, Safari and Opera */
     .no-scrollbar::-webkit-scrollbar {
         display: none;
     }
+
     .no-scrollbar {
         -ms-overflow-style: none;
-        /* IE and Edge */
         scrollbar-width: none;
-        /* Firefox */
     }
 }
 
 html,
 body,
 #app {
-    font-family: 'Montserrat', sans-serif;
-	outline: 1px solid transparent;
-	-webkit-backface-visibility: hidden;
-	transform: translateZ(0);
-	will-change: transform;
-	-webkit-perspective: 1000;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--rqs-text);
+    background: var(--rqs-bg);
+    outline: 1px solid transparent;
+    -webkit-backface-visibility: hidden;
+    transform: translateZ(0);
+    will-change: transform;
+    -webkit-perspective: 1000;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    color: inherit;
+}
+
+.app-shell {
+    width: 100%;
+    height: 100%;
+    background: var(--rqs-bg);
+    color: var(--rqs-text);
+}
+
+.app-content {
+    background: var(--rqs-surface);
+    border: 1px solid var(--rqs-border);
+    box-shadow: var(--rqs-shadow);
+}
+
+.sidebar-panel {
+    color: var(--rqs-text);
+}
+
+.surface-muted {
+    background: var(--rqs-surface-muted);
+    border: 1px solid var(--rqs-border);
+}
+
+.device-card {
+    background: var(--rqs-surface-muted);
+    border: 1px solid var(--rqs-border);
+    transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.device-card[data-clickable="true"]:hover {
+    background: var(--rqs-surface-hover);
+    border-color: color-mix(in srgb, var(--rqs-accent) 45%, var(--rqs-border));
+    transform: translateY(-1px);
+}
+
+.drop-zone {
+    border: 1px dashed var(--rqs-border);
+    background: color-mix(in srgb, var(--rqs-surface-muted) 72%, transparent);
+    transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.drop-zone--active {
+    border-color: var(--rqs-accent);
+    background: var(--rqs-accent-soft);
+    transform: scale(1.01);
+}
+
+.text-muted {
+    color: var(--rqs-text-muted);
+}
+
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid var(--rqs-border);
+    border-radius: 999px;
+    padding: 0.35rem 0.65rem;
+    color: var(--rqs-text-muted);
+    background: var(--rqs-surface-muted);
+    font-size: 0.75rem;
+    line-height: 1rem;
+}
+
+.status-chip--active {
+    color: var(--rqs-accent);
+    background: var(--rqs-accent-soft);
+    border-color: color-mix(in srgb, var(--rqs-accent) 38%, var(--rqs-border));
+}
+
+.modal-backdrop {
+    background: rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(5px);
+}
+
+.modal-card {
+    background: var(--rqs-surface);
+    color: var(--rqs-text);
+    border: 1px solid var(--rqs-border);
+    box-shadow: var(--rqs-shadow);
+}
+
+.setting-row {
+    border: 1px solid transparent;
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.setting-row:hover {
+    background: var(--rqs-surface-muted);
+    border-color: var(--rqs-border);
+}
+
+.btn {
+    min-height: 2.5rem;
+    cursor: pointer;
+    border-radius: 0.75rem;
+    border: 1px solid transparent;
+    padding: 0.55rem 0.9rem;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    line-height: 1.1;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.btn:hover {
+    background: var(--rqs-surface-hover);
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--rqs-accent);
+    outline-offset: 2px;
+}
+
+.btn-primary {
+    color: #ffffff;
+    background: var(--rqs-accent);
+    border-color: var(--rqs-accent);
+}
+
+.btn-primary:hover {
+    background: var(--rqs-accent-hover);
+    border-color: var(--rqs-accent-hover);
+}
+
+@media (prefers-color-scheme: dark) {
+    .btn-primary {
+        color: #102018;
+    }
+}
+
+.btn-secondary {
+    background: var(--rqs-surface-muted);
+    border-color: var(--rqs-border);
+}
+
+.btn-danger {
+    color: var(--rqs-danger);
+    background: var(--rqs-danger-soft);
+    border-color: color-mix(in srgb, var(--rqs-danger) 25%, var(--rqs-border));
+}
+
+.icon-surface {
+    background: var(--rqs-surface);
+    border: 1px solid var(--rqs-border);
+}
+
+.checkbox {
+    flex-shrink: 0;
+    width: 1.35rem;
+    height: 1.35rem;
+    cursor: pointer;
+    appearance: none;
+    border-radius: 0.4rem;
+    border: 1px solid var(--rqs-border);
+    background: var(--rqs-surface);
+    display: grid;
+    place-content: center;
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.checkbox::before {
+    content: "";
+    width: 0.55rem;
+    height: 0.32rem;
+    border-left: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg) scale(0);
+    transform-origin: center;
+    transition: transform 120ms ease;
+}
+
+.checkbox:checked {
+    color: #ffffff;
+    background: var(--rqs-accent);
+    border-color: var(--rqs-accent);
+}
+
+.checkbox:checked::before {
+    transform: rotate(-45deg) scale(1);
+}
+
+@media (prefers-color-scheme: dark) {
+    .checkbox:checked {
+        color: #102018;
+    }
 }
 
 .status-indicator {
     position: relative;
     display: inline-block;
     width: 48px;
-    height: 48px
+    height: 48px;
 }
 
 .status-indicator .circle {
@@ -39,12 +280,12 @@ body,
     left: 18px;
     width: 12px;
     height: 12px;
-    border-radius: 100px
+    border-radius: 100px;
 }
 
 .status-indicator--xl {
     width: 72px;
-    height: 72px
+    height: 72px;
 }
 
 .status-indicator--xl .circle {
@@ -53,7 +294,7 @@ body,
     left: 27px;
     width: 18px;
     height: 18px;
-    border-radius: 100px
+    border-radius: 100px;
 }
 
 .status-indicator .circle.circle--animated {
@@ -61,162 +302,105 @@ body,
     animation-delay: 1s;
     animation-fill-mode: backwards;
     animation-duration: 4s;
-    animation-timing-function: linear
+    animation-timing-function: linear;
 }
 
 .status-indicator .circle-main {
     z-index: 3;
-    background: #000
+    background: var(--rqs-accent);
 }
 
 .status-indicator .circle-main.circle--animated {
-    animation-name: pulsate-main-infinite
+    animation-name: pulsate-main-infinite;
 }
 
 .status-indicator .circle-secondary {
     z-index: 2;
-    background: rgba(0, 0, 0, .1)
+    background: color-mix(in srgb, var(--rqs-accent) 18%, transparent);
 }
 
 .status-indicator .circle-secondary.circle--animated {
-    animation-name: pulsate-secondary-infinite
+    animation-name: pulsate-secondary-infinite;
 }
 
 .status-indicator .circle-tertiary {
     z-index: 1;
-    background: rgba(0, 0, 0, .6);
-    opacity: 1
+    background: color-mix(in srgb, var(--rqs-accent) 46%, transparent);
+    opacity: 1;
 }
 
 .status-indicator .circle-tertiary.circle--animated {
-    animation-name: pulsate-tertiary
-}
-
-.status-indicator--infinite .circle.circle--animated {
-    animation-iteration-count: infinite
-}
-
-.status-indicator--success .circle-main {
-	@apply bg-black
-}
-
-.status-indicator--success .circle-secondary {
-	@apply bg-black bg-opacity-10
-}
-
-.status-indicator--success .circle-tertiary {
-	@apply bg-black bg-opacity-40
+    animation-name: pulsate-tertiary;
 }
 
 @keyframes pulsate-tertiary {
     45% {
-        transform: scale(1, 1)
+        transform: scale(1, 1);
     }
-    80% {
-        transform: scale(3, 3);
-        opacity: 0
-    }
+
+    80%,
     100% {
         transform: scale(3, 3);
-        opacity: 0
+        opacity: 0;
     }
 }
 
 @keyframes pulsate-main-infinite {
-    20% {
-        transform: scale(1, 1)
-    }
-    45% {
-        transform: scale(1.2, 1.2)
-    }
-    55% {
-        transform: scale(1.2, 1.2)
-    }
+    20%,
     80% {
-        transform: scale(1, 1)
+        transform: scale(1, 1);
+    }
+
+    45%,
+    55% {
+        transform: scale(1.2, 1.2);
     }
 }
 
 @keyframes pulsate-secondary-infinite {
-    10% {
-        transform: scale(1, 1)
-    }
-    25% {
-        transform: scale(1, 1)
-    }
-    50% {
-        transform: scale(3, 3)
-    }
-    75% {
-        transform: scale(3, 3)
-    }
+    10%,
+    25%,
     100% {
-        transform: scale(1, 1)
+        transform: scale(1, 1);
     }
-}
 
-.btn {
-	@apply h-12 min-h-12 cursor-pointer rounded-xl font-medium px-4 inline-flex justify-center items-center gap-2 hover:bg-gray-500 hover:bg-opacity-10
-}
-
-.checkbox {
-    flex-shrink: 0;
-    --chkbg: var(--fallback-bc, oklch(var(--bc) / 1));
-    --chkfg: var(--fallback-b1, oklch(var(--b1) / 1));
-    height: 1.5rem;
-    width: 1.5rem;
-    cursor: pointer;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    border-radius: var(--rounded-btn, 0.5rem);
-    border-width: 1px;
-    border-color: var(--fallback-bc, oklch(var(--bc) / var(--tw-border-opacity)));
-    --tw-border-opacity: .2;
-}
-
-.checkbox:checked, .checkbox[checked=true], .checkbox[aria-checked=true] {
-    background-repeat: no-repeat;
-    animation: checkmark var(--animation-input, .2s) ease-out;
-    background-color: #bbf7d0;
-    background-image: linear-gradient(-45deg, transparent 65%, #bbf7d0 65.99%), linear-gradient(45deg, transparent 75%, #bbf7d0 75.99%), linear-gradient(-45deg, #bbf7d0 40%, transparent 40.99%), linear-gradient(45deg, #bbf7d0 30%, black 30.99%, black 40%, transparent 40.99%), linear-gradient(-45deg, black 50%, #bbf7d0 50.99%);
-}
-
-.checkbox:checked, .checkbox[checked=true], .checkbox[aria-checked=true] {
-	@apply bg-green-200 border-green-200 text-black;
+    50%,
+    75% {
+        transform: scale(3, 3);
+    }
 }
 
 .circular-progress {
-	--size: 250px;
-	--half-size: calc(var(--size) / 2);
-	--stroke-width: 12px;
-	--radius: calc((var(--size) - var(--stroke-width)) / 2);
-	--circumference: calc(var(--radius) * pi * 2);
-	--dash: calc((var(--progress) * var(--circumference)) / 100);
+    --size: 250px;
+    --half-size: calc(var(--size) / 2);
+    --stroke-width: 12px;
+    --radius: calc((var(--size) - var(--stroke-width)) / 2);
+    --circumference: calc(var(--radius) * pi * 2);
+    --dash: calc((var(--progress) * var(--circumference)) / 100);
 }
 
 .circular-progress circle {
-	cx: var(--half-size);
-	cy: var(--half-size);
-	r: var(--radius);
-	stroke-width: var(--stroke-width);
-	fill: none;
-	stroke-linecap: round;
+    cx: var(--half-size);
+    cy: var(--half-size);
+    r: var(--radius);
+    stroke-width: var(--stroke-width);
+    fill: none;
+    stroke-linecap: round;
 }
 
 .circular-progress circle.bg {
-  	stroke: #ddd;
+    stroke: var(--rqs-border);
 }
 
 .circular-progress circle.fg {
-	transform: rotate(-90deg);
-	transform-origin: var(--half-size) var(--half-size);
-	stroke-dasharray: var(--dash) calc(var(--circumference) - var(--dash));
-	transition: stroke-dasharray 0.3s linear 0s;
-
-	@apply stroke-black
+    transform: rotate(-90deg);
+    transform-origin: var(--half-size) var(--half-size);
+    stroke: var(--rqs-accent);
+    stroke-dasharray: var(--dash) calc(var(--circumference) - var(--dash));
+    transition: stroke-dasharray 0.3s linear 0s;
 }
 
-.error circle.bg, .error circle.fg {
-    @apply !stroke-red-400
+.error circle.bg,
+.error circle.fg {
+    stroke: var(--rqs-danger) !important;
 }
