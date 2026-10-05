@@ -29,7 +29,7 @@
 								{{ item.name }}
 							</h3>
 							<span v-if="item.state" class="status-chip">
-								{{ item.state }}
+								{{ formatTransferState(item.state) }}
 							</span>
 						</div>
 
@@ -146,7 +146,7 @@ import { EndpointInfo } from '@martichou/core_lib/bindings/EndpointInfo';
 import { OutboundPayload } from '@martichou/core_lib/bindings/OutboundPayload';
 import { Visibility } from '@martichou/core_lib/bindings/Visibility';
 
-import { ToastNotification, ToDelete, stateToDisplay, autostartKey, DisplayedItem, useToastStore, opt, ToastType, utils } from '../vue_lib';
+import { ToastNotification, ToDelete, stateToDisplay, formatTransferState, autostartKey, DisplayedItem, useToastStore, opt, ToastType, utils } from '../vue_lib';
 
 import SettingsModal from '../composables/SettingsModal.vue';
 import Heading from '../composables/Heading.vue';
@@ -174,6 +174,7 @@ export default {
 
 		return {
 			stateToDisplay,
+			formatTransferState,
 			store,
 			toastStore,
 			invoke,
