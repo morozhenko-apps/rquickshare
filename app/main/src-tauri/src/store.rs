@@ -16,7 +16,7 @@ pub fn init_default(app_handle: &AppHandle) {
     let store = _get_store(app_handle);
 
     if !store.has("autostart") {
-        store.set("autostart", true);
+        store.set("autostart", false);
     }
 
     if !store.has("realclose") {
