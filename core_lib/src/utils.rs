@@ -162,6 +162,33 @@ pub fn encode_point(unsigned: Bytes) -> Result<Vec<u8>, anyhow::Error> {
     Ok(big_int.to_signed_bytes_be())
 }
 
+pub fn normalize_p256_coordinate(raw: &[u8]) -> Result<[u8; 32], anyhow::Error> {
+    if raw.is_empty() {
+        return Err(anyhow!("P-256 coordinate is empty"));
+    }
+
+    let unsigned = if raw.len() == 33 {
+        if raw[0] != 0 {
+            return Err(anyhow!(
+                "P-256 coordinate has an invalid 33-byte signed representation"
+            ));
+        }
+        &raw[1..]
+    } else if raw.len() <= 32 {
+        raw
+    } else {
+        return Err(anyhow!(
+            "P-256 coordinate is too long: {} bytes",
+            raw.len()
+        ));
+    };
+
+    let mut normalized = [0_u8; 32];
+    let offset = 32 - unsigned.len();
+    normalized[offset..].copy_from_slice(unsigned);
+    Ok(normalized)
+}
+
 pub fn hkdf_extract_expand(
     salt: &[u8],
     input: &[u8],
@@ -201,12 +228,12 @@ pub fn get_download_dir() -> PathBuf {
     let cdown = CUSTOM_DOWNLOAD.read();
     match cdown {
         Ok(mg) => {
-            if mg.is_some() {
-                return mg.as_ref().unwrap().to_path_buf();
+            if let Some(path) = mg.as_ref() {
+                return path.to_path_buf();
             }
         }
         Err(_) => {
-            // TODO
+            // TODO: fall back to the user download directory if the lock is poisoned.
         }
     }
 
@@ -288,5 +315,30 @@ mod tests {
         let err = parse_mdns_endpoint_info(&info).unwrap_err();
 
         assert!(err.to_string().contains("declared 5 bytes"));
+    }
+
+    #[test]
+    fn test_normalize_p256_coordinate_left_pads_short_values() {
+        let normalized = normalize_p256_coordinate(&[0x12, 0x34]).unwrap();
+
+        assert_eq!(&normalized[..30], &[0_u8; 30]);
+        assert_eq!(&normalized[30..], &[0x12, 0x34]);
+    }
+
+    #[test]
+    fn test_normalize_p256_coordinate_accepts_signed_33_byte_values() {
+        let mut raw = vec![0_u8];
+        raw.extend([0x80_u8; 32]);
+
+        let normalized = normalize_p256_coordinate(&raw).unwrap();
+
+        assert_eq!(normalized, [0x80_u8; 32]);
+    }
+
+    #[test]
+    fn test_normalize_p256_coordinate_rejects_invalid_lengths() {
+        assert!(normalize_p256_coordinate(&[]).is_err());
+        assert!(normalize_p256_coordinate(&[1_u8; 33]).is_err());
+        assert!(normalize_p256_coordinate(&[0_u8; 34]).is_err());
     }
 }
