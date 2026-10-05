@@ -83,8 +83,8 @@ async function savePort() {
 		<div class="modal-card rounded-2xl p-5 w-[30rem] max-w-full max-h-full overflow-y-auto">
 			<div class="flex flex-row justify-between items-center gap-4">
 				<div>
-					<h2 class="font-semibold text-xl">Settings</h2>
-					<p class="text-sm text-muted mt-1">General behavior, networking and received files.</p>
+					<h2 class="font-semibold text-xl">\n\t\t\t\t\t\tSettings\n\t\t\t\t\t</h2>
+					<p class="text-sm text-muted mt-1">\n\t\t\t\t\t\tGeneral behavior, networking and received files.\n\t\t\t\t\t</p>
 				</div>
 				<button type="button" class="btn btn-secondary" @click="emit('close')">
 					Close
@@ -95,8 +95,8 @@ async function savePort() {
 				<div class="setting-row rounded-xl p-3">
 					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
-							<p class="font-medium">Start on boot</p>
-							<p class="text-xs text-muted mt-1">Launch Quick Share when you sign in.</p>
+							<p class="font-medium">\n\t\t\t\t\t\t\tStart on boot\n\t\t\t\t\t\t</p>
+							<p class="text-xs text-muted mt-1">\n\t\t\t\t\t\t\tLaunch Quick Share when you sign in.\n\t\t\t\t\t\t</p>
 						</div>
 						<input
 							type="checkbox"
@@ -109,8 +109,8 @@ async function savePort() {
 				<div class="setting-row rounded-xl p-3">
 					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
-							<p class="font-medium">Keep running on close</p>
-							<p class="text-xs text-muted mt-1">Hide the window instead of stopping the service.</p>
+							<p class="font-medium">\n\t\t\t\t\t\t\tKeep running on close\n\t\t\t\t\t\t</p>
+							<p class="text-xs text-muted mt-1">\n\t\t\t\t\t\t\tHide the window instead of stopping the service.\n\t\t\t\t\t\t</p>
 						</div>
 						<input
 							type="checkbox"
@@ -123,8 +123,8 @@ async function savePort() {
 				<div class="setting-row rounded-xl p-3">
 					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
-							<p class="font-medium">Start minimized</p>
-							<p class="text-xs text-muted mt-1">Open directly in the background.</p>
+							<p class="font-medium">\n\t\t\t\t\t\t\tStart minimized\n\t\t\t\t\t\t</p>
+							<p class="text-xs text-muted mt-1">\n\t\t\t\t\t\t\tOpen directly in the background.\n\t\t\t\t\t\t</p>
 						</div>
 						<input
 							type="checkbox"
@@ -135,7 +135,7 @@ async function savePort() {
 				</div>
 
 				<button type="button" class="setting-row rounded-xl p-3 text-left" @click="openDownloadPicker()">
-					<p class="font-medium">Download folder</p>
+					<p class="font-medium">\n\t\t\t\t\t\tDownload folder\n\t\t\t\t\t</p>
 					<p class="overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted mt-1">
 						{{ vm.downloadPath ?? 'OS user download folder' }}
 					</p>
@@ -144,7 +144,7 @@ async function savePort() {
 				<div class="setting-row rounded-xl p-3">
 					<div class="flex items-start justify-between gap-4">
 						<div class="min-w-0 flex-1">
-							<p class="font-medium">Listening port</p>
+							<p class="font-medium">\n\t\t\t\t\t\t\tListening port\n\t\t\t\t\t\t</p>
 							<p class="text-xs text-muted mt-1">
 								Leave empty for an automatic random port. A fixed port is useful when a firewall is enabled.
 							</p>
