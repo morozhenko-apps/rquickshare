@@ -1176,8 +1176,13 @@ impl InboundRequest {
         }
 
         let encoded_point = EncodedPoint::from_bytes(bytes)?;
-        let peer_key = PublicKey::from_encoded_point(&encoded_point).unwrap();
-        let priv_key = self.state.private_key.as_ref().unwrap();
+        let peer_key = Option::<PublicKey>::from(PublicKey::from_encoded_point(&encoded_point))
+            .ok_or_else(|| anyhow!("Invalid peer P-256 public key"))?;
+        let priv_key = self
+            .state
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing local private key"))?;
 
         let dhs = diffie_hellman(priv_key.to_nonzero_scalar(), peer_key.as_affine());
         let derived_secret = Sha256::digest(dhs.raw_secret_bytes());
