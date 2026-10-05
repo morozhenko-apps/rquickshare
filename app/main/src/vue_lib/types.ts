@@ -41,8 +41,34 @@ export const realcloseKey = "realclose";
 export const startminimizedKey = "startminimized";
 export const visibilityKey = "visibility";
 export const downloadPathKey = "download_path";
-export const stateToDisplay: Array<Partial<State>> = ["ReceivedPairedKeyResult", "WaitingForUserConsent", "ReceivingFiles", "Disconnected",
-	"Finished", "SentIntroduction", "SendingFiles", "Cancelled", "Rejected"]
+
+export const stateToDisplay: State[] = [
+	"ReceivedPairedKeyResult",
+	"WaitingForUserConsent",
+	"ReceivingFiles",
+	"Disconnected",
+	"Finished",
+	"SentIntroduction",
+	"SendingFiles",
+	"Cancelled",
+	"Rejected",
+];
+
+const transferStateLabels: Partial<Record<State, string>> = {
+	ReceivedPairedKeyResult: "Connecting",
+	WaitingForUserConsent: "Approval required",
+	ReceivingFiles: "Receiving",
+	Disconnected: "Disconnected",
+	Finished: "Completed",
+	SentIntroduction: "Connecting",
+	SendingFiles: "Sending",
+	Cancelled: "Cancelled",
+	Rejected: "Rejected",
+};
+
+export function formatTransferState(state: State): string {
+	return transferStateLabels[state] ?? state;
+}
 
 export interface Toast {
 	id: number;
