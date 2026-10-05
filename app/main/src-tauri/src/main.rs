@@ -8,6 +8,8 @@ extern crate log;
 
 use std::sync::{Arc, Mutex};
 
+use anyhow::anyhow;
+
 use rqs_lib::channel::{ChannelDirection, ChannelMessage};
 use rqs_lib::{EndpointInfo, SendInfo, State, Visibility, RQS};
 use store::get_startminimized;
@@ -94,9 +96,13 @@ async fn main() -> Result<(), anyhow::Error> {
                 .build()?;
 
             #[cfg(target_os = "macos")]
-            let icon = Image::from_bytes(include_bytes!("../icons/tray.png")).unwrap();
+            let icon = Image::from_bytes(include_bytes!("../icons/tray.png"))
+                .map_err(|error| anyhow!("unable to decode tray icon: {error}"))?;
             #[cfg(not(target_os = "macos"))]
-            let icon = app.default_window_icon().unwrap().clone();
+            let icon = app
+                .default_window_icon()
+                .cloned()
+                .ok_or_else(|| anyhow!("default window icon is unavailable"))?;
 
             let tray = TrayIconBuilder::new()
                 .icon(icon)
@@ -125,12 +131,15 @@ async fn main() -> Result<(), anyhow::Error> {
             // This is not optimal, but until I find a better way to init log
             // (inside file and stdout) before starting the lib, I'll keep it as
             // is. This allow me to get the whole log :)
-            tokio::task::block_in_place(|| {
+            let start_result = tokio::task::block_in_place(|| {
                 tauri::async_runtime::block_on(async move {
                     trace!("Beginning of RQS start");
                     // Start the RQuickShare service
                     let mut rqs = RQS::new(visibility, port_number, download_path);
-                    let (sender_file, ble_receiver) = rqs.run().await.unwrap();
+                    let (sender_file, ble_receiver) = rqs
+                        .run()
+                        .await
+                        .map_err(|error| anyhow!("unable to start RQuickShare service: {error}"))?;
 
                     // Define state for tauri app
                     app_handle.manage(AppState {
@@ -142,27 +151,35 @@ async fn main() -> Result<(), anyhow::Error> {
                         ble_receiver,
                         rqs: Mutex::new(rqs),
                     });
-                });
+
+                    Ok::<(), anyhow::Error>(())
+                })
             });
+            start_result?;
 
             spawn_receiver_tasks(app.app_handle());
             Ok(())
         })
         .on_window_event(handle_window_event)
         .build(tauri::generate_context!())
-        .expect("error while building tauri application")
+        .map_err(|error| anyhow!("error while building tauri application: {error}"))?
         .run(|app_handle, event| match event {
             tauri::RunEvent::Ready => {
                 trace!("RunEvent::Ready");
                 if get_startminimized(app_handle) {
                     #[cfg(not(target_os = "macos"))]
-                    app_handle
-                        .get_webview_window("main")
-                        .unwrap()
-                        .hide()
-                        .unwrap();
+                    match app_handle.get_webview_window("main") {
+                        Some(window) => {
+                            if let Err(error) = window.hide() {
+                                warn!("Failed to hide main window on startup: {error}");
+                            }
+                        }
+                        None => warn!("Main window not found while starting minimized"),
+                    }
                     #[cfg(target_os = "macos")]
-                    app_handle.hide().unwrap();
+                    if let Err(error) = app_handle.hide() {
+                        warn!("Failed to hide application on startup: {error}");
+                    }
 
                     set_foreground(app_handle, false);
                 }
@@ -244,7 +261,13 @@ fn spawn_receiver_tasks(app_handle: &AppHandle) {
     let capp_handle = app_handle.clone();
     tauri::async_runtime::spawn(async move {
         let state: tauri::State<'_, AppState> = capp_handle.state();
-        let mut visibility_receiver = state.visibility_sender.lock().unwrap().subscribe();
+        let mut visibility_receiver = match state.visibility_sender.lock() {
+            Ok(sender) => sender.subscribe(),
+            Err(_) => {
+                error!("visibility sender lock is poisoned");
+                return;
+            }
+        };
 
         loop {
             let rinfo = visibility_receiver.changed().await;
@@ -303,7 +326,10 @@ fn handle_window_event(w: &Window, event: &WindowEvent) {
         }
 
         trace!("handle_window_event: prevent close");
-        w.hide().unwrap();
+        if let Err(error) = w.hide() {
+            warn!("Failed to hide window on close request: {error}");
+            return;
+        }
         api.prevent_close();
         set_foreground(w.app_handle(), false);
     }
@@ -349,7 +375,10 @@ fn kill_app(app_handle: &AppHandle) {
     tokio::task::block_in_place(|| {
         #[allow(clippy::await_holding_lock)]
         tauri::async_runtime::block_on(async move {
-            let _ = state.rqs.lock().unwrap().stop().await;
+            match state.rqs.lock() {
+                Ok(mut rqs) => rqs.stop().await,
+                Err(_) => error!("RQuickShare state lock is poisoned during shutdown"),
+            }
         });
     });
 
