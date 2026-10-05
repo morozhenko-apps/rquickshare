@@ -43,6 +43,8 @@ The internal `dev -> master` PR validation is intentionally skipped to avoid dup
 
 - Aligned crate/package license metadata with the repository GPLv3 license.
 - Disabled automatic release-please activity for the maintained fork; release preparation is manual.
+- Aligned Tauri JavaScript packages and CLI exactly to 2.2.0 to match the Rust-side Cargo.lock.
+- Regenerated pnpm-lock.yaml reproducibly on a GitHub-hosted runner and removed the temporary sync workflow afterwards.
 
 ### Protocol / interoperability
 
@@ -98,7 +100,7 @@ Reviewed or identified as relevant:
 - PR #430 / issue #429 — continuous BlueZ discovery interference. Equivalent duty-cycle work is included.
 - PR #404 — BLE advertisement based on visibility. Equivalent lifecycle work is included.
 - PR #418 — filesystem / transfer error propagation. Equivalent error-surfacing work is included where applicable.
-- PR #408 — Tauri JS/Rust dependency alignment. Still to review against the current dependency graph before applying.
+- PR #408 — Tauri JS/Rust dependency alignment. Applied in equivalent form: JS API/plugins/CLI are pinned to 2.2.0 to match Cargo.lock, and pnpm-lock.yaml was regenerated on a GitHub-hosted runner.
 - PR #420 — large transport/protobuf refactor. Deferred until the maintained fork is green because it is too broad to merge as a bugfix.
 
 Upstream backlog is not considered closed yet. Remaining open PRs/issues must be classified as: applicable, already covered, obsolete/duplicate, feature request, or deferred refactor.
@@ -106,7 +108,7 @@ Upstream backlog is not considered closed yet. Remaining open PRs/issues must be
 ## Remaining audit work
 
 - Audit remaining network/state-machine `unwrap()`/panic paths and distinguish true peer-controlled paths from internal invariants.
-- Review dependency age and known vulnerabilities, including Tauri/Rust/JS alignment.
+- Review dependency age and known vulnerabilities beyond the now-aligned Tauri 2.2.0 stack.
 - Finish the upstream open PR/issue classification.
 - Expand regression coverage around every bug fixed during this pass.
 - Identify only genuinely flaky/stability-sensitive tests for 10x Mode B repetition.
