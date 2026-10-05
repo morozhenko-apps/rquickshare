@@ -106,17 +106,32 @@ pub fn gen_mdns_endpoint_info(device_type: u8, device_name: &str) -> String {
 
 pub fn parse_mdns_endpoint_info(encoded_str: &str) -> Result<(DeviceType, String), anyhow::Error> {
     let decoded_bytes = URL_SAFE_NO_PAD.decode(encoded_str)?;
-    if decoded_bytes.len() < 19 {
-        return Err(anyhow!("Invalid data length"));
+
+    // Compact Quick Share records contain only the 17-byte binary prefix.
+    if decoded_bytes.len() < 17 {
+        return Err(anyhow!(
+            "Invalid data length: expected at least 17 bytes, got {}",
+            decoded_bytes.len()
+        ));
     }
 
     let device_type = (decoded_bytes[0] >> 1) & 0x7;
-    let name_length = decoded_bytes[17] as usize;
-    if 18 + name_length > decoded_bytes.len() {
-        return Err(anyhow!("Invalid name length"));
+
+    if decoded_bytes.len() == 17 {
+        return Ok((DeviceType::from_raw_value(device_type), String::new()));
     }
 
-    let device_name_bytes = &decoded_bytes[18..18 + name_length];
+    // Standard records append a one-byte UTF-8 name length followed by the name.
+    let name_length = decoded_bytes[17] as usize;
+    let expected_length = 18 + name_length;
+    if expected_length > decoded_bytes.len() {
+        return Err(anyhow!(
+            "Invalid name length: declared {name_length} bytes, payload has {} bytes available",
+            decoded_bytes.len().saturating_sub(18)
+        ));
+    }
+
+    let device_name_bytes = &decoded_bytes[18..expected_length];
     let device_name = String::from_utf8(device_name_bytes.to_vec())?;
 
     Ok((DeviceType::from_raw_value(device_type), device_name))
@@ -222,18 +237,56 @@ pub fn is_not_self_ip(ip_address: &Ipv4Addr) -> bool {
 mod tests {
     use super::*;
 
+    fn encoded_endpoint(device_type: DeviceType, suffix: &[u8]) -> String {
+        let mut payload = vec![(device_type as u8) << 1];
+        payload.extend_from_slice(&[0_u8; 16]);
+        payload.extend_from_slice(suffix);
+        URL_SAFE_NO_PAD.encode(payload)
+    }
+
     #[test]
     fn test_gen_and_parse_mdns_info() {
         let device_name = "a_device_name";
         let device_type = DeviceType::Laptop;
-
-        dbg!(&device_type);
-        dbg!(device_type.clone() as u8);
 
         let info = gen_mdns_endpoint_info(device_type.clone() as u8, device_name);
         let parse_info = parse_mdns_endpoint_info(&info).unwrap();
 
         assert_eq!(parse_info.1, device_name);
         assert_eq!(parse_info.0, device_type);
+    }
+
+    #[test]
+    fn test_parse_compact_17_byte_mdns_info() {
+        let info = encoded_endpoint(DeviceType::Phone, &[]);
+        let parse_info = parse_mdns_endpoint_info(&info).unwrap();
+
+        assert_eq!(parse_info.0, DeviceType::Phone);
+        assert_eq!(parse_info.1, "");
+    }
+
+    #[test]
+    fn test_parse_standard_mdns_info_with_empty_name() {
+        let info = encoded_endpoint(DeviceType::Tablet, &[0]);
+        let parse_info = parse_mdns_endpoint_info(&info).unwrap();
+
+        assert_eq!(parse_info.0, DeviceType::Tablet);
+        assert_eq!(parse_info.1, "");
+    }
+
+    #[test]
+    fn test_parse_mdns_info_rejects_payload_shorter_than_prefix() {
+        let info = URL_SAFE_NO_PAD.encode([0_u8; 16]);
+        let err = parse_mdns_endpoint_info(&info).unwrap_err();
+
+        assert!(err.to_string().contains("expected at least 17 bytes"));
+    }
+
+    #[test]
+    fn test_parse_mdns_info_rejects_truncated_name() {
+        let info = encoded_endpoint(DeviceType::Laptop, &[5, b'a']);
+        let err = parse_mdns_endpoint_info(&info).unwrap_err();
+
+        assert!(err.to_string().contains("declared 5 bytes"));
     }
 }
