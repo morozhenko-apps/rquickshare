@@ -39,7 +39,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
-      - name: Audit core lockfile
-        run: cargo audit --file core_lib/Cargo.lock
-      - name: Audit Tauri lockfile
-        run: cargo audit --file app/main/src-tauri/Cargo.lock
+      - name: Audit both Rust lockfiles
+        run: |
+          set +e
+          cargo audit --file core_lib/Cargo.lock
+          core_status=$?
+          cargo audit --file app/main/src-tauri/Cargo.lock
+          tauri_status=$?
+          if [ "$core_status" -ne 0 ] || [ "$tauri_status" -ne 0 ]; then
+            exit 1
+          fi
