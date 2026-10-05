@@ -102,23 +102,35 @@
 						</div>
 
 						<div v-else-if="item.state === 'Cancelled'">
-							<p class="mt-2 text-muted">\n\t\t\t\t\t\t\t\tTransfer cancelled.\n\t\t\t\t\t\t\t</p>
+							<p class="mt-2 text-muted">
+								Transfer cancelled.
+							</p>
 							<div class="flex flex-row justify-end mt-3">
-								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-secondary">\n\t\t\t\t\t\t\t\t\tClear\n\t\t\t\t\t\t\t\t</button>
+								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-secondary">
+									Clear
+								</button>
 							</div>
 						</div>
 
 						<div v-else-if="item.state === 'Rejected'">
-							<p class="mt-2 text-muted">\n\t\t\t\t\t\t\t\tTransfer rejected.\n\t\t\t\t\t\t\t</p>
+							<p class="mt-2 text-muted">
+								Transfer rejected.
+							</p>
 							<div class="flex flex-row justify-end mt-3">
-								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-secondary">\n\t\t\t\t\t\t\t\t\tClear\n\t\t\t\t\t\t\t\t</button>
+								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-secondary">
+									Clear
+								</button>
 							</div>
 						</div>
 
 						<div v-else-if="item.state === 'Disconnected'">
-							<p class="mt-2" style="color: var(--rqs-danger)">\n\t\t\t\t\t\t\t\tUnexpected disconnection.\n\t\t\t\t\t\t\t</p>
+							<p class="mt-2" style="color: var(--rqs-danger)">
+								{{ item.error ?? 'Unexpected disconnection.' }}
+							</p>
 							<div class="flex flex-row justify-end mt-3">
-								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-danger">\n\t\t\t\t\t\t\t\t\tClear\n\t\t\t\t\t\t\t\t</button>
+								<button type="button" @click.stop="removeRequest(vm, item.id)" class="btn btn-danger">
+									Clear
+								</button>
 							</div>
 						</div>
 					</div>
