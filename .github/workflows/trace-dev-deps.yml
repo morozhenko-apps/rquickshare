@@ -23,10 +23,6 @@ jobs:
       - name: Install dependencies
         working-directory: ./app/main
         run: pnpm install --frozen-lockfile
-      - name: Trace vulnerable packages
+      - name: Report outdated direct dependencies
         working-directory: ./app/main
-        run: |
-          for package in cross-spawn glob minimatch flatted picomatch lodash brace-expansion js-yaml browserslist braces; do
-            echo "===== $package ====="
-            pnpm why "$package" || true
-          done
+        run: pnpm outdated --format json || true
