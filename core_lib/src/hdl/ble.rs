@@ -1,12 +1,12 @@
 use std::pin::Pin;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::anyhow;
 use btleplug::api::{Central, CentralEvent, Manager as _, ScanFilter};
 use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;
 use tokio::sync::{broadcast::Sender, watch};
-use tokio::time::{sleep, Sleep};
+use tokio::time::{sleep, Instant, Sleep};
 use tokio_util::sync::CancellationToken;
 use uuid::{uuid, Uuid};
 

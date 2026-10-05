@@ -657,7 +657,7 @@ impl OutboundRequest {
 
         let mut file_metadata: Vec<FileMetadata> = vec![];
         let mut transferred_files: HashMap<i64, InternalFileInfo> = HashMap::new();
-        let mut total_to_send = 0;
+        let mut total_to_send: u64 = 0;
         // TODO - Handle sending Text
         match &self.payload {
             OutboundPayload::Files(files) => {
