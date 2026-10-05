@@ -1,0 +1,31 @@
+name: Trace vulnerable dev dependencies
+
+on:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - ".github/workflows/trace-dev-deps.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@9.7.0
+      - name: Install dependencies
+        working-directory: ./app/main
+        run: pnpm install --frozen-lockfile
+      - name: Trace vulnerable packages
+        working-directory: ./app/main
+        run: |
+          for package in cross-spawn glob minimatch flatted picomatch lodash brace-expansion js-yaml browserslist braces; do
+            echo "===== $package ====="
+            pnpm why "$package" || true
+          done
