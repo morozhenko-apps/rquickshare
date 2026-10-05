@@ -404,3 +404,24 @@ button {
 .error circle.fg {
     stroke: var(--rqs-danger) !important;
 }
+
+
+.text-input {
+    min-height: 2.5rem;
+    border-radius: 0.7rem;
+    border: 1px solid var(--rqs-border);
+    background: var(--rqs-surface);
+    color: var(--rqs-text);
+    padding: 0.5rem 0.7rem;
+    outline: none;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.text-input:focus {
+    border-color: var(--rqs-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--rqs-accent) 18%, transparent);
+}
+
+.text-input::placeholder {
+    color: var(--rqs-text-muted);
+}
