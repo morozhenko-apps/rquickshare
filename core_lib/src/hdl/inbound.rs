@@ -634,7 +634,9 @@ impl InboundRequest {
 
                             if let Some(text_payload) = self.state.text_payload.clone() {
                                 if text_payload.get_i64_value() != payload_id {
-                                    continue;
+                                    return Err(anyhow!(
+                                        "Unexpected text payload id: {payload_id}"
+                                    ));
                                 }
 
                                 info!("Transfer finished");
