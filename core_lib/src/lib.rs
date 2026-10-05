@@ -85,8 +85,10 @@ impl RQS {
         port_number: Option<u32>,
         download_path: Option<PathBuf>,
     ) -> Self {
-        let mut guard = CUSTOM_DOWNLOAD.write().unwrap();
-        *guard = download_path;
+        match CUSTOM_DOWNLOAD.write() {
+            Ok(mut guard) => *guard = download_path,
+            Err(_) => error!("CUSTOM_DOWNLOAD lock is poisoned during initialization"),
+        }
 
         let (message_sender, _) = broadcast::channel(50);
         let (ble_sender, _) = broadcast::channel(5);
@@ -207,10 +209,10 @@ impl RQS {
     }
 
     pub fn change_visibility(&mut self, nv: Visibility) {
-        self.visibility_sender
-            .lock()
-            .unwrap()
-            .send_modify(|state| *state = nv);
+        match self.visibility_sender.lock() {
+            Ok(sender) => sender.send_modify(|state| *state = nv),
+            Err(_) => error!("visibility sender lock is poisoned"),
+        }
     }
 
     pub fn set_foreground(&self, foreground: bool) {
@@ -235,7 +237,9 @@ impl RQS {
     // Setting None here will resume the default settings
     pub fn set_download_path(&self, p: Option<PathBuf>) {
         debug!("Setting the download path to {:?}", p);
-        let mut guard = CUSTOM_DOWNLOAD.write().unwrap();
-        *guard = p;
+        match CUSTOM_DOWNLOAD.write() {
+            Ok(mut guard) => *guard = p,
+            Err(_) => error!("CUSTOM_DOWNLOAD lock is poisoned while changing path"),
+        }
     }
 }
