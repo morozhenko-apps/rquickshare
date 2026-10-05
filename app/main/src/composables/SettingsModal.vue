@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import { utils } from '../vue_lib';
 import { PropType } from 'vue';
 import { TauriVM } from '../vue_lib/helper/ParamsHelper';
@@ -11,6 +12,22 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+const portInput = ref('');
+const portError = ref('');
+const portSaved = ref(false);
+
+watch(
+	() => props.vm.settingsOpen,
+	async (isOpen) => {
+		if (!isOpen) return;
+
+		const savedPort = await props.vm.store.get<number>('port');
+		portInput.value = savedPort?.toString() ?? '';
+		portError.value = '';
+		portSaved.value = false;
+	},
+	{ immediate: true }
+);
 
 function openDownloadPicker() {
 	props.vm.dialogOpen({
@@ -25,15 +42,38 @@ function openDownloadPicker() {
 		await utils.setDownloadPath(props.vm, el as string);
 	});
 }
+
+async function savePort() {
+	const raw = portInput.value.trim();
+	portError.value = '';
+	portSaved.value = false;
+
+	if (raw === '') {
+		await props.vm.store.delete('port');
+		await props.vm.store.save();
+		portSaved.value = true;
+		return;
+	}
+
+	const port = Number(raw);
+	if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+		portError.value = 'Use a port from 1024 to 65535.';
+		return;
+	}
+
+	await props.vm.store.set('port', port);
+	await props.vm.store.save();
+	portSaved.value = true;
+}
 </script>
 
 <template>
 	<div v-if="vm.settingsOpen" class="modal-backdrop absolute inset-0 z-10 flex justify-center items-center p-6">
-		<div class="modal-card rounded-2xl p-5 w-[28rem] max-w-full">
+		<div class="modal-card rounded-2xl p-5 w-[30rem] max-w-full max-h-full overflow-y-auto">
 			<div class="flex flex-row justify-between items-center gap-4">
 				<div>
 					<h2 class="font-semibold text-xl">Settings</h2>
-					<p class="text-sm text-muted mt-1">General behavior and received files.</p>
+					<p class="text-sm text-muted mt-1">General behavior, networking and received files.</p>
 				</div>
 				<button type="button" class="btn btn-secondary" @click="emit('close')">
 					Close
@@ -77,6 +117,36 @@ function openDownloadPicker() {
 						{{ vm.downloadPath ?? 'OS user download folder' }}
 					</p>
 				</button>
+
+				<div class="setting-row rounded-xl p-3">
+					<div class="flex items-start justify-between gap-4">
+						<div class="min-w-0 flex-1">
+							<p class="font-medium">Listening port</p>
+							<p class="text-xs text-muted mt-1">
+								Leave empty for an automatic random port. A fixed port is useful when a firewall is enabled.
+							</p>
+						</div>
+						<input
+							v-model="portInput"
+							type="number"
+							min="1024"
+							max="65535"
+							placeholder="Auto"
+							class="text-input w-28"
+							@input="portSaved = false"
+							@keyup.enter="savePort">
+					</div>
+					<div class="flex items-center justify-between gap-3 mt-3">
+						<p class="text-xs" :style="{ color: portError ? 'var(--rqs-danger)' : 'var(--rqs-text-muted)' }">
+							<span v-if="portError">{{ portError }}</span>
+							<span v-else-if="portSaved">Saved. Restart the app to apply.</span>
+							<span v-else>Changes apply after restart.</span>
+						</p>
+						<button type="button" class="btn btn-secondary" @click="savePort">
+							Save
+						</button>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
