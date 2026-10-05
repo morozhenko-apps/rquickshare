@@ -15,15 +15,15 @@ This document is the working log for the `morozhenko-apps/rquickshare` maintenan
 
 ## Current gate status
 
-At the start of this document, the latest preflight had four green jobs and one red job:
+Latest `dev` preflight on `70f4a2c` is fully green:
 
 - Rust format — green.
 - Core Rust tests — green.
 - Clippy `core_lib` — green.
 - Frontend lint/typecheck/unit — green.
-- Clippy `app/main/src-tauri` — red because of one pre-existing `clippy::unneeded_struct_pattern` warning in `src/main.rs`.
+- Clippy `app/main/src-tauri` — green.
 
-The Tauri Clippy issue is being fixed as part of the same maintenance pass.
+The internal `dev -> master` PR validation is intentionally skipped to avoid duplicating the authoritative `push dev` preflight.
 
 ## Completed work
 
@@ -105,7 +105,6 @@ Upstream backlog is not considered closed yet. Remaining open PRs/issues must be
 
 ## Remaining audit work
 
-- Finish the current preflight until every fast gate is green.
 - Audit remaining network/state-machine `unwrap()`/panic paths and distinguish true peer-controlled paths from internal invariants.
 - Review dependency age and known vulnerabilities, including Tauri/Rust/JS alignment.
 - Finish the upstream open PR/issue classification.
