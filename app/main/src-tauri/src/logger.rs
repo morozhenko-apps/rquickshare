@@ -90,22 +90,18 @@ fn get_log_file_path(
             let to = dir.as_ref().join(format!(
                 "{}_{}.log",
                 file_name,
-                OffsetDateTime::now_utc()
-                    .format(
-                        &time::format_description::parse(
-                            "[year]-[month]-[day]_[hour]-[minute]-[second]"
-                        )
-                        .unwrap()
-                    )
-                    .unwrap(),
+                OffsetDateTime::now_utc().format(&time::format_description::parse(
+                    "[year]-[month]-[day]_[hour]-[minute]-[second]",
+                )?)?,
             ));
 
             if to.is_file() {
                 let mut to_bak = to.clone();
-                to_bak.set_file_name(format!(
-                    "{}.bak",
-                    to_bak.file_name().unwrap().to_string_lossy()
-                ));
+                let file_name = to_bak
+                    .file_name()
+                    .ok_or_else(|| anyhow::anyhow!("rotated log path has no file name"))?
+                    .to_string_lossy();
+                to_bak.set_file_name(format!("{file_name}.bak"));
                 std::fs::rename(&to, to_bak)?;
             }
 
