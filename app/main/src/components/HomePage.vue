@@ -29,7 +29,7 @@
 								{{ item.name }}
 							</h3>
 							<span v-if="item.state" class="status-chip">
-								{{ stateToDisplay(item.state) }}
+								{{ item.state }}
 							</span>
 						</div>
 
@@ -224,7 +224,7 @@ export default {
 			await this.getVisibility(this);
 
 			if (!await this.store.has(autostartKey)) {
-				await this.setAutoStart(this, true);
+				await this.setAutoStart(this, false);
 			} else {
 				await this.applyAutoStart(this);
 			}
