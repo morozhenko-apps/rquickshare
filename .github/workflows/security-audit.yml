@@ -5,6 +5,12 @@ on:
     branches: [ "dev" ]
     paths:
       - ".github/workflows/security-audit.yml"
+      - "app/main/package.json"
+      - "app/main/pnpm-lock.yaml"
+      - "app/main/src-tauri/Cargo.toml"
+      - "app/main/src-tauri/Cargo.lock"
+      - "core_lib/Cargo.toml"
+      - "core_lib/Cargo.lock"
   workflow_dispatch:
   schedule:
     - cron: "17 4 * * 1"
