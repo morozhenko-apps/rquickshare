@@ -116,7 +116,12 @@ impl MDnsServer {
 
                     let receiver = self.daemon.unregister(self.service_info.get_fullname())?;
                     let _ = receiver.recv();
-                    let _ = self.visibility_sender.lock().unwrap().send(Visibility::Invisible);
+                    match self.visibility_sender.lock() {
+                        Ok(sender) => {
+                            let _ = sender.send(Visibility::Invisible);
+                        }
+                        Err(_) => error!("{INNER_NAME}: visibility sender lock is poisoned"),
+                    }
                 }
             }
         }
