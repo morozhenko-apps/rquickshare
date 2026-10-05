@@ -67,7 +67,7 @@ function openFilePicker() {
 		v-if="props.vm.displayedIsEmpty && props.vm.outboundPayload === undefined"
 		class="drop-zone w-full rounded-2xl p-7 flex flex-col justify-center items-center mt-auto"
 		:class="{'drop-zone--active': props.vm.isDragHovering}">
-		<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" class="w-8 h-8">
+		<svg\n\t\txmlns="http://www.w3.org/2000/svg"\n\t\theight="24" viewBox="0 -960 960 960" width="24"\n\t\tclass="w-8 h-8">
 			<!-- eslint-disable-next-line -->
 			<path d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z" />
 		</svg>
