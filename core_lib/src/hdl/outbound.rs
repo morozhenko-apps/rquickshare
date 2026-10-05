@@ -54,6 +54,16 @@ type HmacSha256 = Hmac<Sha256>;
 const SANE_FRAME_LENGTH: i32 = 5 * 1024 * 1024;
 const SANITY_DURATION: Duration = Duration::from_micros(10);
 
+fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> {
+    if total_size < 0 || total_size > i64::from(SANE_FRAME_LENGTH) {
+        return Err(anyhow!(
+            "Invalid byte payload size: {total_size}; expected 0..={SANE_FRAME_LENGTH}"
+        ));
+    }
+
+    usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
+}
+
 #[derive(Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub enum OutboundPayload {
@@ -387,12 +397,13 @@ impl OutboundRequest {
             )));
         }
 
-        if v1_frame.connection_response.is_none() {
-            return Err(anyhow!(format!("Unexpected None connection_response",)));
-        }
+        let connection_response = v1_frame
+            .connection_response
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing connection response"))?;
 
-        if v1_frame.connection_response.as_ref().unwrap().response() != ResponseStatus::Accept {
-            return Err(anyhow!(format!("Connection rejected by third party",)));
+        if connection_response.response() != ResponseStatus::Accept {
+            return Err(anyhow!("Connection rejected by third party"));
         }
 
         let paired_encryption = sharing_nearby::Frame {
@@ -475,21 +486,20 @@ impl OutboundRequest {
                         info!("Processing PayloadType::Bytes");
                         let payload_id = header.id();
 
-                        if header.total_size() > SANE_FRAME_LENGTH.into() {
-                            self.state.payload_buffers.remove(&payload_id);
-                            return Err(anyhow!(
-                                "Payload too large: {} bytes",
-                                header.total_size()
-                            ));
-                        }
+                        let declared_size = checked_payload_buffer_size(header.total_size())?;
 
                         self.state
                             .payload_buffers
                             .entry(payload_id)
-                            .or_insert_with(|| Vec::with_capacity(header.total_size() as usize));
+                            .or_insert_with(|| Vec::with_capacity(declared_size));
 
                         // Get the current length of the buffer, if it exists, without holding a mutable borrow.
-                        let buffer_len = self.state.payload_buffers.get(&payload_id).unwrap().len();
+                        let buffer_len = self
+                            .state
+                            .payload_buffers
+                            .get(&payload_id)
+                            .ok_or_else(|| anyhow!("Missing payload buffer for {payload_id}"))?
+                            .len();
                         if chunk.offset() != buffer_len as i64 {
                             self.state.payload_buffers.remove(&payload_id);
                             return Err(anyhow!(
@@ -499,7 +509,22 @@ impl OutboundRequest {
                             ));
                         }
 
-                        let buffer = self.state.payload_buffers.get_mut(&payload_id).unwrap();
+                        let body_len = chunk.body().len();
+                        let new_len = buffer_len
+                            .checked_add(body_len)
+                            .ok_or_else(|| anyhow!("Byte payload size overflow"))?;
+                        if new_len > declared_size {
+                            self.state.payload_buffers.remove(&payload_id);
+                            return Err(anyhow!(
+                                "Byte payload exceeds declared size: {new_len} > {declared_size}"
+                            ));
+                        }
+
+                        let buffer = self
+                            .state
+                            .payload_buffers
+                            .get_mut(&payload_id)
+                            .ok_or_else(|| anyhow!("Missing payload buffer for {payload_id}"))?;
                         if let Some(body) = &chunk.body {
                             buffer.extend(body);
                         }
@@ -678,10 +703,22 @@ impl OutboundRequest {
                     let fname = path
                         .file_name()
                         .ok_or_else(|| anyhow!("Failed to get file_name for {f}"))?;
+                    let payload_id = loop {
+                        let candidate = rand::rng().random::<i64>();
+                        if !transferred_files.contains_key(&candidate) {
+                            break candidate;
+                        }
+                    };
+                    let file_size = i64::try_from(fmetadata.size())
+                        .map_err(|_| anyhow!("File is too large to represent in the protocol: {f}"))?;
+                    let file_name = fname
+                        .to_str()
+                        .ok_or_else(|| anyhow!("File name is not valid UTF-8: {f}"))?
+                        .to_owned();
                     let fmeta = FileMetadata {
-                        payload_id: Some(rand::rng().random::<i64>()),
-                        name: Some(fname.to_os_string().into_string().unwrap()),
-                        size: Some(fmetadata.size() as i64),
+                        payload_id: Some(payload_id),
+                        name: Some(file_name),
+                        size: Some(file_size),
                         mime_type: Some(ftype),
                         r#type: Some(meta_type.into()),
                         ..Default::default()
@@ -697,7 +734,9 @@ impl OutboundRequest {
                         },
                     );
                     file_metadata.push(fmeta);
-                    total_to_send += fmetadata.size();
+                    total_to_send = total_to_send
+                        .checked_add(fmetadata.size())
+                        .ok_or_else(|| anyhow!("Total outbound transfer size overflow"))?;
                 }
             }
         }
@@ -734,13 +773,17 @@ impl OutboundRequest {
         &mut self,
         v1_frame: &sharing_nearby::V1Frame,
     ) -> Result<(), anyhow::Error> {
-        if v1_frame.r#type() != sharing_nearby::v1_frame::FrameType::Response
-            || v1_frame.connection_response.is_none()
-        {
-            return Err(anyhow!("Missing required fields"));
+        if v1_frame.r#type() != sharing_nearby::v1_frame::FrameType::Response {
+            return Err(anyhow!("Expected consent response frame"));
         }
 
-        match v1_frame.connection_response.as_ref().unwrap().status() {
+        let connection_response = v1_frame
+            .connection_response
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing consent response"))?;
+        let consent_status = connection_response.status();
+
+        match consent_status {
             sharing_nearby::connection_response_frame::Status::Accept => {
                 info!("State is now State::SendingFiles");
                 self.update_state(
@@ -913,7 +956,7 @@ impl OutboundRequest {
             | sharing_nearby::connection_response_frame::Status::TimedOut => {
                 warn!(
                     "Cannot process: consent denied: {:?}",
-                    v1_frame.connection_response.as_ref().unwrap().status()
+                    consent_status
                 );
                 self.update_state(
                     |e| {
@@ -985,8 +1028,13 @@ impl OutboundRequest {
         }
 
         let encoded_point = EncodedPoint::from_bytes(bytes)?;
-        let peer_key = PublicKey::from_encoded_point(&encoded_point).unwrap();
-        let priv_key = self.state.private_key.as_ref().unwrap();
+        let peer_key = Option::<PublicKey>::from(PublicKey::from_encoded_point(&encoded_point))
+            .ok_or_else(|| anyhow!("Invalid peer P-256 public key"))?;
+        let priv_key = self
+            .state
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing local private key"))?;
 
         let dhs = diffie_hellman(priv_key.to_nonzero_scalar(), peer_key.as_affine());
         let derived_secret = Sha256::digest(dhs.raw_secret_bytes());
@@ -1251,5 +1299,22 @@ impl OutboundRequest {
         // some spare time to process channel's message. Otherwise it
         // get spammed by new requests. Currently set to 10 micro secs.
         tokio::time::sleep(SANITY_DURATION).await;
+    }
+}
+
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn payload_buffer_size_accepts_only_sane_non_negative_values() {
+        assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
+        assert_eq!(
+            checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH)).unwrap(),
+            SANE_FRAME_LENGTH as usize
+        );
+        assert!(checked_payload_buffer_size(-1).is_err());
+        assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
     }
 }
