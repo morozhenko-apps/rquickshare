@@ -105,6 +105,22 @@ Reviewed or identified as relevant:
 
 Upstream backlog is not considered closed yet. Remaining open PRs/issues must be classified as: applicable, already covered, obsolete/duplicate, feature request, or deferred refactor.
 
+## Modern Pixel receiver BLE/GATT bootstrap
+
+Upstream issue #425 contains current 2026 evidence that modern Pixel Quick Share can leave Wi-Fi during receiver discovery. In that state, mDNS-only Linux receivers may never appear or may fail before opening the TCP connection.
+
+A working Linux prototype exists at `martinalderson/rquickshare:feat/ble-receiver-connect-back`. Compared with that fork's master it is six commits and roughly 1.1k changed lines. Its essential architecture is:
+
+- advertise receiver service UUID `0xFEF3`;
+- expose the Nearby GATT slot and weave characteristics;
+- accept the Nearby socket introduction over BLE;
+- reuse the existing UKEY2 / Sharing receive state machine over a generic stream;
+- migrate the established encrypted session to Wi-Fi LAN for actual payload transfer.
+
+The prototype reports successful Pixel -> Linux transfers and is directly relevant to the original symptom that motivated this fork. Our existing BLE duty-cycle and visibility fixes do **not** implement this full receiver-side bootstrap.
+
+This is a required interoperability gate before declaring the maintained fork complete. It will be ported as a separate, reviewable change set so the existing security hardening in `inbound.rs` is not overwritten.
+
 ## Remaining audit work
 
 - Audit remaining network/state-machine `unwrap()`/panic paths and distinguish true peer-controlled paths from internal invariants.
