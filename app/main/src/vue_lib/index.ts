@@ -3,6 +3,7 @@ import ToastMessage from './components/atoms/ToastMessage.vue';
 
 export * from './types';
 export * from './utils';
+export * from './network';
 
 export { ToastNotification, ToastMessage };
 
