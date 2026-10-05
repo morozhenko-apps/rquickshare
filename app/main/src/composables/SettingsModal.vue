@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { utils } from '../vue_lib';
+import { parseListeningPort, utils } from '../vue_lib';
 import { PropType } from 'vue';
 import { TauriVM } from '../vue_lib/helper/ParamsHelper';
 
@@ -43,25 +43,36 @@ function openDownloadPicker() {
 	});
 }
 
+async function onAutostartChange(event: Event) {
+	const checked = (event.target as HTMLInputElement).checked;
+	await utils.setAutoStart(props.vm, checked);
+}
+
+async function onKeepRunningChange(event: Event) {
+	const checked = (event.target as HTMLInputElement).checked;
+	await utils.setRealClose(props.vm, !checked);
+}
+
+async function onStartMinimizedChange(event: Event) {
+	const checked = (event.target as HTMLInputElement).checked;
+	await utils.setStartMinimized(props.vm, checked);
+}
+
 async function savePort() {
-	const raw = portInput.value.trim();
-	portError.value = '';
+	const parsed = parseListeningPort(portInput.value);
+	portError.value = parsed.error ?? '';
 	portSaved.value = false;
 
-	if (raw === '') {
+	if (parsed.error) {
+		return;
+	}
+
+	if (parsed.port === null) {
 		await props.vm.store.delete('port');
-		await props.vm.store.save();
-		portSaved.value = true;
-		return;
+	} else {
+		await props.vm.store.set('port', parsed.port);
 	}
 
-	const port = Number(raw);
-	if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-		portError.value = 'Use a port from 1024 to 65535.';
-		return;
-	}
-
-	await props.vm.store.set('port', port);
 	await props.vm.store.save();
 	portSaved.value = true;
 }
@@ -82,32 +93,44 @@ async function savePort() {
 
 			<div class="pt-5 flex flex-col gap-2">
 				<div class="setting-row rounded-xl p-3">
-					<label class="cursor-pointer flex flex-row justify-between items-center gap-4" @click="utils.setAutoStart(vm, !vm.autostart)">
+					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
 							<p class="font-medium">Start on boot</p>
 							<p class="text-xs text-muted mt-1">Launch Quick Share when you sign in.</p>
 						</div>
-						<input type="checkbox" :checked="vm.autostart" class="checkbox focus:outline-none">
+						<input
+							type="checkbox"
+							:checked="vm.autostart"
+							class="checkbox focus:outline-none"
+							@change="onAutostartChange">
 					</label>
 				</div>
 
 				<div class="setting-row rounded-xl p-3">
-					<label class="cursor-pointer flex flex-row justify-between items-center gap-4" @click="utils.setRealClose(vm, !vm.realclose)">
+					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
 							<p class="font-medium">Keep running on close</p>
 							<p class="text-xs text-muted mt-1">Hide the window instead of stopping the service.</p>
 						</div>
-						<input type="checkbox" :checked="!vm.realclose" class="checkbox focus:outline-none">
+						<input
+							type="checkbox"
+							:checked="!vm.realclose"
+							class="checkbox focus:outline-none"
+							@change="onKeepRunningChange">
 					</label>
 				</div>
 
 				<div class="setting-row rounded-xl p-3">
-					<label class="cursor-pointer flex flex-row justify-between items-center gap-4" @click="utils.setStartMinimized(vm, !vm.startminimized)">
+					<label class="cursor-pointer flex flex-row justify-between items-center gap-4">
 						<div>
 							<p class="font-medium">Start minimized</p>
 							<p class="text-xs text-muted mt-1">Open directly in the background.</p>
 						</div>
-						<input type="checkbox" :checked="vm.startminimized" class="checkbox focus:outline-none">
+						<input
+							type="checkbox"
+							:checked="vm.startminimized"
+							class="checkbox focus:outline-none"
+							@change="onStartMinimizedChange">
 					</label>
 				</div>
 
