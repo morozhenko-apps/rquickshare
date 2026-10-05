@@ -17,18 +17,13 @@ jobs:
     name: Rust format
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.head.ref != 'dev'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        directory:
-          - ./core_lib
-          - ./app/main/src-tauri
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
       - name: Check formatting
-        working-directory: ${{ matrix.directory }}
+        working-directory: ./app/main/src-tauri
         run: cargo fmt --all --check
 
   frontend:
