@@ -1,0 +1,54 @@
+name: Sync current Tauri v2
+
+on:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - "app/main/package.json"
+      - "app/main/src-tauri/Cargo.toml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-current-tauri-v2
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@9.7.0
+
+      - name: Resolve current JavaScript v2 packages
+        working-directory: ./app/main
+        run: pnpm install --lockfile-only
+
+      - name: Resolve current Rust v2 packages
+        working-directory: ./app/main/src-tauri
+        run: cargo update
+
+      - name: Commit lockfiles if changed
+        run: |
+          if git diff --quiet -- app/main/pnpm-lock.yaml app/main/src-tauri/Cargo.lock; then
+            echo "Lockfiles already current"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/main/pnpm-lock.yaml app/main/src-tauri/Cargo.lock
+          git commit -m "chore(deps): resolve current Tauri v2 stack"
+          git push origin HEAD:dev
