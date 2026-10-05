@@ -1,0 +1,54 @@
+name: Sync security dependency locks
+
+on:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - "app/main/package.json"
+      - "app/main/src-tauri/Cargo.toml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-security-dependency-locks
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@9.7.0
+
+      - name: Regenerate pnpm lockfile
+        working-directory: ./app/main
+        run: pnpm install --lockfile-only
+
+      - name: Update patched Rust shell plugin
+        working-directory: ./app/main/src-tauri
+        run: cargo update -p tauri-plugin-shell --precise 2.2.1
+
+      - name: Commit lockfiles if changed
+        run: |
+          if git diff --quiet -- app/main/pnpm-lock.yaml app/main/src-tauri/Cargo.lock; then
+            echo "Lockfiles already match manifests"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/main/pnpm-lock.yaml app/main/src-tauri/Cargo.lock
+          git commit -m "chore(deps): sync security-patched lockfiles"
+          git push origin HEAD:dev
