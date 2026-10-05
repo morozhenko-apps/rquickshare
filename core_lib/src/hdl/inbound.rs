@@ -1,5 +1,6 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::os::unix::fs::FileExt;
+use std::path::{Component, Path};
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -43,7 +44,44 @@ use crate::{location_nearby_connections, sharing_nearby};
 type HmacSha256 = Hmac<Sha256>;
 
 const SANE_FRAME_LENGTH: i32 = 5 * 1024 * 1024;
+const MAX_RECEIVED_FILENAME_BYTES: usize = 255;
 const SANITY_DURATION: Duration = Duration::from_micros(10);
+
+fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
+    if name.is_empty() {
+        return Err(anyhow!("Received file name is empty"));
+    }
+
+    if name.len() > MAX_RECEIVED_FILENAME_BYTES {
+        return Err(anyhow!(
+            "Received file name is too long: {} bytes",
+            name.len()
+        ));
+    }
+
+    if name
+        .chars()
+        .any(|c| c == '/' || c == '\\' || c == '\0' || c.is_control())
+    {
+        return Err(anyhow!("Received file name contains unsafe characters"));
+    }
+
+    let mut components = Path::new(name).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(()),
+        _ => Err(anyhow!("Received file name is not a single safe path component")),
+    }
+}
+
+fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> {
+    if total_size < 0 || total_size > i64::from(SANE_FRAME_LENGTH) {
+        return Err(anyhow!(
+            "Invalid byte payload size: {total_size}; expected 0..={SANE_FRAME_LENGTH}"
+        ));
+    }
+
+    usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
+}
 
 #[derive(Debug)]
 pub struct InboundRequest {
@@ -526,18 +564,12 @@ impl InboundRequest {
                         info!("Processing PayloadType::Bytes");
                         let payload_id = header.id();
 
-                        if header.total_size() > SANE_FRAME_LENGTH.into() {
-                            self.state.payload_buffers.remove(&payload_id);
-                            return Err(anyhow!(
-                                "Payload too large: {} bytes",
-                                header.total_size()
-                            ));
-                        }
+                        let declared_size = checked_payload_buffer_size(header.total_size())?;
 
                         self.state
                             .payload_buffers
                             .entry(payload_id)
-                            .or_insert_with(|| Vec::with_capacity(header.total_size() as usize));
+                            .or_insert_with(|| Vec::with_capacity(declared_size));
 
                         // Get the current length of the buffer, if it exists, without holding a mutable borrow.
                         let buffer_len = self.state.payload_buffers.get(&payload_id).unwrap().len();
@@ -550,7 +582,22 @@ impl InboundRequest {
                             ));
                         }
 
-                        let buffer = self.state.payload_buffers.get_mut(&payload_id).unwrap();
+                        let body_len = chunk.body().len();
+                        let new_len = buffer_len
+                            .checked_add(body_len)
+                            .ok_or_else(|| anyhow!("Byte payload size overflow"))?;
+                        if new_len > declared_size {
+                            self.state.payload_buffers.remove(&payload_id);
+                            return Err(anyhow!(
+                                "Byte payload exceeds declared size: {new_len} > {declared_size}"
+                            ));
+                        }
+
+                        let buffer = self
+                            .state
+                            .payload_buffers
+                            .get_mut(&payload_id)
+                            .ok_or_else(|| anyhow!("Missing payload buffer for {payload_id}"))?;
                         if let Some(body) = &chunk.body {
                             buffer.extend(body);
                         }
@@ -627,6 +674,12 @@ impl InboundRequest {
                         info!("Processing PayloadType::File");
                         let payload_id = header.id();
 
+                        if self.state.state != State::ReceivingFiles {
+                            return Err(anyhow!(
+                                "File payload received before transfer acceptance"
+                            ));
+                        }
+
                         let file_internal = self
                             .state
                             .transferred_files
@@ -644,20 +697,24 @@ impl InboundRequest {
                             ));
                         }
 
-                        let chunk_size = chunk.body().len();
-                        if current_offset + chunk_size as i64 > file_internal.total_size {
+                        let chunk_size = i64::try_from(chunk.body().len())
+                            .map_err(|_| anyhow!("File chunk is too large"))?;
+                        let new_offset = current_offset
+                            .checked_add(chunk_size)
+                            .ok_or_else(|| anyhow!("File offset overflow"))?;
+                        if new_offset > file_internal.total_size {
                             return Err(anyhow!(
-                                "Transferred file size exceeds previously specified value: {} vs {}", current_offset + chunk_size as i64, file_internal.total_size
+                                "Transferred file size exceeds previously specified value: {new_offset} vs {}",
+                                file_internal.total_size
                             ));
                         }
 
                         if !chunk.body().is_empty() {
-                            file_internal
-                                .file
-                                .as_ref()
-                                .unwrap()
-                                .write_all_at(chunk.body(), current_offset as u64)?;
-                            file_internal.bytes_transferred += chunk_size as i64;
+                            let file = file_internal.file.as_ref().ok_or_else(|| {
+                                anyhow!("File payload received before destination file was opened")
+                            })?;
+                            file.write_all_at(chunk.body(), current_offset as u64)?;
+                            file_internal.bytes_transferred = new_offset;
 
                             self.update_state(
                                 |e| {
@@ -826,10 +883,25 @@ impl InboundRequest {
             let mut total_bytes: u64 = 0;
 
             for file in &introduction.file_metadata {
-                info!("File name: {}", file.name());
+                let file_name = file.name();
+                validate_received_file_name(file_name)?;
+                if file.size() < 0 {
+                    return Err(anyhow!(
+                        "Invalid negative file size for {file_name}: {}",
+                        file.size()
+                    ));
+                }
+                if self.state.transferred_files.contains_key(&file.payload_id()) {
+                    return Err(anyhow!(
+                        "Duplicate file payload id: {}",
+                        file.payload_id()
+                    ));
+                }
+
+                info!("File name: {}", file_name);
 
                 let mut dest = get_download_dir();
-                dest.push(file.name());
+                dest.push(file_name);
 
                 info!("Destination: {:?}", dest);
                 if dest.exists() {
@@ -837,7 +909,7 @@ impl InboundRequest {
                     dest.pop();
 
                     loop {
-                        dest.push(format!("{}_{}", counter, file.name()));
+                        dest.push(format!("{}_{}", counter, file_name));
                         if !dest.exists() {
                             break;
                         }
@@ -855,9 +927,11 @@ impl InboundRequest {
                     total_size: file.size(),
                     file: None,
                 };
-                total_bytes += info.total_size as u64;
+                total_bytes = total_bytes
+                    .checked_add(info.total_size as u64)
+                    .ok_or_else(|| anyhow!("Total transfer size overflow"))?;
                 self.state.transferred_files.insert(file.payload_id(), info);
-                files_name.push(file.name().to_owned());
+                files_name.push(file_name.to_owned());
             }
 
             let metadata = TransferMetadata {
@@ -1002,9 +1076,27 @@ impl InboundRequest {
         let ids: Vec<i64> = self.state.transferred_files.keys().cloned().collect();
 
         for id in ids {
-            let mfi = self.state.transferred_files.get_mut(&id).unwrap();
+            let mfi = self
+                .state
+                .transferred_files
+                .get_mut(&id)
+                .ok_or_else(|| anyhow!("Missing transfer metadata for payload {id}"))?;
 
-            let file = File::create(&mfi.file_url)?;
+            let parent = mfi
+                .file_url
+                .parent()
+                .ok_or_else(|| anyhow!("Destination has no parent directory"))?;
+            if !parent.is_dir() {
+                return Err(anyhow!(
+                    "Download directory is unavailable: {}",
+                    parent.display()
+                ));
+            }
+
+            let file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&mfi.file_url)?;
             info!("Created file: {:?}", &file);
             mfi.file = Some(file);
         }
@@ -1344,5 +1436,52 @@ impl InboundRequest {
         // some spare time to process channel's message. Otherwise it
         // get spammed by new requests. Currently set to 10 micro secs.
         tokio::time::sleep(SANITY_DURATION).await;
+    }
+}
+
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn received_file_name_accepts_single_component() {
+        assert!(validate_received_file_name("photo 01.jpg").is_ok());
+        assert!(validate_received_file_name("данные.txt").is_ok());
+    }
+
+    #[test]
+    fn received_file_name_rejects_path_traversal_and_absolute_paths() {
+        for value in [
+            "../secret",
+            "../../secret",
+            "/tmp/secret",
+            "folder/file.txt",
+            "folder\\file.txt",
+            ".",
+            "..",
+        ] {
+            assert!(
+                validate_received_file_name(value).is_err(),
+                "unsafe name unexpectedly accepted: {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn received_file_name_rejects_control_chars_and_oversize_components() {
+        assert!(validate_received_file_name("evil\nname.txt").is_err());
+        assert!(validate_received_file_name(&"a".repeat(MAX_RECEIVED_FILENAME_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn payload_buffer_size_accepts_only_sane_non_negative_values() {
+        assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
+        assert_eq!(
+            checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH)).unwrap(),
+            SANE_FRAME_LENGTH as usize
+        );
+        assert!(checked_payload_buffer_size(-1).is_err());
+        assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
     }
 }
