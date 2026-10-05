@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{Receiver, Sender};
 use ts_rs::TS;
 
@@ -62,6 +63,12 @@ fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> 
     }
 
     usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
+}
+
+fn is_cancel_request(message: &ChannelMessage, transfer_id: &str) -> bool {
+    message.direction == ChannelDirection::FrontToLib
+        && message.id == transfer_id
+        && message.action == Some(ChannelAction::CancelTransfer)
 }
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -112,6 +119,26 @@ impl OutboundRequest {
             sender,
             receiver,
             payload,
+        }
+    }
+
+    fn take_pending_cancel_request(&mut self) -> Result<bool, anyhow::Error> {
+        loop {
+            match self.receiver.try_recv() {
+                Ok(message) => {
+                    if is_cancel_request(&message, &self.state.id) {
+                        debug!("outbound: received cancellation while sending");
+                        return Ok(true);
+                    }
+                }
+                Err(TryRecvError::Empty) => return Ok(false),
+                Err(TryRecvError::Lagged(skipped)) => {
+                    warn!("outbound: control channel lagged by {skipped} messages");
+                }
+                Err(TryRecvError::Closed) => {
+                    return Err(anyhow!("Outbound control channel is closed"));
+                }
+            }
         }
     }
 
@@ -837,6 +864,18 @@ impl OutboundRequest {
 
                     // Loop until we reached end of file
                     loop {
+                        if self.take_pending_cancel_request()? {
+                            self.update_state(
+                                |e| {
+                                    e.state = State::Cancelled;
+                                },
+                                true,
+                            )
+                            .await;
+                            self.disconnection().await?;
+                            return Err(anyhow!(crate::errors::AppError::NotAnError));
+                        }
+
                         // Workaround to limit scope of the immutable borrow on self
                         let (curr_state, buffer, bytes_read) = {
                             let curr_state = match self.state.transferred_files.get(&current) {
@@ -1353,5 +1392,29 @@ mod security_tests {
         );
         assert!(checked_payload_buffer_size(-1).is_err());
         assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
+    }
+
+    #[test]
+    fn test_is_cancel_request_matches_only_current_frontend_transfer() {
+        let cancel = ChannelMessage {
+            id: "transfer-1".to_owned(),
+            direction: ChannelDirection::FrontToLib,
+            action: Some(ChannelAction::CancelTransfer),
+            ..Default::default()
+        };
+        assert!(is_cancel_request(&cancel, "transfer-1"));
+        assert!(!is_cancel_request(&cancel, "transfer-2"));
+
+        let lib_message = ChannelMessage {
+            direction: ChannelDirection::LibToFront,
+            ..cancel.clone()
+        };
+        assert!(!is_cancel_request(&lib_message, "transfer-1"));
+
+        let accept = ChannelMessage {
+            action: Some(ChannelAction::AcceptTransfer),
+            ..cancel
+        };
+        assert!(!is_cancel_request(&accept, "transfer-1"));
     }
 }
