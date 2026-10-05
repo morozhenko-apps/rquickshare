@@ -863,7 +863,7 @@ impl OutboundRequest {
                             }
 
                             let mut buffer = vec![0u8; 512 * 1024];
-                            let file = curr_state
+                            let mut file = curr_state
                                 .file
                                 .as_ref()
                                 .ok_or_else(|| anyhow!("Outbound file handle is missing"))?;
