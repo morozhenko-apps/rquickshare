@@ -6,11 +6,14 @@
   </p>
   <p>
 
-[![CI](https://github.com/Martichou/rquickshare/actions/workflows/build.yml/badge.svg)](https://github.com/Martichou/rquickshare/actions)
-[![CI](https://github.com/Martichou/rquickshare/actions/workflows/lint.yml/badge.svg)](https://github.com/Martichou/rquickshare/actions)
+[![CI](https://github.com/morozhenko-apps/rquickshare/actions/workflows/build.yml/badge.svg)](https://github.com/morozhenko-apps/rquickshare/actions)
+[![CI](https://github.com/morozhenko-apps/rquickshare/actions/workflows/lint.yml/badge.svg)](https://github.com/morozhenko-apps/rquickshare/actions)
 
   </p>
 </div>
+
+> [!NOTE]
+> This repository is a maintained fork of [Martichou/rquickshare](https://github.com/Martichou/rquickshare), focused on current Linux/Android Quick Share compatibility, diagnostics, packaging, and desktop UX. Upstream attribution and license are preserved.
 
 ![demo image](.github/demo.png)
 
@@ -45,12 +48,12 @@ The files should (in theory) install those dependencies by themselves, but if th
 
 ##### Install rquickshare
 ```bash
-sudo dpkg -i r-quick-share_${VERSION}.deb
+sudo apt install ./r-quick-share_${VERSION}.deb
 ```
 
 #### Debian
 ```bash
-sudo dpkg -i r-quick-share_${VERSION}.deb
+sudo apt install ./r-quick-share_${VERSION}.deb
 ```
 
 #### RPM
@@ -155,7 +158,7 @@ If you want to **really** close the app when clicking on the close button, you c
 
 ### My firewall is blocking the connection
 
-In this case, you may want to configure a static port to allow it in your firewall. You can do so by modifying the config file as follow:
+In this case, configure a static port in **Settings → Listening port**, restart the app, and allow that TCP port in your firewall. Leaving the field empty keeps the default random-port behavior.\n\nFor older builds without this setting, you can still edit the config file manually:
 
 ```bash
 # linux
