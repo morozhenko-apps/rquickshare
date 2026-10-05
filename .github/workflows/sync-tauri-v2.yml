@@ -34,7 +34,16 @@ jobs:
 
       - name: Resolve current JavaScript v2 packages
         working-directory: ./app/main
-        run: pnpm install --lockfile-only
+        run: |
+          pnpm update --lockfile-only \
+            '@tauri-apps/api@^2' \
+            '@tauri-apps/plugin-autostart@^2' \
+            '@tauri-apps/plugin-clipboard-manager@^2' \
+            '@tauri-apps/plugin-dialog@^2' \
+            '@tauri-apps/plugin-notification@^2' \
+            '@tauri-apps/plugin-shell@^2' \
+            '@tauri-apps/plugin-store@^2' \
+            '@tauri-apps/cli@^2'
 
       - name: Resolve current Rust v2 packages
         working-directory: ./app/main/src-tauri
