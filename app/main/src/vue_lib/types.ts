@@ -22,6 +22,7 @@ export interface DisplayedItem {
 	destination?: string,
 	total_bytes?: number,
 	ack_bytes?: number,
+	error?: string,
 }
 
 export const visibilityToNumber: { [key in Visibility]: number } = {

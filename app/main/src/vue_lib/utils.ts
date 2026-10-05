@@ -23,10 +23,11 @@ function _displayedItems(vm: TauriVM): Array<DisplayedItem> {
 
 	vm.requests.filter((el) => stateToDisplay.includes(el.state ?? 'Initial')).forEach((el) => {
 		const idx = ndisplayed.findIndex((nel) => el.id == nel.id);
+		const existing = idx !== -1 ? ndisplayed[idx] : undefined;
 		const elem: DisplayedItem = {
 			id: el.id,
-			name: el.meta?.source?.name ?? 'Unknown',
-			deviceType: el.meta?.source?.device_type ?? 'Unknown',
+			name: el.meta?.source?.name ?? existing?.name ?? 'Unknown',
+			deviceType: el.meta?.source?.device_type ?? existing?.deviceType ?? 'Unknown',
 			endpoint: false,
 
 			state: el.state ?? undefined,
@@ -38,6 +39,7 @@ function _displayedItems(vm: TauriVM): Array<DisplayedItem> {
 			text_type: el.meta?.text_type ?? undefined,
 			ack_bytes: (el.meta?.ack_bytes as number | undefined) ?? undefined,
 			total_bytes: (el.meta?.total_bytes as number | undefined) ?? undefined,
+			error: el.error ?? undefined,
 		};
 
 		if (idx !== -1) {
@@ -154,6 +156,7 @@ async function sendCmd(vm: TauriVM, id: string, action: ChannelAction) {
 		meta: null,
 		state: null,
 		rtype: null,
+		error: null,
 	};
 	console.log("js2rs:", cm);
 

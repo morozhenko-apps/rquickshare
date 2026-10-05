@@ -19,6 +19,7 @@ use tauri::{
     AppHandle, Emitter, Manager, Window, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::logger::set_up_logging;
@@ -208,8 +209,12 @@ fn spawn_receiver_tasks(app_handle: &AppHandle) {
                     }
                     rs2js_channelmessage(info, &capp_handle);
                 }
-                Err(e) => {
-                    error!("RecvError: message_sender: {e}");
+                Err(RecvError::Lagged(skipped)) => {
+                    warn!("message_sender lagged by {skipped} messages");
+                }
+                Err(RecvError::Closed) => {
+                    debug!("message_sender closed");
+                    break;
                 }
             }
         }
@@ -225,8 +230,12 @@ fn spawn_receiver_tasks(app_handle: &AppHandle) {
 
             match rinfo {
                 Ok(info) => rs2js_endpointinfo(info, &capp_handle),
-                Err(e) => {
-                    error!("RecvError: dch_sender: {e}");
+                Err(RecvError::Lagged(skipped)) => {
+                    warn!("dch_sender lagged by {skipped} messages");
+                }
+                Err(RecvError::Closed) => {
+                    debug!("dch_sender closed");
+                    break;
                 }
             }
         }
@@ -245,8 +254,9 @@ fn spawn_receiver_tasks(app_handle: &AppHandle) {
                     let v = visibility_receiver.borrow_and_update();
                     let _ = set_visibility(&capp_handle, *v);
                 }
-                Err(e) => {
-                    error!("RecvError: visibility_receiver: {e}");
+                Err(_) => {
+                    debug!("visibility_receiver closed");
+                    break;
                 }
             }
         }
@@ -273,8 +283,12 @@ fn spawn_receiver_tasks(app_handle: &AppHandle) {
                         last_sent = std::time::Instant::now();
                     }
                 }
-                Err(e) => {
-                    error!("RecvError: ble_receiver: {e}");
+                Err(RecvError::Lagged(skipped)) => {
+                    warn!("ble_receiver lagged by {skipped} messages");
+                }
+                Err(RecvError::Closed) => {
+                    debug!("ble_receiver closed");
+                    break;
                 }
             }
         }
@@ -301,12 +315,16 @@ fn rs2js_channelmessage(message: ChannelMessage, manager: &AppHandle) {
     }
 
     info!("rs2js_channelmessage: {:?}", &message);
-    manager.emit("rs2js_channelmessage", &message).unwrap();
+    if let Err(error) = manager.emit("rs2js_channelmessage", &message) {
+        warn!("Failed to emit channel message to UI: {error}");
+    }
 }
 
 fn rs2js_endpointinfo(message: EndpointInfo, manager: &AppHandle) {
     info!("rs2js_endpointinfo: {:?}", &message);
-    manager.emit("rs2js_endpointinfo", &message).unwrap();
+    if let Err(error) = manager.emit("rs2js_endpointinfo", &message) {
+        warn!("Failed to emit endpoint info to UI: {error}");
+    }
 }
 
 fn open_main_window(app_handle: &AppHandle) {

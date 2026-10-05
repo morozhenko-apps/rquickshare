@@ -40,4 +40,5 @@ pub struct ChannelMessage {
     pub rtype: Option<TransferType>,
     pub state: Option<State>,
     pub meta: Option<TransferMetadata>,
+    pub error: Option<String>,
 }

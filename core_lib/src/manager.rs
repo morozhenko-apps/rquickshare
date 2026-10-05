@@ -11,6 +11,11 @@ use crate::hdl::{InboundRequest, OutboundPayload, OutboundRequest, State};
 use crate::utils::RemoteDeviceInfo;
 
 const INNER_NAME: &str = "TcpServer";
+const MAX_UI_ERROR_CHARS: usize = 512;
+
+fn error_for_ui(error: &anyhow::Error) -> String {
+    error.to_string().chars().take(MAX_UI_ERROR_CHARS).collect()
+}
 
 #[derive(Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
@@ -56,8 +61,16 @@ impl TcpServer {
                 }
                 Some(i) = self.connect_receiver.recv() => {
                     info!("{INNER_NAME}: outbound request queued for {}", i.addr);
+                    let request_id = i.id.clone();
                     if let Err(e) = self.connect(cctk, i).await {
                         error!("{INNER_NAME}: error sending: {}", e);
+                        let _ = self.sender.send(ChannelMessage {
+                            id: request_id,
+                            direction: ChannelDirection::LibToFront,
+                            state: Some(State::Disconnected),
+                            error: Some(error_for_ui(&e)),
+                            ..Default::default()
+                        });
                     }
                 }
                 r = self.tcp_listener.accept() => {
@@ -91,6 +104,8 @@ impl TcpServer {
                                                         id: remote_addr.to_string(),
                                                         direction: ChannelDirection::LibToFront,
                                                         state: Some(State::Disconnected),
+                                                        meta: ir.state.transfer_metadata.clone(),
+                                                        error: Some(error_for_ui(&e)),
                                                         ..Default::default()
                                                     });
                                                 }
@@ -166,6 +181,8 @@ impl TcpServer {
                                         id: si.addr.clone(),
                                         direction: ChannelDirection::LibToFront,
                                         state: Some(State::Disconnected),
+                                        meta: or.state.transfer_metadata.clone(),
+                                        error: Some(error_for_ui(&e)),
                                         ..Default::default()
                                     });
                                 }
