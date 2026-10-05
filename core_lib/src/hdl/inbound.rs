@@ -1450,7 +1450,6 @@ impl InboundRequest {
     }
 }
 
-
 #[cfg(test)]
 mod security_tests {
     use super::*;
