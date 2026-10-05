@@ -38,7 +38,8 @@ use crate::securemessage::{
 use crate::sharing_nearby::{paired_key_result_frame, text_metadata};
 use crate::utils::{
     encode_point, gen_ecdsa_keypair, gen_random, get_download_dir, hkdf_extract_expand,
-    stream_read_exact, to_four_digit_string, DeviceType, RemoteDeviceInfo,
+    normalize_p256_coordinate, stream_read_exact, to_four_digit_string, DeviceType,
+    RemoteDeviceInfo,
 };
 use crate::{location_nearby_connections, sharing_nearby};
 
@@ -425,7 +426,12 @@ impl InboundRequest {
         }
 
         let sha512 = Sha512::digest(frame_data);
-        if self.state.cipher_commitment.as_ref().unwrap().commitment() != sha512.as_slice() {
+        let cipher_commitment = self
+            .state
+            .cipher_commitment
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing cipher commitment"))?;
+        if cipher_commitment.commitment() != sha512.as_slice() {
             error!("cipher_commitment isn't equals to sha512(frame_data)");
             return Err(anyhow!("UKey2: cipher_commitment != sha512"));
         }
@@ -509,7 +515,12 @@ impl InboundRequest {
         &mut self,
         smsg: &SecureMessage,
     ) -> Result<(), anyhow::Error> {
-        let mut hmac = HmacSha256::new_from_slice(self.state.recv_hmac_key.as_ref().unwrap())?;
+        let recv_hmac_key = self
+            .state
+            .recv_hmac_key
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing receive HMAC key"))?;
+        let mut hmac = HmacSha256::new_from_slice(recv_hmac_key)?;
         hmac.update(&smsg.header_and_body);
         if !hmac
             .finalize()
@@ -523,9 +534,17 @@ impl InboundRequest {
         let header_and_body = HeaderAndBody::decode(&*smsg.header_and_body)?;
 
         let msg_data = header_and_body.body;
-        let key = self.state.decrypt_key.as_ref().unwrap();
+        let key = self
+            .state
+            .decrypt_key
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing decrypt key"))?;
 
-        let mut cipher = Cipher::new_256(key[..AES_256_KEY_LEN].try_into()?);
+        let key_bytes: &[u8; AES_256_KEY_LEN] = key
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow!("Invalid decrypt key length: {}", key.len()))?;
+        let mut cipher = Cipher::new_256(key_bytes);
         cipher.set_auto_padding(true);
         let decrypted = cipher.cbc_decrypt(header_and_body.header.iv(), &msg_data);
 
@@ -1165,18 +1184,13 @@ impl InboundRequest {
             .ec_p256_public_key
             .ok_or_else(|| anyhow!("Missing required fields"))?;
 
-        let mut bytes = vec![0x04];
-        // Ensure no more than 32 bytes for the keys
-        if peer_p256_key.x.len() > 32 {
-            bytes.extend_from_slice(&peer_p256_key.x[peer_p256_key.x.len() - 32..]);
-        } else {
-            bytes.extend_from_slice(&peer_p256_key.x);
-        }
-        if peer_p256_key.y.len() > 32 {
-            bytes.extend_from_slice(&peer_p256_key.y[peer_p256_key.y.len() - 32..]);
-        } else {
-            bytes.extend_from_slice(&peer_p256_key.y);
-        }
+        let x = normalize_p256_coordinate(&peer_p256_key.x)?;
+        let y = normalize_p256_coordinate(&peer_p256_key.y)?;
+
+        let mut bytes = Vec::with_capacity(65);
+        bytes.push(0x04);
+        bytes.extend_from_slice(&x);
+        bytes.extend_from_slice(&y);
 
         let encoded_point = EncodedPoint::from_bytes(bytes)?;
         let peer_key = Option::<PublicKey>::from(PublicKey::from_encoded_point(&encoded_point))
@@ -1190,9 +1204,20 @@ impl InboundRequest {
         let dhs = diffie_hellman(priv_key.to_nonzero_scalar(), peer_key.as_affine());
         let derived_secret = Sha256::digest(dhs.raw_secret_bytes());
 
+        let client_init_msg_data = self
+            .state
+            .client_init_msg_data
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing UKEY2 client init data"))?;
+        let server_init_data = self
+            .state
+            .server_init_data
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing UKEY2 server init data"))?;
+
         let mut ukey_info: Vec<u8> = vec![];
-        ukey_info.extend_from_slice(self.state.client_init_msg_data.as_ref().unwrap());
-        ukey_info.extend_from_slice(self.state.server_init_data.as_ref().unwrap());
+        ukey_info.extend_from_slice(client_init_msg_data);
+        ukey_info.extend_from_slice(server_init_data);
 
         let auth_label = "UKEY2 v1 auth".as_bytes();
         let next_label = "UKEY2 v1 next".as_bytes();
@@ -1323,11 +1348,19 @@ impl InboundRequest {
             message: Some(frame.encode_to_vec()),
         };
 
-        let key = self.state.encrypt_key.as_ref().unwrap();
+        let key = self
+            .state
+            .encrypt_key
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing encrypt key"))?;
         let msg_data = d2d_msg.encode_to_vec();
         let iv = gen_random(16);
 
-        let mut cipher = Cipher::new_256(&key[..AES_256_KEY_LEN].try_into().unwrap());
+        let key_bytes: &[u8; AES_256_KEY_LEN] = key
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow!("Invalid encrypt key length: {}", key.len()))?;
+        let mut cipher = Cipher::new_256(key_bytes);
         cipher.set_auto_padding(true);
         let encrypted = cipher.cbc_encrypt(&iv, &msg_data);
 
@@ -1348,7 +1381,12 @@ impl InboundRequest {
             },
         };
 
-        let mut hmac = HmacSha256::new_from_slice(self.state.send_hmac_key.as_ref().unwrap())?;
+        let send_hmac_key = self
+            .state
+            .send_hmac_key
+            .as_ref()
+            .ok_or_else(|| anyhow!("Missing send HMAC key"))?;
+        let mut hmac = HmacSha256::new_from_slice(send_hmac_key)?;
         hmac.update(&hb.encode_to_vec());
         let result = hmac.finalize();
 
