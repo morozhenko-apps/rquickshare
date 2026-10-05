@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::collections::HashSet;\nuse std::fs::OpenOptions;
 use std::os::unix::fs::FileExt;
 use std::path::{Component, Path};
 use std::time::Duration;
@@ -881,6 +881,7 @@ impl InboundRequest {
             trace!("process_introduction: handling file_metadata");
             let mut files_name = Vec::with_capacity(introduction.file_metadata.len());
             let mut total_bytes: u64 = 0;
+            let mut reserved_destinations = HashSet::new();
 
             for file in &introduction.file_metadata {
                 let file_name = file.name();
@@ -904,13 +905,13 @@ impl InboundRequest {
                 dest.push(file_name);
 
                 info!("Destination: {:?}", dest);
-                if dest.exists() {
+                if dest.exists() || reserved_destinations.contains(&dest) {
                     let mut counter = 1;
                     dest.pop();
 
                     loop {
                         dest.push(format!("{}_{}", counter, file_name));
-                        if !dest.exists() {
+                        if !dest.exists() && !reserved_destinations.contains(&dest) {
                             break;
                         }
                         dest.pop();
@@ -919,6 +920,7 @@ impl InboundRequest {
 
                     info!("New destination: {:?}", dest);
                 }
+                reserved_destinations.insert(dest.clone());
 
                 let info = InternalFileInfo {
                     payload_id: file.payload_id(),
