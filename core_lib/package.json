@@ -17,13 +17,13 @@
 	},
 	"repository": {
 	  "type": "git",
-	  "url": "git+https://github.com/Martichou/rquickshare.git"
+	  "url": "git+https://github.com/morozhenko-apps/rquickshare.git"
 	},
 	"author": "Martin ANDRE",
 	"bugs": {
-	  "url": "https://github.com/Martichou/rquickshare/issues"
+	  "url": "https://github.com/morozhenko-apps/rquickshare/issues"
 	},
-	"homepage": "https://github.com/Martichou/rquickshare#readme",
+	"homepage": "https://github.com/morozhenko-apps/rquickshare#readme",
 	"devDependencies": {
 	  "typescript": "^5.0.4"
 	}
