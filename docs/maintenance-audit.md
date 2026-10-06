@@ -1,6 +1,6 @@
 # rQuickShare maintained fork — audit and Mode B hardening
 
-_Last updated: 2026-10-05_
+_Last updated: 2026-10-06_
 
 This document is the working log for the `morozhenko-apps/rquickshare` maintenance pass. It is intentionally kept separate from release notes: it tracks audit scope, upstream triage, CI gates, fixes, and the final Mode B verification before fast-forwarding `dev` into `master`.
 
@@ -15,13 +15,9 @@ This document is the working log for the `morozhenko-apps/rquickshare` maintenan
 
 ## Current gate status
 
-Latest `dev` preflight on `70f4a2c` is fully green:
+A full `dev` revalidation is in progress after dependency, clipboard, logging and Tauri security hardening.
 
-- Rust format — green.
-- Core Rust tests — green.
-- Clippy `core_lib` — green.
-- Frontend lint/typecheck/unit — green.
-- Clippy `app/main/src-tauri` — green.
+The last representative dependency-upgrade preflight had four green jobs (Rust format, core tests, core Clippy and frontend lint/typecheck/unit) and one Tauri Clippy failure caused only by five newly surfaced lint/deprecation findings. Those findings have been fixed; a fresh authoritative `push dev` preflight is now running.
 
 The internal `dev -> master` PR validation is intentionally skipped to avoid duplicating the authoritative `push dev` preflight.
 
@@ -43,8 +39,14 @@ The internal `dev -> master` PR validation is intentionally skipped to avoid dup
 
 - Aligned crate/package license metadata with the repository GPLv3 license.
 - Disabled automatic release-please activity for the maintained fork; release preparation is manual.
-- Aligned Tauri JavaScript packages and CLI exactly to 2.2.0 to match the Rust-side Cargo.lock.
-- Regenerated pnpm-lock.yaml reproducibly on a GitHub-hosted runner and removed the temporary sync workflow afterwards.
+- Replaced the stale Tauri 2.2 dependency set with current Tauri v2 packages (Tauri core/API/CLI 2.12.1 plus current compatible plugin minors).
+- Regenerated Cargo.lock and pnpm-lock.yaml reproducibly on GitHub-hosted runners and removed the temporary sync workflows afterwards.
+- Updated the frontend toolchain conservatively inside its existing major lines: ESLint 9, Tailwind 3, TypeScript 5, Vite 6 and Vitest 3.
+- Removed the unused Vue DevTools/Electron development stack that was responsible for a large obsolete vulnerability tree.
+- Added weekly/manual dependency security auditing for both Rust lockfiles and frontend dependencies.
+- Current Rust cargo-audit is clean for both lockfiles.
+- Current JavaScript production/runtime audit has no known vulnerabilities.
+- Full JavaScript dev-tooling audit has one accepted high-severity build-only advisory: Tailwind CSS 3.4.19 pulls `braces 3.0.3` through its watcher/glob chain; the advisory currently has no patched `braces` release. This dependency is not shipped in the Tauri runtime and build inputs are trusted repository files. The runtime audit remains release-blocking; the full toolchain audit remains visible/reporting.
 
 ### Protocol / interoperability
 
@@ -90,6 +92,9 @@ This work is intended to cover the same problem areas reported upstream in issue
 - Surface transfer errors instead of reducing every failure to a generic unexpected disconnect.
 - Stop receiver loops cleanly when their channel closes.
 - Normalized transfer state text and Vue markup so lint is meaningful rather than permanently noisy.
+- Added a browser Clipboard API fallback when the Tauri clipboard plugin fails on Linux/Wayland, with unit coverage for primary/fallback/failure paths.
+- Capped the active on-disk log at 5 MiB per session while keeping stdout logging alive; oversized previous logs are still rotated at startup. Unit tests cover the capped writer.
+- Enabled a restrictive production/development Content Security Policy and `freezePrototype` in the Tauri WebView. Production network access is limited to Tauri IPC plus the GitHub API used for release checks.
 
 ## Upstream PR / issue triage
 
@@ -100,7 +105,11 @@ Reviewed or identified as relevant:
 - PR #430 / issue #429 — continuous BlueZ discovery interference. Equivalent duty-cycle work is included.
 - PR #404 — BLE advertisement based on visibility. Equivalent lifecycle work is included.
 - PR #418 — filesystem / transfer error propagation. Equivalent error-surfacing work is included where applicable.
-- PR #408 — Tauri JS/Rust dependency alignment. Applied in equivalent form: JS API/plugins/CLI are pinned to 2.2.0 to match Cargo.lock, and pnpm-lock.yaml was regenerated on a GitHub-hosted runner.
+- PR #408 — Tauri JS/Rust dependency alignment. Superseded: the fork now uses current Tauri v2 (2.12.1 core/API/CLI with compatible current plugins) and reproducibly regenerated lockfiles.
+- PR #380 / issues #423 and #195 — clipboard fallback. Equivalent behavior is included with dedicated unit tests.
+- PR #334 — cancellation during active file sends. Equivalent cancellation handling is included.
+- PR #333 — Wi-Fi credential payload parsing. Equivalent handling is included with declared-length validation.
+- Issue #268 — unbounded active log growth. Fixed with a 5 MiB runtime file cap.
 - PR #420 — large transport/protobuf refactor. Deferred until the maintained fork is green because it is too broad to merge as a bugfix.
 
 Upstream backlog is not considered closed yet. Remaining open PRs/issues must be classified as: applicable, already covered, obsolete/duplicate, feature request, or deferred refactor.
@@ -123,9 +132,9 @@ This is a required interoperability gate before declaring the maintained fork co
 
 ## Remaining audit work
 
-- Audit remaining network/state-machine `unwrap()`/panic paths and distinguish true peer-controlled paths from internal invariants.
-- Review dependency age and known vulnerabilities beyond the now-aligned Tauri 2.2.0 stack.
-- Finish the upstream open PR/issue classification.
+- Finish residual network/state-machine `unwrap()`/panic review; peer-controlled crypto/size/path panic paths have already been removed.
+- Finish the upstream open PR/issue classification and keep large feature/refactor PRs separate from hardening.
+- Validate the new CSP/freezePrototype behavior in the packaged Linux smoke test.
 - Expand regression coverage around every bug fixed during this pass.
 - Identify only genuinely flaky/stability-sensitive tests for 10x Mode B repetition.
 - Run one manual Linux package build.
