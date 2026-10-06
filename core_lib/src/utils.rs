@@ -247,9 +247,19 @@ pub fn get_download_dir() -> PathBuf {
 
 fn is_virtual_interface(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    ["docker", "veth", "br-", "virbr", "tun", "tap", "wg", "tailscale", "warp"]
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
+    [
+        "docker",
+        "veth",
+        "br-",
+        "virbr",
+        "tun",
+        "tap",
+        "wg",
+        "tailscale",
+        "warp",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
 }
 
 /// Pick a LAN IPv4 suitable for advertising a Wi-Fi bandwidth-upgrade endpoint.
@@ -378,12 +388,28 @@ mod tests {
 
     #[test]
     fn virtual_interface_filter_rejects_tunnels() {
-        for name in ["docker0", "veth1234", "br-abcd", "virbr0", "tun0", "tap0", "wg0", "tailscale0", "warp0"] {
-            assert!(is_virtual_interface(name), "{name} should be treated as virtual");
+        for name in [
+            "docker0",
+            "veth1234",
+            "br-abcd",
+            "virbr0",
+            "tun0",
+            "tap0",
+            "wg0",
+            "tailscale0",
+            "warp0",
+        ] {
+            assert!(
+                is_virtual_interface(name),
+                "{name} should be treated as virtual"
+            );
         }
 
         for name in ["wlan0", "wlp3s0", "eth0", "enp4s0"] {
-            assert!(!is_virtual_interface(name), "{name} should be eligible for LAN selection");
+            assert!(
+                !is_virtual_interface(name),
+                "{name} should be eligible for LAN selection"
+            );
         }
     }
 }
