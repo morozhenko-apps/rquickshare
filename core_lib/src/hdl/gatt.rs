@@ -312,10 +312,8 @@ async fn weave_session(
                 Err(error) => {
                     if !matches!(error.downcast_ref(), Some(AppError::NotAnError)) {
                         debug!("{INNER_NAME}: BLE inbound ended: {error}");
-                        let _ = inbound_error_sender.send(inbound_disconnected_message(
-                            "ble-weave",
-                            error.to_string(),
-                        ));
+                        let _ = inbound_error_sender
+                            .send(inbound_disconnected_message("ble-weave", error.to_string()));
                     }
                     break;
                 }
