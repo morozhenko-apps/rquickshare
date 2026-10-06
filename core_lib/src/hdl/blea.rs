@@ -185,10 +185,7 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
     connection_advertisement.push(0x23);
     connection_advertisement.extend_from_slice(&QS_SVC_HASH);
     connection_advertisement.extend_from_slice(&endpoint_id);
-    connection_advertisement.push(
-        u8::try_from(endpoint_info.len())
-            .expect("receiver endpoint info is truncated to the one-byte protocol limit"),
-    );
+    connection_advertisement.push(endpoint_info.len().min(MAX_ENDPOINT_INFO_BYTES) as u8);
     connection_advertisement.extend_from_slice(&endpoint_info);
 
     // Reserved Bluetooth MAC, UWB-address length and extra-field byte.
