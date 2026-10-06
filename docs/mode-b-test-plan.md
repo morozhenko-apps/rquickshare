@@ -76,10 +76,13 @@ P2:
 
 ## Current evidence
 
+Baseline before the current SSOT remediation:
 - Rust stable suite: 50 tests.
 - Frontend stable suite: 25 tests across 6 files.
 - Rust core coverage: 30.37% lines, 29.75% functions, 31.19% regions.
 - Frontend coverage: 46.18% lines/statements, 82.71% branches, 53.33% functions.
+
+These percentages are now stale because the branch contains additional tests and production fixes. They must not be reported as final Mode B coverage. The current branch adds 28 Rust test functions plus 3 additional frontend table cases relative to that baseline; execution and final counts are pending the new Mode B gate.
 - High-value file coverage currently recorded:
   - `hdl/bwu.rs`: 95.83% lines.
   - `hdl/migratable.rs`: 81.40% lines.
@@ -108,7 +111,7 @@ Missing mandatory artifacts:
 ## Execution plan
 
 ### Milestone 1 - Inventory and branch map
-Status: IN PROGRESS
+Status: COMPLETE
 
 - Enumerate every executable artifact in the scoped production files.
 - Map current tests to artifacts.
@@ -118,7 +121,7 @@ Status: IN PROGRESS
 Rollback: documentation-only commit.
 
 ### Milestone 2 - Test matrix and interaction matrix
-Status: NOT STARTED
+Status: COMPLETE
 
 - Build Positive/N1-N12 matrix with explicit N/A reasons.
 - Enumerate interaction pairs/triples that can change outcomes, especially transport x visibility x route state, filename x collision x filesystem state, frame length x transport state, and cancellation x consent x transfer state.
@@ -127,7 +130,7 @@ Status: NOT STARTED
 Rollback: documentation-only commit.
 
 ### Milestone 3 - Implement missing deterministic tests
-Status: NOT STARTED
+Status: IN PROGRESS
 
 - Add only tests justified by the completed matrix.
 - Prefer unit/domain and integration/contract tests.
@@ -146,9 +149,11 @@ Status: NOT STARTED
 Rollback: tests/refactors remain isolated in atomic commits.
 
 ### Milestone 5 - Ten-run automated stability gate
-Status: NOT STARTED
+Status: WORKFLOW READY, EXECUTION PENDING
 
 The SSOT supplied on 2026-10-06 is authoritative for this pass. The complete automated suite must pass ten consecutive runs for the final Mode B gate. This is stricter than the earlier repository policy of stable 1x plus selected flaky-sensitive tests 10x.
+
+The Mode B workflow now runs the complete Rust and frontend suite ten consecutive times and, only after those runs succeed, measures fresh Rust and frontend coverage on the same HEAD.
 
 The final hardware/package smoke remains separate and cannot be replaced by CI repetition.
 
@@ -165,6 +170,27 @@ Required live checks:
 - FE2C/FEF3 BlueZ coexistence.
 
 After smoke, re-run the final automated Mode B gate and record Stage 12 answers.
+
+## Implementation progress after inventory
+
+Completed deterministic work:
+- fixed receiver advertisement UTF-8 truncation so the one-byte endpoint-info bound cannot cut a multibyte code point;
+- covered BWU router empty IDs, unknown routes, dropped receivers, duplicate registration races, and idempotent cancellation;
+- covered Weave connection-request boundaries, wrong commands, inverted version ranges, connection-confirm encoding, and framed-message boundaries;
+- covered both BLE and TCP variants of the migratable transport;
+- strengthened payload-size inner boundaries and non-finite frontend listening-port inputs;
+- extracted a pure LAN-address selector and covered tunnel, IPv6, loopback, link-local, public fallback, private preference, interface order, and case-insensitive tunnel names;
+- covered BWU listener classification for no-pending, malformed and unregistered introduction paths;
+- strengthened inbound filename byte boundaries, malformed Wi-Fi credential UTF-8, oversized plaintext frames, empty plaintext sends, and one-shot BWU request flags;
+- covered malformed mDNS Base64/UTF-8;
+- fixed mDNS endpoint-name length wrapping and UTF-8 truncation;
+- covered outbound audio/video classification.
+
+Two production defects were found by the Mode B review and fixed rather than weakening tests:
+1. receiver BLE endpoint names could be truncated in the middle of a UTF-8 code point;
+2. mDNS endpoint-name length could wrap through `u8` while retaining the full payload.
+
+Remaining deterministic work is limited to gaps that can be covered without broad pre-smoke protocol refactoring. BlueZ/GATT lifecycle and the full BLE -> Wi-Fi migration remain hardware/package smoke gates.
 
 ## Completion gate
 
