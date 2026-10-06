@@ -136,6 +136,8 @@ pub struct InboundRequest<S = TcpStream> {
     pub state: InnerState,
     sender: Sender<ChannelMessage>,
     receiver: Receiver<ChannelMessage>,
+    bandwidth_upgrade_enabled: bool,
+    bwu_pending: bool,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
@@ -154,7 +156,17 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             },
             sender,
             receiver,
+            bandwidth_upgrade_enabled: false,
+            bwu_pending: false,
         }
+    }
+
+    pub fn enable_bandwidth_upgrade(&mut self) {
+        self.bandwidth_upgrade_enabled = true;
+    }
+
+    pub fn take_bwu_pending(&mut self) -> bool {
+        std::mem::take(&mut self.bwu_pending)
     }
 
     pub async fn handle(&mut self) -> Result<(), anyhow::Error> {
@@ -291,6 +303,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                     false,
                 )
                 .await;
+
+                if self.bandwidth_upgrade_enabled {
+                    self.bwu_pending = true;
+                }
             }
             _ => {
                 debug!("Handling SecureMessage frame");
@@ -607,6 +623,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         }
 
         let offline = location_nearby_connections::OfflineFrame::decode(d2d_msg.message())?;
+        self.process_offline_frame(offline).await
+    }
+
+    async fn process_offline_frame(
+        &mut self,
+        offline: OfflineFrame,
+    ) -> Result<(), anyhow::Error> {
         let v1_frame = offline
             .v1
             .as_ref()
@@ -903,7 +926,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }
             State::ReceivedPairedKeyResult => {
                 debug!("Processing State::ReceivedPairedKeyResult");
-                self.process_introduction(v1_frame).await?;
+                if v1_frame.introduction.is_some() {
+                    self.process_introduction(v1_frame).await?;
+                } else {
+                    debug!(
+                        "Ignoring interleaved sharing frame {:?} while waiting for Introduction",
+                        v1_frame.r#type()
+                    );
+                }
             }
             _ => {
                 info!(
