@@ -1847,14 +1847,94 @@ mod security_tests {
         assert!(final_chunk.body().is_empty());
     }
 
-    #[tokio::test]
-    async fn ephemeral_files_are_removed_when_request_is_dropped() {
-        let root = std::env::temp_dir().join(format!(
-            "rquickshare-ephemeral-test-{}",
+    #[test]
+    fn managed_ephemeral_file_accepts_only_owned_temp_names() {
+        let valid = std::env::temp_dir().join(format!(
+            "{MANAGED_EPHEMERAL_FILE_PREFIX}{}-{}-0.png",
+            std::process::id(),
             rand::random::<u64>()
         ));
-        std::fs::create_dir_all(&root).unwrap();
-        let image = root.join("clipboard.png");
+        assert!(ManagedEphemeralFile::try_from_path(&valid).is_ok());
+
+        for invalid in [
+            std::env::temp_dir().join("other-app.png"),
+            std::env::temp_dir().join("rquickshare-clipboard-user-file.png"),
+            std::env::temp_dir().join("rquickshare-clipboard-1-2-0.jpg"),
+            std::env::temp_dir()
+                .join("nested")
+                .join("rquickshare-clipboard-1-2-0.png"),
+            PathBuf::from("/etc/passwd"),
+        ] {
+            assert!(
+                ManagedEphemeralFile::try_from_path(&invalid).is_err(),
+                "unmanaged path unexpectedly accepted: {}",
+                invalid.display()
+            );
+        }
+    }
+
+    #[test]
+    fn managed_ephemeral_file_removal_is_idempotent() {
+        let path = std::env::temp_dir().join(format!(
+            "{MANAGED_EPHEMERAL_FILE_PREFIX}{}-{}-0.png",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        std::fs::write(&path, [1_u8, 2, 3]).unwrap();
+
+        let managed = ManagedEphemeralFile::try_from_path(&path).unwrap();
+        managed.remove().unwrap();
+        assert!(!path.exists());
+        managed.remove().unwrap();
+    }
+
+    #[tokio::test]
+    async fn ephemeral_request_rejects_unmanaged_paths() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _peer = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
+        let (sender, _receiver) = tokio::sync::broadcast::channel(16);
+
+        let result = OutboundRequest::new(
+            [1, 2, 3, 4],
+            socket,
+            "unmanaged-ephemeral-transfer".to_owned(),
+            sender,
+            OutboundPayload::EphemeralFiles(vec!["/etc/passwd".to_owned()]),
+            RemoteDeviceInfo {
+                name: "Test phone".to_owned(),
+                device_type: DeviceType::Phone,
+            },
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn normal_files_never_acquire_cleanup_capability() {
+        let path = std::env::temp_dir().join(format!(
+            "{MANAGED_EPHEMERAL_FILE_PREFIX}{}-{}-0.png",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        std::fs::write(&path, [9_u8]).unwrap();
+
+        let (request, _peer) = test_request(vec![path.to_string_lossy().into_owned()]).await;
+        assert!(request.cleanup_files.is_empty());
+        drop(request);
+        assert!(path.exists());
+
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn ephemeral_files_are_removed_when_request_is_dropped() {
+        let image = std::env::temp_dir().join(format!(
+            "{MANAGED_EPHEMERAL_FILE_PREFIX}{}-{}-0.png",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
         std::fs::write(&image, [1_u8, 2, 3, 4]).unwrap();
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1873,13 +1953,12 @@ mod security_tests {
                 name: "Test phone".to_owned(),
                 device_type: DeviceType::Phone,
             },
-        );
+        )
+        .unwrap();
 
         assert!(image.exists());
         drop(request);
         assert!(!image.exists());
-
-        std::fs::remove_dir_all(root).unwrap();
     }
 
     async fn test_request(files: Vec<String>) -> (OutboundRequest, tokio::net::TcpStream) {
@@ -1899,7 +1978,8 @@ mod security_tests {
                 name: "Test phone".to_owned(),
                 device_type: DeviceType::Phone,
             },
-        );
+        )
+        .unwrap();
         request.state.encryption_done = false;
         (request, peer)
     }
