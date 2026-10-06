@@ -2014,6 +2014,159 @@ mod security_tests {
         assert!(read_plain_frame_from(&mut reader).await.is_err());
     }
 
+    fn test_request() -> InboundRequest<tokio::io::DuplexStream> {
+        let (socket, _peer) = tokio::io::duplex(4096);
+        let (sender, _receiver) = tokio::sync::broadcast::channel(16);
+        InboundRequest::new(socket, "test-transfer".to_owned(), sender)
+    }
+
+    fn introduction_frame(
+        files: Vec<sharing_nearby::FileMetadata>,
+        text: Vec<sharing_nearby::TextMetadata>,
+        wifi: Vec<sharing_nearby::WifiCredentialsMetadata>,
+    ) -> sharing_nearby::V1Frame {
+        sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Introduction.into()),
+            introduction: Some(sharing_nearby::IntroductionFrame {
+                file_metadata: files,
+                text_metadata: text,
+                wifi_credentials_metadata: wifi,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn file_metadata(name: &str, payload_id: i64, size: i64) -> sharing_nearby::FileMetadata {
+        sharing_nearby::FileMetadata {
+            name: Some(name.to_owned()),
+            payload_id: Some(payload_id),
+            size: Some(size),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn introduction_prepares_duplicate_file_names_with_unique_destinations() {
+        let mut request = test_request();
+        let frame = introduction_frame(
+            vec![
+                file_metadata("mode-b-duplicate.bin", 101, 5),
+                file_metadata("mode-b-duplicate.bin", 102, 7),
+            ],
+            vec![],
+            vec![],
+        );
+
+        request.process_introduction(&frame).await.unwrap();
+
+        assert_eq!(request.state.state, State::WaitingForUserConsent);
+        assert_eq!(request.state.transferred_files.len(), 2);
+
+        let first = &request.state.transferred_files[&101].file_url;
+        let second = &request.state.transferred_files[&102].file_url;
+        assert_ne!(first, second);
+        assert_eq!(first.parent(), second.parent());
+
+        let metadata = request.state.transfer_metadata.as_ref().unwrap();
+        assert_eq!(metadata.total_bytes, 12);
+        assert_eq!(
+            metadata.files.as_ref().unwrap(),
+            &vec![
+                "mode-b-duplicate.bin".to_owned(),
+                "mode-b-duplicate.bin".to_owned()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_file_introduction_is_transactional() {
+        let mut duplicate = test_request();
+        let duplicate_frame = introduction_frame(
+            vec![
+                file_metadata("first.bin", 201, 1),
+                file_metadata("second.bin", 201, 1),
+            ],
+            vec![],
+            vec![],
+        );
+
+        assert!(duplicate.process_introduction(&duplicate_frame).await.is_err());
+        assert!(duplicate.state.transferred_files.is_empty());
+        assert!(duplicate.state.transfer_metadata.is_none());
+
+        let mut negative = test_request();
+        let negative_frame = introduction_frame(
+            vec![file_metadata("negative.bin", 202, -1)],
+            vec![],
+            vec![],
+        );
+
+        assert!(negative.process_introduction(&negative_frame).await.is_err());
+        assert!(negative.state.transferred_files.is_empty());
+        assert!(negative.state.transfer_metadata.is_none());
+    }
+
+    #[tokio::test]
+    async fn introduction_records_url_consent_metadata() {
+        let mut request = test_request();
+        let frame = introduction_frame(
+            vec![],
+            vec![sharing_nearby::TextMetadata {
+                text_title: Some("Example link".to_owned()),
+                r#type: Some(sharing_nearby::text_metadata::Type::Url.into()),
+                payload_id: Some(301),
+                size: Some(24),
+                ..Default::default()
+            }],
+            vec![],
+        );
+
+        request.process_introduction(&frame).await.unwrap();
+
+        assert!(matches!(
+            request.state.text_payload,
+            Some(TextPayloadInfo::Url(301))
+        ));
+        let metadata = request.state.transfer_metadata.as_ref().unwrap();
+        assert_eq!(metadata.text_description.as_deref(), Some("Example link"));
+        assert_eq!(request.state.state, State::WaitingForUserConsent);
+    }
+
+    #[tokio::test]
+    async fn introduction_records_wifi_consent_metadata() {
+        let mut request = test_request();
+        let frame = introduction_frame(
+            vec![],
+            vec![],
+            vec![sharing_nearby::WifiCredentialsMetadata {
+                ssid: Some("ModeB-WiFi".to_owned()),
+                security_type: Some(2),
+                payload_id: Some(401),
+                ..Default::default()
+            }],
+        );
+
+        request.process_introduction(&frame).await.unwrap();
+
+        match request.state.text_payload.as_ref().unwrap() {
+            TextPayloadInfo::Wifi {
+                payload_id,
+                ssid,
+                security_type,
+            } => {
+                assert_eq!(*payload_id, 401);
+                assert_eq!(ssid, "ModeB-WiFi");
+                assert_eq!(*security_type as i32, 2);
+            }
+            other => panic!("unexpected payload info: {other:?}"),
+        }
+
+        let metadata = request.state.transfer_metadata.as_ref().unwrap();
+        assert_eq!(metadata.text_description.as_deref(), Some("ModeB-WiFi"));
+        assert_eq!(request.state.state, State::WaitingForUserConsent);
+    }
+
     #[cfg(all(feature = "experimental", target_os = "linux"))]
     #[test]
     fn client_introduction_validation_accepts_only_bwu_intro() {
