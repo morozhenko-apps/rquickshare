@@ -122,8 +122,7 @@ mod tests {
         assert_eq!(data[0], 0x48);
         assert_eq!(&data[1..4], &QS_SVC_HASH);
 
-        let connection_len =
-            u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        let connection_len = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
         let connection_end = 8 + connection_len;
         assert_eq!(data.len(), connection_end + 2);
 
