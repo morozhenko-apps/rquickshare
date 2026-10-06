@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::anyhow;
 use channel::ChannelMessage;
+use hdl::MDnsDiscovery;
 #[cfg(all(feature = "experimental", target_os = "linux"))]
 use hdl::{receiver_service_data, BleAdvertiser, ReceiverAdvertiser, ReceiverGattServer};
-use hdl::MDnsDiscovery;
 use once_cell::sync::Lazy;
 use rand::distr::Alphanumeric;
 use rand::Rng;
@@ -163,8 +163,11 @@ impl RQS {
         {
             let endpoint_id: [u8; 4] = endpoint_id[..4].try_into()?;
             let hostname = sys_metrics::host::get_hostname()?;
-            let receiver_advertisement =
-                receiver_service_data(endpoint_id, crate::utils::DeviceType::Laptop as u8, &hostname);
+            let receiver_advertisement = receiver_service_data(
+                endpoint_id,
+                crate::utils::DeviceType::Laptop as u8,
+                &hostname,
+            );
 
             let visibility_rx = self.visibility_receiver.clone();
             let ctk = ctoken.clone();
