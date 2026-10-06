@@ -142,4 +142,3 @@ fn legacy_introduction_defaults_remain_compatible() {
         introduction_frame::SharingUseCase::Unknown
     );
 }
-
