@@ -488,4 +488,45 @@ mod tests {
 
         assert!(complete_framed_message_len(&0_u32.to_be_bytes()).is_err());
     }
+    #[test]
+    fn connection_request_preserves_supported_boundary_packet_sizes() {
+        let min = [0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x14];
+        let max = [0x80, 0x00, 0x01, 0x00, 0x01, 0x01, 0xfd];
+
+        assert_eq!(parse_connection_request(&min).unwrap(), MIN_WEAVE_PACKET_SIZE);
+        assert_eq!(parse_connection_request(&max).unwrap(), MAX_WEAVE_PACKET_SIZE);
+    }
+
+    #[test]
+    fn connection_request_rejects_wrong_command_and_inverted_version_range() {
+        let wrong_command = [0x81, 0x00, 0x01, 0x00, 0x01, 0x00, 0x14];
+        let inverted_range = [0x80, 0x00, 0x02, 0x00, 0x01, 0x00, 0x14];
+
+        assert!(parse_connection_request(&wrong_command).is_err());
+        assert!(parse_connection_request(&inverted_range).is_err());
+    }
+
+    #[test]
+    fn connection_confirm_encodes_version_and_packet_size() {
+        assert_eq!(
+            connection_confirm(0x01fd),
+            [WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM, 0x00, 0x01, 0x01, 0xfd]
+        );
+    }
+
+    #[test]
+    fn framed_message_length_handles_boundaries_and_trailing_bytes() {
+        let max_prefix = (MAX_INBOUND_FRAME_SIZE as u32).to_be_bytes();
+        assert_eq!(complete_framed_message_len(&max_prefix).unwrap(), None);
+
+        let too_large = ((MAX_INBOUND_FRAME_SIZE + 1) as u32).to_be_bytes();
+        assert!(complete_framed_message_len(&too_large).is_err());
+
+        let incomplete = [0_u8, 0, 0, 3, 1, 2];
+        assert_eq!(complete_framed_message_len(&incomplete).unwrap(), None);
+
+        let with_trailing = [0_u8, 0, 0, 1, 0xaa, 0xbb, 0xcc];
+        assert_eq!(complete_framed_message_len(&with_trailing).unwrap(), Some(5));
+    }
+
 }
