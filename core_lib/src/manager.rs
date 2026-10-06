@@ -341,7 +341,11 @@ mod tests {
             .unwrap()
             .is_none());
 
-        let mut routed = receiver.await.unwrap();
+        eprintln!("BWU manager route completed; awaiting routed socket");
+        let mut routed = tokio::time::timeout(std::time::Duration::from_millis(250), receiver)
+            .await
+            .expect("BWU manager route did not deliver the socket")
+            .expect("BWU manager route sender dropped without a socket");
         let mut received = vec![0_u8; framed.len()];
         routed.read_exact(&mut received).await.unwrap();
         assert_eq!(received, framed);
