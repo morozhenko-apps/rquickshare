@@ -1,5 +1,7 @@
 name: Mode B validation
 
+# Pre-smoke rerun after BWU mutation regression fixes.
+
 on:
   push:
     branches:
