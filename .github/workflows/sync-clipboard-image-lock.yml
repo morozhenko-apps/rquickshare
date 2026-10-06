@@ -5,6 +5,7 @@ on:
     branches: [ "feat/full-quickshare" ]
     paths:
       - "app/main/src-tauri/Cargo.toml"
+      - ".github/workflows/sync-clipboard-image-lock.yml"
 
 permissions:
   contents: write
