@@ -1792,7 +1792,6 @@ mod security_tests {
         );
     }
 
-
     #[test]
     fn outbound_text_classification_handles_boundary_shapes() {
         for (value, expected) in [
