@@ -264,9 +264,7 @@ async fn weave_session(
         }
     };
 
-    info!(
-        "{INNER_NAME}: negotiated BLE Weave packet size {selected_packet_size}"
-    );
+    info!("{INNER_NAME}: negotiated BLE Weave packet size {selected_packet_size}");
     notifier
         .notify(connection_confirm(selected_packet_size).to_vec())
         .await?;
