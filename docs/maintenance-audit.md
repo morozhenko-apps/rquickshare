@@ -15,11 +15,15 @@ This document is the working log for the `morozhenko-apps/rquickshare` maintenan
 
 ## Current gate status
 
-A full `dev` revalidation is in progress after dependency, clipboard, logging and Tauri security hardening.
+Draft PR #2 (`feat/pixel-ble-receiver -> dev`) remains isolated until the real Pixel smoke test, but all pre-smoke automated gates are now green.
 
-The last representative dependency-upgrade preflight had four green jobs (Rust format, core tests, core Clippy and frontend lint/typecheck/unit) and one Tauri Clippy failure caused only by five newly surfaced lint/deprecation findings. Those findings have been fixed; a fresh authoritative `push dev` preflight is now running.
+- Current feature preflight is green after the mutation-driven BWU test hardening and CI cleanup.
+- Linux debug `.deb` package smoke is green on application code head `a1b96b7` (run `37474172562`); all later changes before this documentation update are tests/CI only, so the packaged application code is unchanged.
+- Pre-smoke Mode B is green after the BWU test hardening: stable suite 1x plus the selected async transport/BWU tests 10x (run `37475497104`).
+- Targeted mutation audit now reports 22 caught, 18 unviable, 1 missed and 0 timeouts across 41 mutants. The only survivor is the `MigratableStream::poll_flush -> Ok(())` mutation, which is equivalent/unobservable for the current concrete `DuplexStream` and `TcpStream` transports; the real delegation remains in production code.
+- Residual `unwrap`/`expect`/panic review of the 11 changed Rust modules found no such calls in production regions; remaining occurrences are under `#[cfg(test)]`.
 
-The internal `dev -> master` PR validation is intentionally skipped to avoid duplicating the authoritative `push dev` preflight.
+The internal `dev -> master` PR validation remains intentionally skipped to avoid duplicating the authoritative `push dev` preflight.
 
 ## Completed work
 
@@ -175,14 +179,11 @@ No arbitrary repository-wide percentage gate is being introduced in this pass. T
 
 ## Remaining audit work
 
-- Finish residual network/state-machine `unwrap()`/panic review; peer-controlled crypto/size/path panic paths have already been removed.
-- Validate the new CSP/freezePrototype behavior in the packaged Linux smoke test.
-- Keep the regression coverage map aligned with fixes; current coverage includes mDNS compact records, P-256 normalization, inbound path/size guards, Wi-Fi credential parsing, clipboard fallback, log caps, BLE receiver advertisement, weave framing/handshake, BWU introduction validation and LAN-interface filtering.
-- Identify only genuinely flaky/stability-sensitive tests for 10x Mode B repetition.
-- Run one manual Linux package build.
-- Complete PR #2 validation and real Pixel -> Linux BLE/GATT -> Wi-Fi-LAN smoke.
-- Perform install/start/send/receive smoke checks on Linux/Android.
-- Run the final Mode B gate.
+- Validate the new CSP/freezePrototype behavior in the packaged Linux UI smoke test.
+- Keep the regression coverage map aligned with fixes; current coverage includes mDNS compact records, P-256 normalization, inbound path/size guards, Wi-Fi credential parsing, clipboard fallback, log caps, BLE receiver advertisement, weave framing/handshake, BWU routing/introduction validation and LAN-interface filtering.
+- Complete PR #2 real-device validation: Pixel -> Linux BLE/GATT -> Wi-Fi-LAN receive, repeat receive without restarting the app, Linux -> Android send, and explicit FE2C/FEF3 BlueZ coexistence check.
+- Perform packaged install/start/window/tray/send/receive smoke checks on the target Ubuntu/KDE/Wayland machine.
+- Run the final Mode B gate after the hardware smoke. The pre-smoke Mode B run is already green and is not a substitute for this final post-smoke gate.
 - Fast-forward `dev` to `master` only after the above is complete.
 
 ## Mode B exit criteria
