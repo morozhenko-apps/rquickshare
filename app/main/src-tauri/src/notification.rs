@@ -164,20 +164,21 @@ pub fn send_finished_notification(message: &ChannelMessage, app_handle: &AppHand
             .meta
             .as_ref()
             .and_then(|meta| meta.text_payload.clone());
-        let has_files = message
+        let first_file = message
             .meta
             .as_ref()
             .and_then(|meta| meta.files.as_ref())
-            .is_some_and(|files| !files.is_empty());
+            .and_then(|files| files.first())
+            .cloned();
 
         let mut builder = Notification::new();
         builder.summary("RQuickShare").body(&body);
 
         if text_payload.is_some() {
             builder.action("copy", "Copy").action("dismiss", "Dismiss");
-        } else if has_files {
+        } else if first_file.is_some() {
             builder
-                .action("open-folder", "Open folder")
+                .action("show-file", "Show file")
                 .action("dismiss", "Dismiss");
         }
 
@@ -193,13 +194,16 @@ pub fn send_finished_notification(message: &ChannelMessage, app_handle: &AppHand
                                 }
                             }
                         }
-                        "open-folder" => {
-                            if let Err(error) =
-                                cmds::open_download_destination(capp_handle.clone())
-                            {
-                                error!(
-                                    "Couldn't open received-file destination from notification: {error}"
-                                );
+                        "show-file" => {
+                            if let Some(file_name) = first_file.as_ref() {
+                                if let Err(error) = cmds::reveal_download_item(
+                                    capp_handle.clone(),
+                                    file_name.clone(),
+                                ) {
+                                    error!(
+                                        "Couldn't reveal received file from notification: {error}"
+                                    );
+                                }
                             }
                         }
                         _ => (),

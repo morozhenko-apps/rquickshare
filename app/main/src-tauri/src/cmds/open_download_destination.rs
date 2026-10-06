@@ -1,6 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+#[cfg(target_os = "linux")]
+use std::time::Duration;
 
+#[cfg(target_os = "linux")]
+use dbus::blocking::Connection;
 use tauri::{AppHandle, Manager};
+#[cfg(target_os = "linux")]
+use url::Url;
 
 use crate::store::get_download_path;
 
@@ -13,6 +19,18 @@ fn validate_download_destination(path: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn validate_received_basename(file_name: &str) -> Result<(), String> {
+    if file_name.is_empty() {
+        return Err("received file name is empty".to_owned());
+    }
+
+    let mut components = Path::new(file_name).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(()),
+        _ => Err("received file name must be a single path component".to_owned()),
+    }
 }
 
 fn resolve_download_destination(app: &AppHandle) -> Result<PathBuf, String> {
@@ -30,10 +48,75 @@ fn resolve_download_destination(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|error| format!("unable to resolve the download destination: {error}"))
 }
 
+fn resolve_received_item(destination: &Path, file_name: &str) -> Result<Option<PathBuf>, String> {
+    validate_received_basename(file_name)?;
+
+    let candidate = destination.join(file_name);
+    if !candidate.exists() {
+        return Ok(None);
+    }
+
+    let canonical_candidate = candidate
+        .canonicalize()
+        .map_err(|error| format!("unable to resolve received item: {error}"))?;
+
+    if !canonical_candidate.starts_with(destination) {
+        return Err("received item escaped the download destination".to_owned());
+    }
+
+    Ok(Some(canonical_candidate))
+}
+
+#[cfg(target_os = "linux")]
+fn show_item_in_file_manager(path: &Path) -> Result<(), String> {
+    let uri = Url::from_file_path(path)
+        .map_err(|_| format!("unable to convert path to file URI: {}", path.display()))?;
+
+    let connection = Connection::new_session()
+        .map_err(|error| format!("unable to connect to the session D-Bus: {error}"))?;
+    let proxy = connection.with_proxy(
+        "org.freedesktop.FileManager1",
+        "/org/freedesktop/FileManager1",
+        Duration::from_secs(3),
+    );
+
+    let _: () = proxy
+        .method_call(
+            "org.freedesktop.FileManager1",
+            "ShowItems",
+            (vec![uri.to_string()], String::new()),
+        )
+        .map_err(|error| format!("FileManager1.ShowItems failed: {error}"))?;
+
+    Ok(())
+}
+
 #[tauri::command]
 pub fn open_download_destination(app: AppHandle) -> Result<(), String> {
     let destination = resolve_download_destination(&app)?;
     info!("open_download_destination: {:?}", destination);
+
+    open::that(&destination)
+        .map_err(|error| format!("unable to open the download destination: {error}"))
+}
+
+#[tauri::command]
+pub fn reveal_download_item(app: AppHandle, file_name: String) -> Result<(), String> {
+    let destination = resolve_download_destination(&app)?;
+    let item = resolve_received_item(&destination, &file_name)?;
+
+    #[cfg(target_os = "linux")]
+    if let Some(item) = item.as_ref() {
+        info!("reveal_download_item: {:?}", item);
+        if let Err(error) = show_item_in_file_manager(item) {
+            warn!("{error}; falling back to opening the download directory");
+        } else {
+            return Ok(());
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    let _ = item;
 
     open::that(&destination)
         .map_err(|error| format!("unable to open the download destination: {error}"))
@@ -53,5 +136,46 @@ mod tests {
             std::process::id()
         ));
         assert!(validate_download_destination(&missing).is_err());
+    }
+
+    #[test]
+    fn received_basename_rejects_traversal_and_nested_paths() {
+        for value in ["", ".", "..", "../secret", "/tmp/secret", "folder/file.png"] {
+            assert!(
+                validate_received_basename(value).is_err(),
+                "unsafe path unexpectedly accepted: {value}"
+            );
+        }
+
+        assert!(validate_received_basename("photo 01.png").is_ok());
+        assert!(validate_received_basename("данные.txt").is_ok());
+    }
+
+    #[test]
+    fn received_item_must_exist_under_destination() {
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-reveal-test-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("thread")
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let destination = root.canonicalize().unwrap();
+
+        let file = destination.join("photo.png");
+        std::fs::write(&file, b"test").unwrap();
+
+        assert_eq!(
+            resolve_received_item(&destination, "photo.png")
+                .unwrap()
+                .unwrap(),
+            file.canonicalize().unwrap()
+        );
+        assert!(resolve_received_item(&destination, "missing.png")
+            .unwrap()
+            .is_none());
+        assert!(resolve_received_item(&destination, "../photo.png").is_err());
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

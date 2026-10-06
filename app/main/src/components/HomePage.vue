@@ -84,7 +84,7 @@
 								<button
 									v-if="item.destination"
 									type="button"
-									@click.stop="openDownloadDestination()"
+									@click.stop="revealDownloadItem(item.files?.[0])"
 									class="btn btn-secondary">
 									Open
 								</button>
@@ -376,12 +376,16 @@ export default {
 			this.toastStore.addToast("Unable to copy text", ToastType.Error);
 			console.error("Clipboard copy failed through both Tauri and browser APIs");
 		},
-		openDownloadDestination: async function() {
+		revealDownloadItem: async function(fileName?: string) {
 			try {
-				await invoke('open_download_destination');
+				if (!fileName) {
+					await invoke('open_download_destination');
+					return;
+				}
+				await invoke('reveal_download_item', { fileName });
 			} catch (e) {
-				this.toastStore.addToast("Unable to open the download folder", ToastType.Error);
-				console.error("Error opening download destination", e);
+				this.toastStore.addToast("Unable to show the received file", ToastType.Error);
+				console.error("Error revealing received file", e);
 			}
 		},
 		openUrl: async function(url: string) {

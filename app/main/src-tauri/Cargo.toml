@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 anyhow = "1.0"
+dbus = "0.9.12"
 fern = { version = "0.7", features = ["colored"] }
 humantime = "2.1"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
@@ -35,6 +36,7 @@ tauri-plugin-clipboard-manager = "2"
 time = { version = "0.3", features = ["formatting"] }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "net", "sync", "time", "io-util"] }
 tokio-util = { version = "0.7", features = ["rt"] }
+url = "2.5.8"
 
 [features]
 # by default Tauri runs in production mode
