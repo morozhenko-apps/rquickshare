@@ -54,12 +54,16 @@ The maintained fork is no longer scoped to "make upstream rQuickShare work again
    - Tests for metadata classification, framing, payload bytes and cancellation.
 
 3. **Folders**
-   - Select files or folders.
-   - Recursively enumerate folders without following unsafe symlink escapes.
-   - Populate `FileMetadata.parent_folder`.
-   - Preserve hierarchy on receive with traversal-safe path validation.
-   - Resolve collisions at the root folder level without flattening the tree.
-   - Tests for nested folders, duplicate names and malicious parent paths.
+   - Select files or folders; drag-and-drop directories use the same expansion path.
+   - Recursively enumerate folders without following symbolic links. Empty folders are not representable by the Quick Share wire format and are skipped.
+   - Preserve the selected directory name as the first `FileMetadata.parent_folder` segment. Example: selecting `Trip/` sends `Trip/photo.jpg` as `name = "photo.jpg"`, `parent_folder = "Trip"`; nested files use forward-slash relative parents such as `Trip/photos`.
+   - Individual selected files keep an empty `parent_folder`.
+   - Reject an outbound selection if recursive expansion yields zero regular files rather than sending an empty introduction.
+   - On receive, accept forward- or backslash-separated peer parent folders but normalize to safe relative components. Reject absolute paths, `.`, `..`, empty/oversized/control-character components and excessive depth.
+   - Create directories only after user consent. Never mutate the filesystem while merely parsing an Introduction frame.
+   - Resolve an occupied top-level folder to one collision-safe root and apply that same remapping to every descendant, preserving the hierarchy instead of flattening or independently renaming children.
+   - Never follow a received symlink out of the download root; canonical/root-boundary checks remain mandatory before file creation.
+   - Tests cover nested folders, duplicate/root collisions, mixed files + folders, symlink inputs, empty folders, Windows-style separators, malformed parent paths and transactional failure.
 
 4. **Custom device name**
    - Persist a validated display name.
