@@ -1374,6 +1374,113 @@ impl OutboundRequest {
 mod security_tests {
     use super::*;
 
+    async fn test_request(
+        files: Vec<String>,
+    ) -> (OutboundRequest, tokio::net::TcpStream) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let peer = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
+        let (sender, _receiver) = tokio::sync::broadcast::channel(16);
+
+        let mut request = OutboundRequest::new(
+            [1, 2, 3, 4],
+            socket,
+            "test-outbound".to_owned(),
+            sender,
+            OutboundPayload::Files(files),
+            RemoteDeviceInfo {
+                name: "Test phone".to_owned(),
+                device_type: DeviceType::Phone,
+            },
+        );
+        request.state.encryption_done = false;
+        (request, peer)
+    }
+
+    fn consent_frame(
+        status: sharing_nearby::connection_response_frame::Status,
+    ) -> sharing_nearby::V1Frame {
+        sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
+            connection_response: Some(sharing_nearby::ConnectionResponseFrame {
+                status: Some(status.into()),
+            }),
+            ..Default::default()
+        }
+    }
+
+    async fn read_offline_frame(
+        socket: &mut tokio::net::TcpStream,
+    ) -> location_nearby_connections::OfflineFrame {
+        use tokio::io::AsyncReadExt;
+
+        let mut length = [0_u8; 4];
+        socket.read_exact(&mut length).await.unwrap();
+        let length = u32::from_be_bytes(length) as usize;
+        let mut payload = vec![0_u8; length];
+        socket.read_exact(&mut payload).await.unwrap();
+        location_nearby_connections::OfflineFrame::decode(payload.as_slice()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn accepted_empty_transfer_finishes_and_disconnects() {
+        let (mut request, mut peer) = test_request(vec![]).await;
+        let frame = consent_frame(sharing_nearby::connection_response_frame::Status::Accept);
+
+        request.process_consent(&frame).await.unwrap();
+
+        assert_eq!(request.state.state, State::Finished);
+        let disconnect = read_offline_frame(&mut peer).await;
+        assert_eq!(
+            disconnect.v1.unwrap().r#type(),
+            location_nearby_connections::v1_frame::FrameType::Disconnection
+        );
+    }
+
+    #[tokio::test]
+    async fn denied_consent_disconnects_cleanly() {
+        for status in [
+            sharing_nearby::connection_response_frame::Status::Reject,
+            sharing_nearby::connection_response_frame::Status::NotEnoughSpace,
+            sharing_nearby::connection_response_frame::Status::UnsupportedAttachmentType,
+            sharing_nearby::connection_response_frame::Status::TimedOut,
+        ] {
+            let (mut request, mut peer) = test_request(vec![]).await;
+            let result = request.process_consent(&consent_frame(status)).await;
+
+            assert!(result.is_err());
+            assert_eq!(request.state.state, State::Disconnected);
+
+            let disconnect = read_offline_frame(&mut peer).await;
+            assert_eq!(
+                disconnect.v1.unwrap().r#type(),
+                location_nearby_connections::v1_frame::FrameType::Disconnection
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn malformed_consent_response_is_rejected() {
+        let (mut request, _peer) = test_request(vec![]).await;
+
+        let wrong_type = sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Introduction.into()),
+            ..Default::default()
+        };
+        assert!(request.process_consent(&wrong_type).await.is_err());
+        assert_eq!(request.state.state, State::Initial);
+
+        let missing_response = sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
+            ..Default::default()
+        };
+        assert!(request.process_consent(&missing_response).await.is_err());
+        assert_eq!(request.state.state, State::Initial);
+    }
+
     #[test]
     fn test_is_cancel_request_matches_only_current_frontend_transfer() {
         let cancel = ChannelMessage {
