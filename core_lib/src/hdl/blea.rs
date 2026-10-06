@@ -143,12 +143,18 @@ mod tests {
     }
 
     #[test]
-    fn receiver_advertisement_truncates_long_names() {
+    fn receiver_advertisement_truncates_long_names_to_endpoint_info_limit() {
         let data = receiver_service_data([1, 2, 3, 4], 3, &"x".repeat(300));
 
-        // The endpoint info name-length byte must remain representable as u8.
-        assert!(data.windows(255).any(|window| window == vec![b'x'; 255]));
-        assert!(!data.windows(256).any(|window| window == vec![b'x'; 256]));
+        let connection_len =
+            u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        let connection = &data[8..8 + connection_len];
+        let info_len = usize::from(connection[8]);
+        let endpoint_info = &connection[9..9 + info_len];
+
+        assert_eq!(info_len, u8::MAX as usize);
+        assert_eq!(usize::from(endpoint_info[17]), 237);
+        assert_eq!(&endpoint_info[18..], vec![b'x'; 237]);
     }
 }
 
@@ -166,8 +172,12 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
     let identity: [u8; 16] = rand::random();
     endpoint_info.extend_from_slice(&identity);
 
+    const ENDPOINT_INFO_FIXED_BYTES: usize = 18;
+    const MAX_ENDPOINT_INFO_BYTES: usize = u8::MAX as usize;
+    const MAX_RECEIVER_NAME_BYTES: usize = MAX_ENDPOINT_INFO_BYTES - ENDPOINT_INFO_FIXED_BYTES;
+
     let name = device_name.as_bytes();
-    let name_len = name.len().min(255);
+    let name_len = name.len().min(MAX_RECEIVER_NAME_BYTES);
     endpoint_info.push(name_len as u8);
     endpoint_info.extend_from_slice(&name[..name_len]);
 
@@ -175,7 +185,10 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
     connection_advertisement.push(0x23);
     connection_advertisement.extend_from_slice(&QS_SVC_HASH);
     connection_advertisement.extend_from_slice(&endpoint_id);
-    connection_advertisement.push(endpoint_info.len() as u8);
+    connection_advertisement.push(
+        u8::try_from(endpoint_info.len())
+            .expect("receiver endpoint info is truncated to the one-byte protocol limit"),
+    );
     connection_advertisement.extend_from_slice(&endpoint_info);
 
     // Reserved Bluetooth MAC, UWB-address length and extra-field byte.
