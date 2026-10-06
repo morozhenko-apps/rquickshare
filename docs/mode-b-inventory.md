@@ -500,3 +500,13 @@ Notification UX follow-up:
 - Successful inbound files should raise a completion notification with file/count summary and an `Open folder` action.
 - Notification previews must be bounded to avoid oversized desktop notifications; the underlying payload must not be truncated for actions such as Copy.
 
+### Reveal received item UX
+
+Post-smoke UX follow-up for completed inbound files:
+
+- The completed-file action should reveal the received item itself in the desktop file manager instead of opening the download directory at its initial scroll position.
+- On Linux, use the standard `org.freedesktop.FileManager1.ShowItems` D-Bus interface so Dolphin/Nautilus can open the parent folder and select the file.
+- The frontend must not regain arbitrary filesystem-open authority. It may pass only the received basename from trusted transfer metadata; the backend resolves the configured download directory, rejects non-basename/path-traversal input, verifies the candidate exists under that directory, and constructs the file URI.
+- If the file-manager D-Bus interface is unavailable or the named file cannot be resolved, fall back to opening the configured download directory.
+- For multi-file completion, revealing the first received item is sufficient for the current UI; multi-selection can be added later.
+
