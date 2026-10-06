@@ -145,8 +145,7 @@ mod tests {
     fn receiver_advertisement_truncates_long_names_to_endpoint_info_limit() {
         let data = receiver_service_data([1, 2, 3, 4], 3, &"x".repeat(300));
 
-        let connection_len =
-            u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        let connection_len = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
         let connection = &data[8..8 + connection_len];
         let info_len = usize::from(connection[8]);
         let endpoint_info = &connection[9..9 + info_len];
