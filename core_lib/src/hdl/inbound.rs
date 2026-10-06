@@ -78,6 +78,72 @@ fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
     }
 }
 
+fn prepare_inbound_files(
+    files: &[sharing_nearby::FileMetadata],
+    existing_payload_ids: &HashSet<i64>,
+) -> Result<(Vec<(i64, InternalFileInfo)>, Vec<String>, u64), anyhow::Error> {
+    let mut prepared = Vec::with_capacity(files.len());
+    let mut file_names = Vec::with_capacity(files.len());
+    let mut total_bytes = 0_u64;
+    let mut reserved_destinations = HashSet::new();
+    let mut payload_ids = existing_payload_ids.clone();
+
+    for file in files {
+        let file_name = file.name();
+        validate_received_file_name(file_name)?;
+
+        if file.size() < 0 {
+            return Err(anyhow!(
+                "Invalid negative file size for {file_name}: {}",
+                file.size()
+            ));
+        }
+
+        let payload_id = file.payload_id();
+        if !payload_ids.insert(payload_id) {
+            return Err(anyhow!("Duplicate file payload id: {payload_id}"));
+        }
+
+        let mut destination = get_download_dir();
+        destination.push(file_name);
+
+        if destination.exists() || reserved_destinations.contains(&destination) {
+            let mut counter = 1_u64;
+            destination.pop();
+
+            loop {
+                destination.push(format!("{counter}_{file_name}"));
+                if !destination.exists() && !reserved_destinations.contains(&destination) {
+                    break;
+                }
+                destination.pop();
+                counter = counter
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow!("Destination suffix overflow"))?;
+            }
+        }
+
+        reserved_destinations.insert(destination.clone());
+
+        let info = InternalFileInfo {
+            payload_id,
+            file_url: destination,
+            bytes_transferred: 0,
+            total_size: file.size(),
+            file: None,
+        };
+
+        total_bytes = total_bytes
+            .checked_add(info.total_size as u64)
+            .ok_or_else(|| anyhow!("Total transfer size overflow"))?;
+
+        prepared.push((payload_id, info));
+        file_names.push(file_name.to_owned());
+    }
+
+    Ok((prepared, file_names, total_bytes))
+}
+
 fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
     if buffer.len() < 4 {
         return Err(anyhow!(
@@ -1184,62 +1250,25 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
 
         if !introduction.file_metadata.is_empty() && introduction.text_metadata.is_empty() {
             trace!("process_introduction: handling file_metadata");
-            let mut files_name = Vec::with_capacity(introduction.file_metadata.len());
-            let mut total_bytes: u64 = 0;
-            let mut reserved_destinations = HashSet::new();
+            let existing_payload_ids = self
+                .state
+                .transferred_files
+                .keys()
+                .copied()
+                .collect::<HashSet<_>>();
+            let (prepared_files, files_name, total_bytes) =
+                prepare_inbound_files(&introduction.file_metadata, &existing_payload_ids)?;
 
-            for file in &introduction.file_metadata {
-                let file_name = file.name();
-                validate_received_file_name(file_name)?;
-                if file.size() < 0 {
-                    return Err(anyhow!(
-                        "Invalid negative file size for {file_name}: {}",
-                        file.size()
-                    ));
-                }
-                if self
-                    .state
-                    .transferred_files
-                    .contains_key(&file.payload_id())
-                {
-                    return Err(anyhow!("Duplicate file payload id: {}", file.payload_id()));
-                }
-
-                info!("File name: {}", file_name);
-
-                let mut dest = get_download_dir();
-                dest.push(file_name);
-
-                info!("Destination: {:?}", dest);
-                if dest.exists() || reserved_destinations.contains(&dest) {
-                    let mut counter = 1;
-                    dest.pop();
-
-                    loop {
-                        dest.push(format!("{}_{}", counter, file_name));
-                        if !dest.exists() && !reserved_destinations.contains(&dest) {
-                            break;
-                        }
-                        dest.pop();
-                        counter += 1;
-                    }
-
-                    info!("New destination: {:?}", dest);
-                }
-                reserved_destinations.insert(dest.clone());
-
-                let info = InternalFileInfo {
-                    payload_id: file.payload_id(),
-                    file_url: dest,
-                    bytes_transferred: 0,
-                    total_size: file.size(),
-                    file: None,
-                };
-                total_bytes = total_bytes
-                    .checked_add(info.total_size as u64)
-                    .ok_or_else(|| anyhow!("Total transfer size overflow"))?;
-                self.state.transferred_files.insert(file.payload_id(), info);
-                files_name.push(file_name.to_owned());
+            for (payload_id, info) in prepared_files {
+                info!(
+                    "Prepared inbound file {} -> {:?}",
+                    files_name
+                        .get(self.state.transferred_files.len())
+                        .map(String::as_str)
+                        .unwrap_or("<unknown>"),
+                    info.file_url
+                );
+                self.state.transferred_files.insert(payload_id, info);
             }
 
             let metadata = TransferMetadata {
