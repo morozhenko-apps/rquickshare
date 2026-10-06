@@ -415,8 +415,8 @@ impl InboundRequest {
         let (secret_key, public_key) = gen_ecdsa_keypair();
 
         let encoded_point = public_key.to_encoded_point(false);
-        let x = encoded_point.x().unwrap();
-        let y = encoded_point.y().unwrap();
+        let x = encoded_point.x().ok_or_else(|| anyhow!("Generated P-256 point has no X coordinate"))?;
+        let y = encoded_point.y().ok_or_else(|| anyhow!("Generated P-256 point has no Y coordinate"))?;
 
         let pkey = GenericPublicKey {
             r#type: PublicKeyType::EcP256.into(),
@@ -1051,7 +1051,7 @@ impl InboundRequest {
             .await;
         } else if introduction.text_metadata.len() == 1 {
             trace!("process_introduction: handling text_metadata");
-            let meta = introduction.text_metadata.first().unwrap();
+            let meta = introduction\n                .text_metadata\n                .first()\n                .ok_or_else(|| anyhow!("Missing text metadata"))?;
 
             match meta.r#type() {
                 text_metadata::Type::Url => {
@@ -1108,7 +1108,7 @@ impl InboundRequest {
             }
         } else if introduction.wifi_credentials_metadata.len() == 1 {
             trace!("process_introduction: handling wifi_credentials_metadata");
-            let meta = introduction.wifi_credentials_metadata.first().unwrap();
+            let meta = introduction\n                .wifi_credentials_metadata\n                .first()\n                .ok_or_else(|| anyhow!("Missing Wi-Fi credential metadata"))?;
 
             let metadata = TransferMetadata {
                 id: self.state.id.clone(),
