@@ -15,10 +15,13 @@ describe('parseListeningPort', () => {
 		expect(parseListeningPort('65535')).toEqual({ port: 65535, error: null });
 	});
 
-	test.each(['1023', '65536', '1.5', 'abc', 80, 70000])('rejects invalid port %s', (value) => {
-		const result = parseListeningPort(value);
+	test.each(['1023', '65536', '1.5', 'abc', 80, 70000, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+		'rejects invalid port %s',
+		(value) => {
+			const result = parseListeningPort(value);
 
-		expect(result.port).toBeNull();
-		expect(result.error).toBe('Use a port from 1024 to 65535.');
-	});
+			expect(result.port).toBeNull();
+			expect(result.error).toBe('Use a port from 1024 to 65535.');
+		},
+	);
 });
