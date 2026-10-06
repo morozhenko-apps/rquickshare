@@ -103,4 +103,43 @@ mod tests {
 
         assert_eq!(read, 0);
     }
+    async fn tcp_pair() -> (tokio::net::TcpStream, tokio::net::TcpStream) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+        (client, server)
+    }
+
+    #[tokio::test]
+    async fn tcp_transport_round_trip() {
+        let (mut peer, transport) = tcp_pair().await;
+        let mut stream = MigratableStream::Tcp(transport);
+
+        peer.write_all(b"phone-to-linux").await.unwrap();
+
+        let mut inbound = [0_u8; 14];
+        stream.read_exact(&mut inbound).await.unwrap();
+        assert_eq!(&inbound, b"phone-to-linux");
+
+        stream.write_all(b"linux-to-phone").await.unwrap();
+        stream.flush().await.unwrap();
+
+        let mut outbound = [0_u8; 14];
+        peer.read_exact(&mut outbound).await.unwrap();
+        assert_eq!(&outbound, b"linux-to-phone");
+    }
+
+    #[tokio::test]
+    async fn tcp_shutdown_is_forwarded_to_the_underlying_stream() {
+        let (mut peer, transport) = tcp_pair().await;
+        let mut stream = MigratableStream::Tcp(transport);
+
+        stream.shutdown().await.unwrap();
+
+        let mut byte = [0_u8; 1];
+        let read = peer.read(&mut byte).await.unwrap();
+        assert_eq!(read, 0);
+    }
+
 }
