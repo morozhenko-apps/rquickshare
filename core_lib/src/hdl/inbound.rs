@@ -961,17 +961,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                         if (chunk.flags() & 1) == 1 {
                             debug!("Chunk flags & 1 == 1 ?? End of data ??");
 
-                            let buffer = self
-                                .state
-                                .payload_buffers
-                                .remove(&payload_id)
-                                .ok_or_else(|| anyhow!("Missing completed payload buffer for {payload_id}"))?;
+                            let buffer =
+                                self.state.payload_buffers.remove(&payload_id).ok_or_else(
+                                    || anyhow!("Missing completed payload buffer for {payload_id}"),
+                                )?;
 
-                            let matching_text_payload = self
-                                .state
-                                .text_payload
-                                .clone()
-                                .filter(|text_payload| text_payload.get_i64_value() == payload_id);
+                            let matching_text_payload =
+                                self.state.text_payload.clone().filter(|text_payload| {
+                                    text_payload.get_i64_value() == payload_id
+                                });
 
                             if let Some(text_payload) = matching_text_payload {
                                 info!("Transfer finished");
@@ -2276,7 +2274,10 @@ mod security_tests {
             request.state.text_payload,
             Some(TextPayloadInfo::Text(id)) if id == text_payload_id
         ));
-        assert!(!request.state.payload_buffers.contains_key(&setup_payload_id));
+        assert!(!request
+            .state
+            .payload_buffers
+            .contains_key(&setup_payload_id));
     }
 
     #[tokio::test]
