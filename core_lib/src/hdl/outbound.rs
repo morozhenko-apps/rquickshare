@@ -1386,7 +1386,6 @@ impl OutboundRequest {
                                 .file_name()
                                 .map(|name| name.to_string_lossy().into_owned()),
                             parent_folder: curr_state.parent_folder.clone(),
-                            ..Default::default()
                         };
 
                         let wrapper = location_nearby_connections::OfflineFrame {
