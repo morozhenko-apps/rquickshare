@@ -1,5 +1,7 @@
 name: Coverage baseline
 
+# Re-measure after component tests and protocol helper extraction.
+
 on:
   push:
     branches: [ "feat/pixel-ble-receiver" ]
