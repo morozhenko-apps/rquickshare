@@ -62,7 +62,7 @@ async function shareClipboard() {
 	}
 
 	try {
-		const path = await props.vm.invoke<string>('save_clipboard_image');
+		const path = await props.vm.invoke('save_clipboard_image') as string;
 		emits('outboundPayload', { EphemeralFiles: [path] } as OutboundPayload);
 		await ensureDiscovery();
 	} catch {
