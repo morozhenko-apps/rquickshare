@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  stable:
-    name: Stable suite 1x
+  full_suite:
+    name: Complete automated suite 10x
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -38,35 +38,20 @@ jobs:
         working-directory: ./app/main
         run: pnpm install --frozen-lockfile
 
-      - name: Rust stable suite
-        working-directory: ./core_lib
-        run: cargo test --all-features
-
-      - name: Frontend stable suite
-        working-directory: ./app/main
-        run: pnpm exec vitest run
-
-  stability:
-    name: Async transport/BWU 10x
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libdbus-1-dev
-
-      - name: Run stability-sensitive tests ten times
-        working-directory: ./core_lib
+      - name: Run complete suite ten consecutive times
         shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 10); do
-            echo "=== stability attempt ${attempt}/10 ==="
-            cargo test --all-features ble_transport_round_trip -- --nocapture
-            cargo test --all-features plaintext_bwu_frame_round_trip -- --nocapture
-            cargo test --all-features routes_bwu_socket_without_consuming_client_introduction -- --nocapture
+            echo "=== Mode B attempt ${attempt}/10: Rust ==="
+            (
+              cd core_lib
+              cargo test --all-features
+            )
+
+            echo "=== Mode B attempt ${attempt}/10: frontend ==="
+            (
+              cd app/main
+              pnpm exec vitest run
+            )
           done
