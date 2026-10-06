@@ -77,7 +77,9 @@ fn resolve_received_item(
     let segments = validate_received_relative_path(relative_path)?;
     let candidate = segments
         .iter()
-        .fold(destination.to_path_buf(), |path, segment| path.join(segment));
+        .fold(destination.to_path_buf(), |path, segment| {
+            path.join(segment)
+        });
 
     if !candidate.exists() {
         return Ok(None);
@@ -209,9 +211,11 @@ mod tests {
                 .unwrap(),
             file.canonicalize().unwrap()
         );
-        assert!(resolve_received_item(&destination, "Trip/photos/missing.png")
-            .unwrap()
-            .is_none());
+        assert!(
+            resolve_received_item(&destination, "Trip/photos/missing.png")
+                .unwrap()
+                .is_none()
+        );
         assert!(resolve_received_item(&destination, "../photo.png").is_err());
 
         std::fs::remove_dir_all(&root).unwrap();
