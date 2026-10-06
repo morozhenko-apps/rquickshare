@@ -134,6 +134,7 @@ fn prepare_inbound_files(
         let info = InternalFileInfo {
             payload_id,
             file_url: destination,
+            parent_folder: None,
             bytes_transferred: 0,
             total_size: file.size(),
             file: None,

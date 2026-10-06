@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
@@ -54,6 +55,7 @@ use crate::{location_nearby_connections, sharing_nearby};
 type HmacSha256 = Hmac<Sha256>;
 
 pub const MANAGED_EPHEMERAL_FILE_PREFIX: &str = "rquickshare-clipboard-";
+const MAX_OUTBOUND_FOLDER_DEPTH: usize = 64;
 
 #[derive(Debug)]
 pub struct ManagedEphemeralFile {
@@ -252,32 +254,166 @@ fn byte_payload_frames(payload_id: i64, body: &[u8]) -> Result<Vec<OfflineFrame>
     Ok(frames)
 }
 
-fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, anyhow::Error> {
-    let mut file_metadata = Vec::with_capacity(files.len());
-    let mut transferred_files = HashMap::new();
-    let mut total_to_send = 0_u64;
+#[derive(Debug)]
+struct OutboundFileCandidate {
+    path: PathBuf,
+    parent_folder: Option<String>,
+}
 
-    for file_path in files {
-        let path = Path::new(file_path);
-        if !path.is_file() {
-            warn!("Path is not a file: {file_path}");
+fn validate_outbound_path_component(component: &OsStr) -> Result<String, anyhow::Error> {
+    let value = component
+        .to_str()
+        .ok_or_else(|| anyhow!("Folder path component is not valid UTF-8"))?;
+
+    if value.is_empty()
+        || value.len() > 255
+        || value
+            .chars()
+            .any(|character| character == '\\' || character == '\0' || character.is_control())
+    {
+        return Err(anyhow!("Folder path component is unsafe: {value:?}"));
+    }
+
+    Ok(value.to_owned())
+}
+
+fn collect_directory_files(
+    root: &Path,
+    current: &Path,
+    root_name: &str,
+    depth: usize,
+    output: &mut Vec<OutboundFileCandidate>,
+) -> Result<(), anyhow::Error> {
+    if depth > MAX_OUTBOUND_FOLDER_DEPTH {
+        return Err(anyhow!(
+            "Outbound folder exceeds maximum nesting depth of {MAX_OUTBOUND_FOLDER_DEPTH}"
+        ));
+    }
+
+    let mut entries = std::fs::read_dir(current)?
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+
+        if file_type.is_symlink() {
+            warn!("Skipping symbolic link in outbound folder: {}", path.display());
             continue;
         }
 
-        let file = match File::open(path) {
-            Ok(file) => file,
-            Err(error) => {
-                error!("Failed to open file: {file_path}: {error:?}");
-                continue;
+        if file_type.is_dir() {
+            collect_directory_files(root, &path, root_name, depth + 1, output)?;
+            continue;
+        }
+
+        if !file_type.is_file() {
+            warn!("Skipping non-regular outbound path: {}", path.display());
+            continue;
+        }
+
+        let relative_parent = path
+            .parent()
+            .ok_or_else(|| anyhow!("Outbound file has no parent: {}", path.display()))?
+            .strip_prefix(root)
+            .map_err(|_| anyhow!("Outbound file escaped selected folder: {}", path.display()))?;
+
+        let mut parent_segments = vec![root_name.to_owned()];
+        for component in relative_parent.components() {
+            match component {
+                std::path::Component::Normal(value) => {
+                    parent_segments.push(validate_outbound_path_component(value)?);
+                }
+                _ => {
+                    return Err(anyhow!(
+                        "Outbound relative folder contains unsafe components: {}",
+                        relative_parent.display()
+                    ));
+                }
             }
-        };
-        let metadata = match file.metadata() {
+        }
+
+        output.push(OutboundFileCandidate {
+            path,
+            parent_folder: Some(parent_segments.join("/")),
+        });
+    }
+
+    Ok(())
+}
+
+fn collect_outbound_file_candidates(
+    inputs: &[String],
+) -> Result<Vec<OutboundFileCandidate>, anyhow::Error> {
+    let mut output = Vec::new();
+
+    for input in inputs {
+        let path = Path::new(input);
+        let metadata = match std::fs::symlink_metadata(path) {
             Ok(metadata) => metadata,
-            Err(error) => {
-                error!("Failed to get metadata for: {file_path}: {error:?}");
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                warn!("Outbound path does not exist: {input}");
                 continue;
             }
+            Err(error) => {
+                return Err(anyhow!("Failed to inspect outbound path {input}: {error}"));
+            }
         };
+
+        if metadata.file_type().is_symlink() {
+            warn!("Skipping symbolic link selected for outbound transfer: {input}");
+            continue;
+        }
+
+        if metadata.is_file() {
+            output.push(OutboundFileCandidate {
+                path: path.to_path_buf(),
+                parent_folder: None,
+            });
+            continue;
+        }
+
+        if metadata.is_dir() {
+            let root_name = path
+                .file_name()
+                .ok_or_else(|| anyhow!("Selected folder has no root name: {input}"))
+                .and_then(validate_outbound_path_component)?;
+            collect_directory_files(path, path, &root_name, 0, &mut output)?;
+            continue;
+        }
+
+        warn!("Skipping non-file outbound path: {input}");
+    }
+
+    Ok(output)
+}
+
+fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, anyhow::Error> {
+    let candidates = collect_outbound_file_candidates(files)?;
+    if candidates.is_empty() {
+        return Err(anyhow!("Outbound selection contains no shareable regular files"));
+    }
+
+    let mut file_metadata = Vec::with_capacity(candidates.len());
+    let mut transferred_files = HashMap::new();
+    let mut total_to_send = 0_u64;
+
+    for candidate in candidates {
+        let path = candidate.path.as_path();
+        let file_path = path.display().to_string();
+
+        let file = File::open(path)
+            .map_err(|error| anyhow!("Failed to open outbound file {file_path}: {error}"))?;
+        let metadata = file
+            .metadata()
+            .map_err(|error| anyhow!("Failed to get metadata for {file_path}: {error}"))?;
+
+        if !metadata.is_file() {
+            return Err(anyhow!(
+                "Outbound candidate is no longer a regular file: {file_path}"
+            ));
+        }
 
         let mime_type = mime_guess::from_path(path)
             .first_or_octet_stream()
@@ -302,9 +438,9 @@ fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, any
             .to_owned();
 
         let payload_id = loop {
-            let candidate = rand::rng().random::<i64>();
-            if !transferred_files.contains_key(&candidate) {
-                break candidate;
+            let candidate_id = rand::rng().random::<i64>();
+            if !transferred_files.contains_key(&candidate_id) {
+                break candidate_id;
             }
         };
 
@@ -317,6 +453,7 @@ fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, any
             size: Some(file_size),
             mime_type: Some(mime_type),
             r#type: Some(attachment_type.into()),
+            parent_folder: candidate.parent_folder.clone(),
             ..Default::default()
         };
 
@@ -325,6 +462,7 @@ fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, any
             InternalFileInfo {
                 payload_id,
                 file_url: path.to_path_buf(),
+                parent_folder: candidate.parent_folder,
                 bytes_transferred: 0,
                 total_size: file_size,
                 file: Some(file),
@@ -1230,6 +1368,7 @@ impl OutboundRequest {
                                 .file_url
                                 .file_name()
                                 .map(|name| name.to_string_lossy().into_owned()),
+                            parent_folder: curr_state.parent_folder.clone(),
                             ..Default::default()
                         };
 
@@ -1768,12 +1907,84 @@ mod security_tests {
     }
 
     #[test]
-    fn outbound_file_preparation_handles_empty_input() {
-        let prepared = prepare_outbound_files(&[]).unwrap();
+    fn outbound_file_preparation_rejects_empty_input() {
+        assert!(prepare_outbound_files(&[]).is_err());
+    }
 
-        assert!(prepared.metadata.is_empty());
-        assert!(prepared.files.is_empty());
-        assert_eq!(prepared.total_bytes, 0);
+    #[test]
+    fn outbound_folder_preparation_preserves_selected_root_and_nested_parents() {
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-folder-test-{}",
+            rand::random::<u64>()
+        ));
+        let root = base.join("Trip");
+        let nested = root.join("photos");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(root.join("readme.txt"), [1_u8]).unwrap();
+        std::fs::write(nested.join("sunset.jpg"), [2_u8, 3]).unwrap();
+
+        let prepared =
+            prepare_outbound_files(&[root.to_string_lossy().into_owned()]).unwrap();
+        assert_eq!(prepared.metadata.len(), 2);
+        assert_eq!(prepared.total_bytes, 3);
+
+        let by_name = prepared
+            .metadata
+            .iter()
+            .map(|metadata| (metadata.name().to_owned(), metadata))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(by_name["readme.txt"].parent_folder(), "Trip");
+        assert_eq!(by_name["sunset.jpg"].parent_folder(), "Trip/photos");
+
+        for metadata in &prepared.metadata {
+            assert_eq!(
+                prepared.files[&metadata.payload_id()].parent_folder.as_deref(),
+                metadata.parent_folder.as_deref()
+            );
+        }
+
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn outbound_folder_preparation_rejects_empty_folder() {
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-empty-folder-test-{}",
+            rand::random::<u64>()
+        ));
+        let root = base.join("Empty");
+        std::fs::create_dir_all(&root).unwrap();
+
+        assert!(prepare_outbound_files(&[root.to_string_lossy().into_owned()]).is_err());
+
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn outbound_folder_preparation_does_not_follow_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-symlink-test-{}",
+            rand::random::<u64>()
+        ));
+        let root = base.join("Share");
+        std::fs::create_dir_all(&root).unwrap();
+        let outside = base.join("secret.txt");
+        std::fs::write(&outside, [9_u8]).unwrap();
+        std::fs::write(root.join("public.txt"), [1_u8]).unwrap();
+        symlink(&outside, root.join("linked-secret.txt")).unwrap();
+
+        let prepared =
+            prepare_outbound_files(&[root.to_string_lossy().into_owned()]).unwrap();
+
+        assert_eq!(prepared.metadata.len(), 1);
+        assert_eq!(prepared.metadata[0].name(), "public.txt");
+        assert_eq!(prepared.metadata[0].parent_folder(), "Share");
+
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

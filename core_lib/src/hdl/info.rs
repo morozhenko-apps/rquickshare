@@ -11,6 +11,7 @@ use crate::utils::RemoteDeviceInfo;
 pub struct InternalFileInfo {
     pub payload_id: i64,
     pub file_url: PathBuf,
+    pub parent_folder: Option<String>,
     pub bytes_transferred: i64,
     pub total_size: i64,
     pub file: Option<File>,
