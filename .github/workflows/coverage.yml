@@ -1,14 +1,8 @@
-name: Coverage baseline
+name: Coverage measurement
 
-# Final Mode B coverage measurement.
-
-# Re-measure after component tests and protocol helper extraction.
+# Manual diagnostic coverage. The final Mode B coverage gate also runs from mode-b.yml.
 
 on:
-  push:
-    branches: [ "feat/pixel-ble-receiver" ]
-    paths:
-      - ".github/workflows/coverage.yml"
   workflow_dispatch:
 
 permissions:
@@ -36,7 +30,10 @@ jobs:
       - name: Measure core coverage
         working-directory: ./core_lib
         run: |
-          cargo llvm-cov             --all-features             --summary-only             --ignore-filename-regex 'target/|bindings/'
+          cargo llvm-cov \
+            --all-features \
+            --summary-only \
+            --ignore-filename-regex 'target/|bindings/'
 
   frontend:
     name: Frontend coverage
@@ -58,4 +55,9 @@ jobs:
       - name: Measure frontend coverage
         working-directory: ./app/main
         run: |
-          pnpm exec vitest run             --coverage             --coverage.provider=v8             --coverage.reporter=text             --coverage.include='src/**/*.{ts,vue}'             --coverage.exclude='src/auto-imports.d.ts'
+          pnpm exec vitest run \
+            --coverage \
+            --coverage.provider=v8 \
+            --coverage.reporter=text \
+            --coverage.include='src/**/*.{ts,vue}' \
+            --coverage.exclude='src/auto-imports.d.ts'
