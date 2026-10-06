@@ -9,6 +9,9 @@ use crate::securegcm::ukey2_client_init::CipherCommitment;
 use crate::sharing_nearby::wifi_credentials_metadata::SecurityType;
 use crate::utils::RemoteDeviceInfo;
 
+mod bwu;
+pub use bwu::*;
+
 #[cfg(feature = "experimental")]
 mod ble;
 #[cfg(feature = "experimental")]
