@@ -349,4 +349,78 @@ mod tests {
         routed.read_exact(&mut received).await.unwrap();
         assert_eq!(received, framed);
     }
+    #[tokio::test]
+    async fn returns_socket_when_no_bwu_route_is_pending() {
+        let router = BwuRouter::new();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn malformed_frame_does_not_consume_pending_bwu_route() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-1234".to_owned()).await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        client
+            .write_all(&(BWU_PEEK_LIMIT as u32).to_be_bytes())
+            .await
+            .unwrap();
+        client.flush().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_some());
+        assert!(router.has_pending().await);
+
+        router.cancel("peer-1234").await;
+        drop(receiver);
+    }
+
+    #[tokio::test]
+    async fn unregistered_bwu_introduction_does_not_consume_other_pending_route() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-1234".to_owned()).await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        let framed = client_introduction("peer-other");
+        client.write_all(&framed).await.unwrap();
+        client.flush().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(router.has_pending().await);
+
+        router.cancel("peer-1234").await;
+        drop(receiver);
+    }
+
+    #[test]
+    fn ui_error_is_truncated_to_character_limit() {
+        let source = "é".repeat(MAX_UI_ERROR_CHARS + 10);
+        let error = anyhow::anyhow!(source);
+        let rendered = error_for_ui(&error);
+
+        assert_eq!(rendered.chars().count(), MAX_UI_ERROR_CHARS);
+        assert_eq!(rendered, "é".repeat(MAX_UI_ERROR_CHARS));
+    }
+
 }
