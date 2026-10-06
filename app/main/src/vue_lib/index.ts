@@ -12,3 +12,4 @@ export { useToastStore } from './stores/useToastStore';
 export function opt<T>(v?: T) {
 	return v ?? null;
 }
+export * from './clipboard';
