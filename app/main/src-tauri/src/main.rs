@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::anyhow;
 
-use rqs_lib::channel::{ChannelDirection, ChannelMessage};
+use rqs_lib::channel::{ChannelDirection, ChannelMessage, TransferType};
 use rqs_lib::{EndpointInfo, SendInfo, State, Visibility, RQS};
 use store::get_startminimized;
 #[cfg(target_os = "macos")]
@@ -25,7 +25,9 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::logger::set_up_logging;
-use crate::notification::{send_request_notification, send_temporarily_notification};
+use crate::notification::{
+    send_finished_notification, send_request_notification, send_temporarily_notification,
+};
 use crate::store::{
     get_download_path, get_port, get_realclose, get_visibility, init_default, set_visibility,
 };
@@ -216,16 +218,16 @@ fn spawn_receiver_tasks(app_handle: &AppHandle) {
 
             match rinfo {
                 Ok(info) => {
-                    if info.state.as_ref().unwrap_or(&State::Initial)
-                        == &State::WaitingForUserConsent
-                    {
-                        let name = info
-                            .meta
-                            .as_ref()
-                            .and_then(|meta| meta.source.as_ref())
-                            .map(|source| source.name.clone())
-                            .unwrap_or_else(|| "Unknown".to_string());
-                        send_request_notification(name, info.id.clone(), &capp_handle);
+                    if info.rtype == Some(TransferType::Inbound) {
+                        match info.state.as_ref().unwrap_or(&State::Initial) {
+                            State::WaitingForUserConsent => {
+                                send_request_notification(&info, &capp_handle);
+                            }
+                            State::Finished => {
+                                send_finished_notification(&info, &capp_handle);
+                            }
+                            _ => {}
+                        }
                     }
                     rs2js_channelmessage(info, &capp_handle);
                 }
