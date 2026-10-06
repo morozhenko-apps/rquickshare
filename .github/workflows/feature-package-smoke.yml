@@ -1,5 +1,7 @@
 name: Feature Linux package smoke
 
+# Validation trigger: hardened legacy FEF3 receiver + bounded GATT queue.
+
 on:
   push:
     branches: [ "feat/pixel-ble-receiver" ]
