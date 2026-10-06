@@ -1259,15 +1259,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             let (prepared_files, files_name, total_bytes) =
                 prepare_inbound_files(&introduction.file_metadata, &existing_payload_ids)?;
 
-            for (payload_id, info) in prepared_files {
-                info!(
-                    "Prepared inbound file {} -> {:?}",
-                    files_name
-                        .get(self.state.transferred_files.len())
-                        .map(String::as_str)
-                        .unwrap_or("<unknown>"),
-                    info.file_url
-                );
+            for ((payload_id, info), file_name) in
+                prepared_files.into_iter().zip(files_name.iter())
+            {
+                info!("Prepared inbound file {file_name} -> {:?}", info.file_url);
                 self.state.transferred_files.insert(payload_id, info);
             }
 
