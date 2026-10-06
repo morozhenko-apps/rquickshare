@@ -58,9 +58,13 @@ fn is_cancel_request(message: &ChannelMessage, transfer_id: &str) -> bool {
         && message.action == Some(ChannelAction::CancelTransfer)
 }
 
-fn prepare_outbound_files(
-    files: &[String],
-) -> Result<(Vec<FileMetadata>, HashMap<i64, InternalFileInfo>, u64), anyhow::Error> {
+struct PreparedOutboundFiles {
+    metadata: Vec<FileMetadata>,
+    files: HashMap<i64, InternalFileInfo>,
+    total_bytes: u64,
+}
+
+fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, anyhow::Error> {
     let mut file_metadata = Vec::with_capacity(files.len());
     let mut transferred_files = HashMap::new();
     let mut total_to_send = 0_u64;
@@ -145,7 +149,11 @@ fn prepare_outbound_files(
             .ok_or_else(|| anyhow!("Total outbound transfer size overflow"))?;
     }
 
-    Ok((file_metadata, transferred_files, total_to_send))
+    Ok(PreparedOutboundFiles {
+        metadata: file_metadata,
+        files: transferred_files,
+        total_bytes: total_to_send,
+    })
 }
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -781,7 +789,11 @@ impl OutboundRequest {
         }
 
         // TODO - Handle sending Text
-        let (file_metadata, transferred_files, total_to_send) = match &self.payload {
+        let PreparedOutboundFiles {
+            metadata: file_metadata,
+            files: transferred_files,
+            total_bytes: total_to_send,
+        } = match &self.payload {
             OutboundPayload::Files(files) => prepare_outbound_files(files)?,
         };
 
@@ -1406,11 +1418,13 @@ mod security_tests {
             missing.to_string_lossy().into_owned(),
         ];
 
-        let (metadata, transferred, total) = prepare_outbound_files(&inputs).unwrap();
+        let prepared = prepare_outbound_files(&inputs).unwrap();
+        let metadata = prepared.metadata;
+        let transferred = prepared.files;
 
         assert_eq!(metadata.len(), 3);
         assert_eq!(transferred.len(), 3);
-        assert_eq!(total, 6);
+        assert_eq!(prepared.total_bytes, 6);
 
         let by_name = metadata
             .iter()
@@ -1448,11 +1462,11 @@ mod security_tests {
 
     #[test]
     fn outbound_file_preparation_handles_empty_input() {
-        let (metadata, transferred, total) = prepare_outbound_files(&[]).unwrap();
+        let prepared = prepare_outbound_files(&[]).unwrap();
 
-        assert!(metadata.is_empty());
-        assert!(transferred.is_empty());
-        assert_eq!(total, 0);
+        assert!(prepared.metadata.is_empty());
+        assert!(prepared.files.is_empty());
+        assert_eq!(prepared.total_bytes, 0);
     }
 
     async fn test_request(
