@@ -214,17 +214,23 @@ impl ReceiverAdvertiser {
         let mut handle: Option<AdvertisementHandle> = None;
 
         info!(
-            "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({})",
+            "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({}) ({} bytes served via GATT slot 0)",
             self.adapter.name(),
-            self.adapter.address().await?
+            self.adapter.address().await?,
+            self.service_data.len()
         );
 
         loop {
             let visibility = *self.visibility_receiver.borrow_and_update();
             if BleAdvertiser::should_advertise(visibility) && handle.is_none() {
+                // Keep the on-air packet legacy-sized: advertise only the 0xFEF3
+                // service UUID and serve the full Nearby receiver advertisement
+                // through GATT slot 0. Putting the full service data on air can
+                // force BlueZ into Extended Advertising, which some Android
+                // scanners and kernel/adapter combinations do not discover reliably.
                 let advertisement = Advertisement {
                     advertisement_type: bluer::adv::Type::Peripheral,
-                    service_data: [(service_uuid, self.service_data.clone())].into(),
+                    service_uuids: [service_uuid].into(),
                     discoverable: Some(true),
                     min_interval: Some(std::time::Duration::from_millis(100)),
                     max_interval: Some(std::time::Duration::from_millis(150)),
