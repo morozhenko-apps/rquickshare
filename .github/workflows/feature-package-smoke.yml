@@ -1,8 +1,8 @@
 name: Feature Linux package smoke
 
 on:
-  pull_request:
-    branches: [ "dev" ]
+  push:
+    branches: [ "feat/pixel-ble-receiver" ]
     paths:
       - ".github/workflows/feature-package-smoke.yml"
 
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: feature-package-smoke-${{ github.event.pull_request.number }}
+  group: feature-package-smoke-pixel-receiver
   cancel-in-progress: true
 
 jobs:
