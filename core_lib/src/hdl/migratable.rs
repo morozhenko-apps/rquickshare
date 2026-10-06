@@ -55,3 +55,29 @@ impl AsyncWrite for MigratableStream {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn ble_transport_round_trip() {
+        let (mut peer, transport) = tokio::io::duplex(128);
+        let mut stream = MigratableStream::Ble(transport);
+
+        peer.write_all(b"phone-to-linux").await.unwrap();
+
+        let mut inbound = [0_u8; 14];
+        stream.read_exact(&mut inbound).await.unwrap();
+        assert_eq!(&inbound, b"phone-to-linux");
+
+        stream.write_all(b"linux-to-phone").await.unwrap();
+        stream.flush().await.unwrap();
+
+        let mut outbound = [0_u8; 14];
+        peer.read_exact(&mut outbound).await.unwrap();
+        assert_eq!(&outbound, b"linux-to-phone");
+    }
+}
