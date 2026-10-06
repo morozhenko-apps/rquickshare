@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::channel::ChannelMessage;
 use crate::errors::AppError;
-use crate::hdl::{InboundRequest, MigratableStream};
+use crate::hdl::{BwuRouter, InboundRequest, MigratableStream};
 
 const INNER_NAME: &str = "ReceiverGattServer";
 
@@ -97,12 +97,16 @@ pub struct ReceiverGattServer {
     adapter: Arc<Adapter>,
     advertisement: Vec<u8>,
     sender: Sender<ChannelMessage>,
+    tcp_port: u16,
+    bwu_router: BwuRouter,
 }
 
 impl ReceiverGattServer {
     pub async fn new(
         advertisement: Vec<u8>,
         sender: Sender<ChannelMessage>,
+        tcp_port: u16,
+        bwu_router: BwuRouter,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
         let adapter = session.default_adapter().await?;
@@ -112,6 +116,8 @@ impl ReceiverGattServer {
             adapter: Arc::new(adapter),
             advertisement,
             sender,
+            tcp_port,
+            bwu_router,
         })
     }
 
@@ -127,6 +133,8 @@ impl ReceiverGattServer {
         let packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>> =
             Arc::new(Mutex::new(Some(packet_receiver)));
         let channel_sender = self.sender.clone();
+        let tcp_port = self.tcp_port;
+        let bwu_router = self.bwu_router.clone();
 
         let app = Application {
             services: vec![Service {
@@ -183,10 +191,16 @@ impl ReceiverGattServer {
                             method: CharacteristicNotifyMethod::Fun(Box::new(move |notifier| {
                                 let packet_receiver = packet_receiver.clone();
                                 let channel_sender = channel_sender.clone();
+                                let bwu_router = bwu_router.clone();
                                 Box::pin(async move {
-                                    if let Err(error) =
-                                        weave_session(notifier, packet_receiver, channel_sender)
-                                            .await
+                                    if let Err(error) = weave_session(
+                                        notifier,
+                                        packet_receiver,
+                                        channel_sender,
+                                        bwu_router,
+                                        tcp_port,
+                                    )
+                                    .await
                                     {
                                         warn!(
                                             "{INNER_NAME}: weave session ended with error: {error}"
@@ -220,6 +234,8 @@ async fn weave_session(
     mut notifier: CharacteristicNotifier,
     packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>>,
     sender: Sender<ChannelMessage>,
+    bwu_router: BwuRouter,
+    tcp_port: u16,
 ) -> Result<(), anyhow::Error> {
     let mut receiver_guard = packet_receiver.lock().await;
     let receiver = receiver_guard
@@ -250,6 +266,7 @@ async fn weave_session(
     let (inbound_side, weave_side) = tokio::io::duplex(64 * 1024);
     let (mut weave_read, mut weave_write) = tokio::io::split(weave_side);
     let inbound_sender = sender.clone();
+    let inbound_bwu_router = bwu_router.clone();
 
     let inbound_task = tokio::spawn(async move {
         let mut request = InboundRequest::new(
@@ -263,7 +280,10 @@ async fn weave_session(
             match request.handle().await {
                 Ok(()) => {
                     if request.take_bwu_pending() {
-                        if let Err(error) = request.do_bandwidth_upgrade().await {
+                        if let Err(error) = request
+                            .do_bandwidth_upgrade(&inbound_bwu_router, tcp_port)
+                            .await
+                        {
                             warn!(
                                 "{INNER_NAME}: Wi-Fi bandwidth upgrade failed; continuing on BLE: {error}"
                             );
