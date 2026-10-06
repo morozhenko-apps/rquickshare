@@ -1942,4 +1942,61 @@ mod security_tests {
         assert!(parse_wifi_password_payload(&[0x0A, 5, b'a', 0x10, 0]).is_err());
         assert!(parse_wifi_password_payload(&[0x0A, 1, b'a', 0x11, 0]).is_err());
     }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[test]
+    fn client_introduction_validation_accepts_only_bwu_intro() {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+            ClientIntroduction, EventType,
+        };
+        use location_nearby_connections::{
+            offline_frame, v1_frame, BandwidthUpgradeNegotiationFrame, V1Frame,
+        };
+
+        let frame = OfflineFrame {
+            version: Some(offline_frame::Version::V1.into()),
+            v1: Some(V1Frame {
+                r#type: Some(v1_frame::FrameType::BandwidthUpgradeNegotiation.into()),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(EventType::ClientIntroduction.into()),
+                    client_introduction: Some(ClientIntroduction {
+                        endpoint_id: Some("peer-1234".to_owned()),
+                        supports_disabling_encryption: Some(false),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+
+        assert_eq!(
+            validate_client_introduction(&frame.encode_to_vec()).unwrap(),
+            "peer-1234"
+        );
+
+        let mut wrong_event = frame.clone();
+        wrong_event
+            .v1
+            .as_mut()
+            .unwrap()
+            .bandwidth_upgrade_negotiation
+            .as_mut()
+            .unwrap()
+            .event_type = Some(EventType::SafeToClosePriorChannel.into());
+        assert!(validate_client_introduction(&wrong_event.encode_to_vec()).is_err());
+
+        let mut empty_id = frame;
+        empty_id
+            .v1
+            .as_mut()
+            .unwrap()
+            .bandwidth_upgrade_negotiation
+            .as_mut()
+            .unwrap()
+            .client_introduction
+            .as_mut()
+            .unwrap()
+            .endpoint_id = Some(String::new());
+        assert!(validate_client_introduction(&empty_id.encode_to_vec()).is_err());
+    }
 }
