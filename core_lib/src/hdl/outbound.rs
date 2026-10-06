@@ -1678,6 +1678,38 @@ mod security_tests {
     }
 
     #[test]
+    fn outbound_file_preparation_classifies_audio_and_video() {
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-media-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let video = root.join("clip.mp4");
+        let audio = root.join("sound.mp3");
+        std::fs::write(&video, [1_u8]).unwrap();
+        std::fs::write(&audio, [2_u8]).unwrap();
+
+        let prepared = prepare_outbound_files(&[
+            video.to_string_lossy().into_owned(),
+            audio.to_string_lossy().into_owned(),
+        ])
+        .unwrap();
+
+        let by_name = prepared
+            .metadata
+            .iter()
+            .map(|item| (item.name().to_owned(), item.r#type()))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(by_name["clip.mp4"], file_metadata::Type::Video);
+        assert_eq!(by_name["sound.mp3"], file_metadata::Type::Audio);
+        assert_eq!(prepared.total_bytes, 2);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn outbound_file_preparation_handles_empty_input() {
         let prepared = prepare_outbound_files(&[]).unwrap();
 
