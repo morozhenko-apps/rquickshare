@@ -961,18 +961,24 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                         if (chunk.flags() & 1) == 1 {
                             debug!("Chunk flags & 1 == 1 ?? End of data ??");
 
-                            if let Some(text_payload) = self.state.text_payload.clone() {
-                                if text_payload.get_i64_value() != payload_id {
-                                    return Err(anyhow!(
-                                        "Unexpected text payload id: {payload_id}"
-                                    ));
-                                }
+                            let buffer = self
+                                .state
+                                .payload_buffers
+                                .remove(&payload_id)
+                                .ok_or_else(|| anyhow!("Missing completed payload buffer for {payload_id}"))?;
 
+                            let matching_text_payload = self
+                                .state
+                                .text_payload
+                                .clone()
+                                .filter(|text_payload| text_payload.get_i64_value() == payload_id);
+
+                            if let Some(text_payload) = matching_text_payload {
                                 info!("Transfer finished");
 
                                 match text_payload {
                                     TextPayloadInfo::Url(_) => {
-                                        let payload = std::str::from_utf8(buffer)?.to_owned();
+                                        let payload = std::str::from_utf8(&buffer)?.to_owned();
                                         self.update_state(
                                             |e| {
                                                 if let Some(tmd) = e.transfer_metadata.as_mut() {
@@ -985,7 +991,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                         .await;
                                     }
                                     TextPayloadInfo::Text(_) => {
-                                        let payload = std::str::from_utf8(buffer)?.to_owned();
+                                        let payload = std::str::from_utf8(&buffer)?.to_owned();
                                         self.update_state(
                                             |e| {
                                                 if let Some(tmd) = e.transfer_metadata.as_mut() {
@@ -1007,7 +1013,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                             SecurityType::WpaPsk
                                             | SecurityType::Wep
                                             | SecurityType::Sae => {
-                                                parse_wifi_password_payload(buffer)?
+                                                parse_wifi_password_payload(&buffer)?
                                             }
                                             SecurityType::UnknownSecurityType => {
                                                 return Err(anyhow!(
@@ -1039,11 +1045,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                 .await;
                                 self.disconnection().await?;
                                 return Err(anyhow!(crate::errors::AppError::NotAnError));
-                            } else {
-                                let innner_frame =
-                                    sharing_nearby::Frame::decode(buffer.as_slice())?;
-                                self.process_transfer_setup(&innner_frame).await?;
                             }
+
+                            let inner_frame = sharing_nearby::Frame::decode(buffer.as_slice())?;
+                            self.process_transfer_setup(&inner_frame).await?;
                         }
                     }
                     payload_header::PayloadType::File => {
@@ -2184,6 +2189,94 @@ mod security_tests {
             .is_err());
         assert!(negative.state.transferred_files.is_empty());
         assert!(negative.state.transfer_metadata.is_none());
+    }
+
+    #[tokio::test]
+    async fn non_text_bytes_after_text_introduction_remain_transfer_setup_frames() {
+        let mut request = test_request();
+        let text_payload_id = 301;
+        let setup_payload_id = 999;
+
+        let introduction = introduction_frame(
+            vec![],
+            vec![sharing_nearby::TextMetadata {
+                text_title: Some("Clipboard text".to_owned()),
+                r#type: Some(sharing_nearby::text_metadata::Type::Text.into()),
+                payload_id: Some(text_payload_id),
+                size: Some(12),
+                ..Default::default()
+            }],
+            vec![],
+        );
+        request.process_introduction(&introduction).await.unwrap();
+
+        let setup = sharing_nearby::Frame {
+            version: Some(sharing_nearby::frame::Version::V1.into()),
+            v1: Some(sharing_nearby::V1Frame::default()),
+        }
+        .encode_to_vec();
+
+        let first = OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(
+                    location_nearby_connections::v1_frame::FrameType::PayloadTransfer.into(),
+                ),
+                payload_transfer: Some(PayloadTransferFrame {
+                    packet_type: Some(PacketType::Data.into()),
+                    payload_header: Some(PayloadHeader {
+                        id: Some(setup_payload_id),
+                        r#type: Some(payload_header::PayloadType::Bytes.into()),
+                        total_size: Some(setup.len() as i64),
+                        is_sensitive: Some(false),
+                        ..Default::default()
+                    }),
+                    payload_chunk: Some(PayloadChunk {
+                        offset: Some(0),
+                        flags: Some(0),
+                        body: Some(setup.clone()),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        request.process_offline_frame(first).await.unwrap();
+
+        let last = OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(
+                    location_nearby_connections::v1_frame::FrameType::PayloadTransfer.into(),
+                ),
+                payload_transfer: Some(PayloadTransferFrame {
+                    packet_type: Some(PacketType::Data.into()),
+                    payload_header: Some(PayloadHeader {
+                        id: Some(setup_payload_id),
+                        r#type: Some(payload_header::PayloadType::Bytes.into()),
+                        total_size: Some(setup.len() as i64),
+                        is_sensitive: Some(false),
+                        ..Default::default()
+                    }),
+                    payload_chunk: Some(PayloadChunk {
+                        offset: Some(setup.len() as i64),
+                        flags: Some(1),
+                        body: Some(vec![]),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+
+        request.process_offline_frame(last).await.unwrap();
+
+        assert_eq!(request.state.state, State::WaitingForUserConsent);
+        assert!(matches!(
+            request.state.text_payload,
+            Some(TextPayloadInfo::Text(id)) if id == text_payload_id
+        ));
+        assert!(!request.state.payload_buffers.contains_key(&setup_payload_id));
     }
 
     #[tokio::test]
