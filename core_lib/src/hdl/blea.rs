@@ -203,15 +203,11 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
 #[derive(Debug, Clone)]
 pub struct ReceiverAdvertiser {
     adapter: Arc<bluer::Adapter>,
-    service_data: Vec<u8>,
     visibility_receiver: watch::Receiver<Visibility>,
 }
 
 impl ReceiverAdvertiser {
     pub async fn new(
-        endpoint_id: [u8; 4],
-        device_type: u8,
-        device_name: &str,
         visibility_receiver: watch::Receiver<Visibility>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
@@ -220,7 +216,6 @@ impl ReceiverAdvertiser {
 
         Ok(Self {
             adapter: Arc::new(adapter),
-            service_data: receiver_service_data(endpoint_id, device_type, device_name),
             visibility_receiver,
         })
     }
@@ -230,10 +225,9 @@ impl ReceiverAdvertiser {
         let mut handle: Option<AdvertisementHandle> = None;
 
         info!(
-            "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({}) ({} bytes served via GATT slot 0)",
+            "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({})",
             self.adapter.name(),
-            self.adapter.address().await?,
-            self.service_data.len()
+            self.adapter.address().await?
         );
 
         loop {
