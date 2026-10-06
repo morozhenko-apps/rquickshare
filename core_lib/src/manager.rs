@@ -35,8 +35,8 @@ async fn route_bandwidth_upgrade_if_pending(
             }
 
             if count >= 4 {
-                let frame_len =
-                    u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+                let frame_len = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]])
+                    as usize;
                 if frame_len == 0 || frame_len > BWU_PEEK_LIMIT.saturating_sub(4) {
                     return Ok(None);
                 }
