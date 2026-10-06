@@ -78,10 +78,16 @@ fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
     }
 }
 
+struct PreparedInboundFiles {
+    files: Vec<(i64, InternalFileInfo)>,
+    names: Vec<String>,
+    total_bytes: u64,
+}
+
 fn prepare_inbound_files(
     files: &[sharing_nearby::FileMetadata],
     existing_payload_ids: &HashSet<i64>,
-) -> Result<(Vec<(i64, InternalFileInfo)>, Vec<String>, u64), anyhow::Error> {
+) -> Result<PreparedInboundFiles, anyhow::Error> {
     let mut prepared = Vec::with_capacity(files.len());
     let mut file_names = Vec::with_capacity(files.len());
     let mut total_bytes = 0_u64;
@@ -141,7 +147,11 @@ fn prepare_inbound_files(
         file_names.push(file_name.to_owned());
     }
 
-    Ok((prepared, file_names, total_bytes))
+    Ok(PreparedInboundFiles {
+        files: prepared,
+        names: file_names,
+        total_bytes,
+    })
 }
 
 fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
@@ -1256,8 +1266,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 .keys()
                 .copied()
                 .collect::<HashSet<_>>();
-            let (prepared_files, files_name, total_bytes) =
-                prepare_inbound_files(&introduction.file_metadata, &existing_payload_ids)?;
+            let PreparedInboundFiles {
+                files: prepared_files,
+                names: files_name,
+                total_bytes,
+            } = prepare_inbound_files(&introduction.file_metadata, &existing_payload_ids)?;
 
             for ((payload_id, info), file_name) in
                 prepared_files.into_iter().zip(files_name.iter())
