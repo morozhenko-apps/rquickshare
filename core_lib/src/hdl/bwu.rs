@@ -58,6 +58,29 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn route_delivers_the_registered_socket() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-route".to_owned()).await.unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        router.route("peer-route", server).await.unwrap();
+
+        let delivered = tokio::time::timeout(std::time::Duration::from_millis(250), receiver)
+            .await
+            .expect("BWU route did not deliver the socket")
+            .expect("BWU route sender dropped without a socket");
+
+        assert_eq!(delivered.local_addr().unwrap(), client.peer_addr().unwrap());
+        assert!(!router.has_pending().await);
+    }
+
+    #[tokio::test]
     async fn registration_is_unique_and_cancellable() {
         let router = BwuRouter::new();
 
