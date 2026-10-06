@@ -4055,7 +4055,7 @@ snapshots:
       '@vue/compiler-dom': 3.5.42
       '@vue/compiler-sfc': 3.5.42
       '@vue/runtime-dom': 3.5.42
-      '@vue/server-renderer': 3.5.42(vue@3.5.42(typescript@5.9.3))
+      '@vue/server-renderer': 3.5.42
       '@vue/shared': 3.5.42
     optionalDependencies:
       typescript: 5.9.3
