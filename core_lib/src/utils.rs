@@ -244,7 +244,6 @@ pub fn get_download_dir() -> PathBuf {
     Path::new("/").to_path_buf()
 }
 
-
 fn is_virtual_interface(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     [
