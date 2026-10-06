@@ -13,8 +13,7 @@ use p256::{PublicKey, SecretKey};
 use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use tokio::io::AsyncReadExt;
-use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use ts_rs::TS;
 
 use crate::CUSTOM_DOWNLOAD;
@@ -96,10 +95,14 @@ pub fn gen_mdns_endpoint_info(device_type: u8, device_name: &str) -> String {
     let unknown_bytes = rand::rng().random::<[u8; 16]>();
     record.extend_from_slice(&unknown_bytes);
 
-    let device_name = device_name.as_bytes();
-    let length = device_name.len() as u8;
-    record.push(length);
-    record.extend_from_slice(device_name);
+    let device_name_bytes = device_name.as_bytes();
+    let mut name_len = device_name_bytes.len().min(u8::MAX as usize);
+    while !device_name.is_char_boundary(name_len) {
+        name_len -= 1;
+    }
+
+    record.push(name_len as u8);
+    record.extend_from_slice(&device_name_bytes[..name_len]);
 
     URL_SAFE_NO_PAD.encode(&record)
 }
@@ -137,8 +140,8 @@ pub fn parse_mdns_endpoint_info(encoded_str: &str) -> Result<(DeviceType, String
     Ok((DeviceType::from_raw_value(device_type), device_name))
 }
 
-pub async fn stream_read_exact(
-    socket: &mut TcpStream,
+pub async fn stream_read_exact<S: AsyncRead + Unpin>(
+    socket: &mut S,
     buf: &mut [u8],
 ) -> Result<(), anyhow::Error> {
     match socket.read_exact(buf).await {
@@ -222,15 +225,17 @@ pub fn gen_random(size: usize) -> Vec<u8> {
 }
 
 pub fn get_download_dir() -> PathBuf {
-    let cdown = CUSTOM_DOWNLOAD.read();
-    match cdown {
-        Ok(mg) => {
-            if let Some(path) = mg.as_ref() {
+    match CUSTOM_DOWNLOAD.read() {
+        Ok(guard) => {
+            if let Some(path) = guard.as_ref() {
                 return path.to_path_buf();
             }
         }
-        Err(_) => {
-            // TODO: fall back to the user download directory if the lock is poisoned.
+        Err(poisoned) => {
+            warn!("CUSTOM_DOWNLOAD lock is poisoned; recovering the stored path");
+            if let Some(path) = poisoned.into_inner().as_ref() {
+                return path.to_path_buf();
+            }
         }
     }
 
@@ -243,6 +248,63 @@ pub fn get_download_dir() -> PathBuf {
     }
 
     Path::new("/").to_path_buf()
+}
+
+fn is_virtual_interface(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    [
+        "docker",
+        "veth",
+        "br-",
+        "virbr",
+        "tun",
+        "tap",
+        "wg",
+        "tailscale",
+        "warp",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
+}
+
+/// Pick a LAN IPv4 suitable for advertising a Wi-Fi bandwidth-upgrade endpoint.
+///
+/// Virtual/tunnel interfaces are intentionally ignored so a VPN, Docker bridge,
+/// or WireGuard-style adapter is not advertised to a nearby Android device.
+fn select_lan_ipv4<I>(interfaces: I) -> Option<[u8; 4]>
+where
+    I: IntoIterator<Item = (String, std::net::IpAddr)>,
+{
+    let mut fallback = None;
+
+    for (name, address) in interfaces {
+        if is_virtual_interface(&name) {
+            continue;
+        }
+
+        let std::net::IpAddr::V4(ip) = address else {
+            continue;
+        };
+        if ip.is_loopback() || ip.is_link_local() {
+            continue;
+        }
+
+        if ip.is_private() {
+            return Some(ip.octets());
+        }
+
+        fallback.get_or_insert(ip.octets());
+    }
+
+    fallback
+}
+
+pub fn local_lan_ipv4() -> Option<[u8; 4]> {
+    let interfaces = get_if_addrs().ok()?;
+    select_lan_ipv4(interfaces.into_iter().map(|interface| {
+        let address = interface.ip();
+        (interface.name, address)
+    }))
 }
 
 pub fn is_not_self_ip(ip_address: &Ipv4Addr) -> bool {
@@ -281,6 +343,16 @@ mod tests {
     }
 
     #[test]
+    fn test_gen_mdns_info_truncates_multibyte_name_on_utf8_boundary() {
+        let info = gen_mdns_endpoint_info(DeviceType::Laptop as u8, &"é".repeat(200));
+        let (device_type, device_name) = parse_mdns_endpoint_info(&info).unwrap();
+
+        assert_eq!(device_type, DeviceType::Laptop);
+        assert_eq!(device_name.as_bytes().len(), 254);
+        assert_eq!(device_name, "é".repeat(127));
+    }
+
+    #[test]
     fn test_parse_compact_17_byte_mdns_info() {
         let info = encoded_endpoint(DeviceType::Phone, &[]);
         let parse_info = parse_mdns_endpoint_info(&info).unwrap();
@@ -315,6 +387,18 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_mdns_info_rejects_invalid_base64() {
+        assert!(parse_mdns_endpoint_info("%%%not-base64%%%").is_err());
+    }
+
+    #[test]
+    fn test_parse_mdns_info_rejects_invalid_utf8_name() {
+        let info = encoded_endpoint(DeviceType::Laptop, &[1, 0xff]);
+
+        assert!(parse_mdns_endpoint_info(&info).is_err());
+    }
+
+    #[test]
     fn test_normalize_p256_coordinate_left_pads_short_values() {
         let normalized = normalize_p256_coordinate(&[0x12, 0x34]).unwrap();
 
@@ -337,5 +421,99 @@ mod tests {
         assert!(normalize_p256_coordinate(&[]).is_err());
         assert!(normalize_p256_coordinate(&[1_u8; 33]).is_err());
         assert!(normalize_p256_coordinate(&[0_u8; 34]).is_err());
+    }
+
+    #[test]
+    fn virtual_interface_filter_rejects_tunnels() {
+        for name in [
+            "docker0",
+            "veth1234",
+            "br-abcd",
+            "virbr0",
+            "tun0",
+            "tap0",
+            "wg0",
+            "tailscale0",
+            "warp0",
+        ] {
+            assert!(
+                is_virtual_interface(name),
+                "{name} should be treated as virtual"
+            );
+        }
+
+        for name in ["wlan0", "wlp3s0", "eth0", "enp4s0"] {
+            assert!(
+                !is_virtual_interface(name),
+                "{name} should be eligible for LAN selection"
+            );
+        }
+    }
+
+    #[test]
+    fn virtual_interface_filter_is_case_insensitive() {
+        for name in ["Docker0", "Wg0", "TAILSCALE0", "Warp0"] {
+            assert!(is_virtual_interface(name));
+        }
+    }
+
+    #[test]
+    fn lan_selector_prefers_private_physical_ipv4() {
+        let selected = select_lan_ipv4([
+            (
+                "docker0".to_owned(),
+                "172.17.0.1".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "eth0".to_owned(),
+                "203.0.113.10".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "wlan0".to_owned(),
+                "192.168.1.25".parse::<std::net::IpAddr>().unwrap(),
+            ),
+        ]);
+
+        assert_eq!(selected, Some([192, 168, 1, 25]));
+    }
+
+    #[test]
+    fn lan_selector_uses_first_public_ipv4_as_fallback() {
+        let selected = select_lan_ipv4([
+            (
+                "eth0".to_owned(),
+                "203.0.113.10".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "eth1".to_owned(),
+                "198.51.100.20".parse::<std::net::IpAddr>().unwrap(),
+            ),
+        ]);
+
+        assert_eq!(selected, Some([203, 0, 113, 10]));
+    }
+
+    #[test]
+    fn lan_selector_ignores_ipv6_loopback_link_local_and_tunnels() {
+        let selected = select_lan_ipv4([
+            (
+                "lo".to_owned(),
+                "127.0.0.1".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "eth0".to_owned(),
+                "169.254.10.20".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "wlan0".to_owned(),
+                "2001:db8::1".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "wg0".to_owned(),
+                "10.0.0.5".parse::<std::net::IpAddr>().unwrap(),
+            ),
+        ]);
+
+        assert_eq!(selected, None);
     }
 }

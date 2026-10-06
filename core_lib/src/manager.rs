@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast::Sender;
@@ -7,11 +9,67 @@ use ts_rs::TS;
 
 use crate::channel::{ChannelDirection, ChannelMessage};
 use crate::errors::AppError;
-use crate::hdl::{InboundRequest, OutboundPayload, OutboundRequest, State};
+use crate::hdl::{
+    peek_client_introduction, BwuRouter, InboundRequest, OutboundPayload, OutboundRequest, State,
+};
 use crate::utils::RemoteDeviceInfo;
 
 const INNER_NAME: &str = "TcpServer";
 const MAX_UI_ERROR_CHARS: usize = 512;
+const BWU_PEEK_LIMIT: usize = 8 * 1024;
+
+async fn route_bandwidth_upgrade_if_pending(
+    socket: TcpStream,
+    router: &BwuRouter,
+) -> Result<Option<TcpStream>, anyhow::Error> {
+    if !router.has_pending().await {
+        return Ok(Some(socket));
+    }
+
+    let mut buffer = vec![0_u8; BWU_PEEK_LIMIT];
+    let endpoint_id = match tokio::time::timeout(Duration::from_millis(750), async {
+        loop {
+            let count = socket.peek(&mut buffer).await?;
+            if count == 0 {
+                return Ok::<Option<String>, anyhow::Error>(None);
+            }
+
+            if count >= 4 {
+                let frame_len =
+                    u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+                if frame_len == 0 || frame_len > BWU_PEEK_LIMIT.saturating_sub(4) {
+                    return Ok(None);
+                }
+
+                let total = 4 + frame_len;
+                if count >= total {
+                    return peek_client_introduction(&buffer[..total]);
+                }
+            }
+
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result?,
+        Err(_) => None,
+    };
+
+    let Some(endpoint_id) = endpoint_id else {
+        return Ok(Some(socket));
+    };
+
+    match router.route(&endpoint_id, socket).await {
+        Ok(()) => Ok(None),
+        Err(_socket) => {
+            warn!(
+                "{INNER_NAME}: received BWU CLIENT_INTRODUCTION for unregistered endpoint {endpoint_id}"
+            );
+            Ok(None)
+        }
+    }
+}
 
 fn error_for_ui(error: &anyhow::Error) -> String {
     error.to_string().chars().take(MAX_UI_ERROR_CHARS).collect()
@@ -31,6 +89,7 @@ pub struct TcpServer {
     tcp_listener: TcpListener,
     sender: Sender<ChannelMessage>,
     connect_receiver: Receiver<SendInfo>,
+    bwu_router: BwuRouter,
 }
 
 impl TcpServer {
@@ -39,12 +98,14 @@ impl TcpServer {
         tcp_listener: TcpListener,
         sender: Sender<ChannelMessage>,
         connect_receiver: Receiver<SendInfo>,
+        bwu_router: BwuRouter,
     ) -> Result<Self, anyhow::Error> {
         Ok(Self {
             endpoint_id,
             tcp_listener,
             sender,
             connect_receiver,
+            bwu_router,
         })
     }
 
@@ -79,8 +140,30 @@ impl TcpServer {
                             info!("{INNER_NAME}: accepted inbound client from {remote_addr}");
                             let esender = self.sender.clone();
                             let csender = self.sender.clone();
+                            let bwu_router = self.bwu_router.clone();
 
                             tokio::spawn(async move {
+                                let socket = match route_bandwidth_upgrade_if_pending(
+                                    socket,
+                                    &bwu_router,
+                                )
+                                .await
+                                {
+                                    Ok(Some(socket)) => socket,
+                                    Ok(None) => {
+                                        info!(
+                                            "{INNER_NAME}: routed bandwidth-upgrade client from {remote_addr}"
+                                        );
+                                        return;
+                                    }
+                                    Err(error) => {
+                                        warn!(
+                                            "{INNER_NAME}: failed to classify inbound client {remote_addr}: {error}"
+                                        );
+                                        return;
+                                    }
+                                };
+
                                 let mut ir = InboundRequest::new(socket, remote_addr.to_string(), csender);
 
                                 loop {
@@ -201,4 +284,143 @@ impl TcpServer {
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use prost::Message;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::*;
+    use crate::location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+        ClientIntroduction, EventType,
+    };
+    use crate::location_nearby_connections::{
+        offline_frame, v1_frame, BandwidthUpgradeNegotiationFrame, OfflineFrame, V1Frame,
+    };
+
+    fn client_introduction(endpoint_id: &str) -> Vec<u8> {
+        let frame = OfflineFrame {
+            version: Some(offline_frame::Version::V1.into()),
+            v1: Some(V1Frame {
+                r#type: Some(v1_frame::FrameType::BandwidthUpgradeNegotiation.into()),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(EventType::ClientIntroduction.into()),
+                    client_introduction: Some(ClientIntroduction {
+                        endpoint_id: Some(endpoint_id.to_owned()),
+                        supports_disabling_encryption: Some(false),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+
+        let encoded = frame.encode_to_vec();
+        let mut framed = (encoded.len() as u32).to_be_bytes().to_vec();
+        framed.extend_from_slice(&encoded);
+        framed
+    }
+
+    #[tokio::test]
+    async fn routes_bwu_socket_without_consuming_client_introduction() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-1234".to_owned()).await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        let framed = client_introduction("peer-1234");
+        client.write_all(&framed).await.unwrap();
+        client.flush().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_none());
+
+        let mut routed = tokio::time::timeout(std::time::Duration::from_millis(250), receiver)
+            .await
+            .expect("BWU manager route did not deliver the socket")
+            .expect("BWU manager route sender dropped without a socket");
+        let mut received = vec![0_u8; framed.len()];
+        routed.read_exact(&mut received).await.unwrap();
+        assert_eq!(received, framed);
+    }
+    #[tokio::test]
+    async fn returns_socket_when_no_bwu_route_is_pending() {
+        let router = BwuRouter::new();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn malformed_frame_does_not_consume_pending_bwu_route() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-1234".to_owned()).await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        client
+            .write_all(&(BWU_PEEK_LIMIT as u32).to_be_bytes())
+            .await
+            .unwrap();
+        client.flush().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_some());
+        assert!(router.has_pending().await);
+
+        router.cancel("peer-1234").await;
+        drop(receiver);
+    }
+
+    #[tokio::test]
+    async fn unregistered_bwu_introduction_does_not_consume_other_pending_route() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-1234".to_owned()).await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        let framed = client_introduction("peer-other");
+        client.write_all(&framed).await.unwrap();
+        client.flush().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(router.has_pending().await);
+
+        router.cancel("peer-1234").await;
+        drop(receiver);
+    }
+
+    #[test]
+    fn ui_error_is_truncated_to_character_limit() {
+        let source = "é".repeat(MAX_UI_ERROR_CHARS + 10);
+        let error = anyhow::anyhow!(source);
+        let rendered = error_for_ui(&error);
+
+        assert_eq!(rendered.chars().count(), MAX_UI_ERROR_CHARS);
+        assert_eq!(rendered, "é".repeat(MAX_UI_ERROR_CHARS));
+    }
+
 }

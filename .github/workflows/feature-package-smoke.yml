@@ -1,0 +1,78 @@
+name: Feature Linux package smoke
+
+# Validation trigger: revalidate the current audited Pixel receiver head.
+
+on:
+  push:
+    branches: [ "feat/pixel-ble-receiver" ]
+    paths:
+      - ".github/workflows/feature-package-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feature-package-smoke-pixel-receiver
+  cancel-in-progress: true
+
+jobs:
+  linux_package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack install --global pnpm@9.7.0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2.9.0
+        with:
+          workspaces: "app/main/src-tauri -> target"
+          shared-key: pixel-ble-linux
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler \
+            libdbus-1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Install frontend dependencies
+        working-directory: ./app/main
+        run: pnpm install --frozen-lockfile
+
+      - name: Build debug Debian package
+        working-directory: ./app/main
+        run: pnpm exec tauri build --debug --bundles deb
+
+      - name: Validate Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t DEBS < <(find app/main/src-tauri/target/debug/bundle -type f -name '*.deb' -print)
+          test "${#DEBS[@]}" -gt 0
+          for deb in "${DEBS[@]}"; do
+            echo "=== $deb ==="
+            dpkg-deb --info "$deb"
+            dpkg-deb --contents "$deb" | head -n 80
+          done
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v6
+        with:
+          name: rquickshare-pixel-ble-linux-debug
+          path: app/main/src-tauri/target/debug/bundle/**/*.deb
+          if-no-files-found: error

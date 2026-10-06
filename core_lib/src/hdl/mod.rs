@@ -9,6 +9,9 @@ use crate::securegcm::ukey2_client_init::CipherCommitment;
 use crate::sharing_nearby::wifi_credentials_metadata::SecurityType;
 use crate::utils::RemoteDeviceInfo;
 
+mod bwu;
+pub use bwu::*;
+
 #[cfg(feature = "experimental")]
 mod ble;
 #[cfg(feature = "experimental")]
@@ -17,6 +20,14 @@ pub use ble::*;
 mod blea;
 #[cfg(all(feature = "experimental", target_os = "linux"))]
 pub use blea::*;
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+mod migratable;
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+pub use migratable::*;
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+mod gatt;
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+pub use gatt::*;
 mod inbound;
 pub use inbound::*;
 pub(crate) mod info;

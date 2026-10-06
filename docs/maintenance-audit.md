@@ -10,16 +10,20 @@ This document is the working log for the `morozhenko-apps/rquickshare` maintenan
 - Internal `dev -> master` PR: duplicate heavy jobs are skipped; the push to `dev` is the authoritative preflight.
 - Package/build smoke: manual only. No Tauri packaging on every development commit.
 - Release artifact build: manual only.
-- Mode B: stable tests run once; only explicitly flaky/stability-sensitive tests are repeated 10 times.
+- Mode B final gate: the complete Rust and frontend automated suite runs 10 consecutive times. This supersedes the earlier stable-1x/selected-stability-10x policy for this maintenance pass.
 - `master`: updated only after the audit is complete and the final gates are green.
 
 ## Current gate status
 
-A full `dev` revalidation is in progress after dependency, clipboard, logging and Tauri security hardening.
+Draft PR #2 (`feat/pixel-ble-receiver -> dev`) remains isolated until the real Pixel smoke test, but all pre-smoke automated gates are now green.
 
-The last representative dependency-upgrade preflight had four green jobs (Rust format, core tests, core Clippy and frontend lint/typecheck/unit) and one Tauri Clippy failure caused only by five newly surfaced lint/deprecation findings. Those findings have been fixed; a fresh authoritative `push dev` preflight is now running.
+- Current feature preflight is green after the mutation-driven BWU test hardening and CI cleanup.
+- Linux debug `.deb` package smoke is green on application code head `a1b96b7` (run `37474172562`); all later changes before this documentation update are tests/CI only, so the packaged application code is unchanged.
+- Historical pre-smoke Mode B is green after the BWU test hardening: stable suite 1x plus selected async transport/BWU tests 10x (run `37475497104`). The current SSOT is stricter, so a complete-suite 10x run is still required before completion.
+- Targeted mutation audit now reports 22 caught, 18 unviable, 1 missed and 0 timeouts across 41 mutants. The only survivor is the `MigratableStream::poll_flush -> Ok(())` mutation, which is equivalent/unobservable for the current concrete `DuplexStream` and `TcpStream` transports; the real delegation remains in production code.
+- Residual `unwrap`/`expect`/panic review of the 11 changed Rust modules found no such calls in production regions; remaining occurrences are under `#[cfg(test)]`.
 
-The internal `dev -> master` PR validation is intentionally skipped to avoid duplicating the authoritative `push dev` preflight.
+The internal `dev -> master` PR validation remains intentionally skipped to avoid duplicating the authoritative `push dev` preflight.
 
 ## Completed work
 
@@ -112,34 +116,74 @@ Reviewed or identified as relevant:
 - Issue #268 — unbounded active log growth. Fixed with a 5 MiB runtime file cap.
 - PR #420 — large transport/protobuf refactor. Deferred until the maintained fork is green because it is too broad to merge as a bugfix.
 
-Upstream backlog is not considered closed yet. Remaining open PRs/issues must be classified as: applicable, already covered, obsolete/duplicate, feature request, or deferred refactor.
+Upstream backlog classification for this maintenance pass:
+
+- **Covered by equivalent fixes in this fork:** PRs #439/#433, #430, #418, #408, #404, #380, #334 and #333; issues #431, #429/#369, #423/#195, #421/#407, #268 and #440.
+- **Covered by the isolated Pixel receiver work in PR #2:** issue #425 and the modern BLE/GATT receiver bootstrap path; older discovery reports #358/#311/#270 are smoke-test targets because they overlap with the same mDNS/BLE/TCP chain but do not provide enough evidence for separate code changes.
+- **Linux packaged-smoke targets rather than speculative code fixes:** #422 (Wayland close/hide behavior), #357/#390/#328 (blank/partial WebKit rendering across mixed GPU/font/EGL causes), #307 (window reopen/GTK lifecycle), #426/#365 (package dependency variance), #325/#394 (generic transfer failures without a single reproducible root cause).
+- **Feature requests, not Mode B blockers:** #435/#436 folder hierarchy, #432 multi-file UX, #434 AirDrop interoperability, #428/#363/#246 outbound clipboard/text, #388/#347/#310 custom device name, #387/#384/#224 trusted devices, #386/#383 sorting, #385/#382 tray indicators, #356/#395 localization, #370 visibility tray menu, #411 decorations, #405 update-check toggle, #375 sender image, #368 QR, #366 silent flag, #364 double-click tray, #354/#374 icon variants, #329 Flatpak, #326 Homebrew, #295/#412/#413/#414/#415/#416 Windows work, #264 dock behavior, #245/#182 notification actions.
+- **Dependency/packaging PRs superseded or handled independently:** #424, #419, #417, #410, #402, #400, #399, #391, #371, #342, #276 and #241.
+- **Deferred architecture work:** PR #420 transport/protobuf refactor. It is intentionally not merged into this hardening pass because PR #2 introduces the minimum transport abstraction required for modern Pixel receive without replacing the hardened state machine.
+
+No remaining upstream item is treated as an automatic blocker solely because it is open; only reproducible defects that overlap the maintained Linux/Android scope can block Mode B.
 
 ## Modern Pixel receiver BLE/GATT bootstrap
 
 Upstream issue #425 contains current 2026 evidence that modern Pixel Quick Share can leave Wi-Fi during receiver discovery. In that state, mDNS-only Linux receivers may never appear or may fail before opening the TCP connection.
 
-A working Linux prototype exists at `martinalderson/rquickshare:feat/ble-receiver-connect-back`. Compared with that fork's master it is six commits and roughly 1.1k changed lines. Its essential architecture is:
+The implementation is now isolated in draft PR #2 (`feat/pixel-ble-receiver -> dev`) and ports the proven architecture from `martinalderson/rquickshare:feat/ble-receiver-connect-back` without overwriting the fork's hardened inbound code:
 
-- advertise receiver service UUID `0xFEF3`;
-- expose the Nearby GATT slot and weave characteristics;
-- accept the Nearby socket introduction over BLE;
-- reuse the existing UKEY2 / Sharing receive state machine over a generic stream;
-- migrate the established encrypted session to Wi-Fi LAN for actual payload transfer.
+- receiver advertisement on service UUID `0xFEF3` using the same endpoint id and hostname as mDNS;
+- visibility-aware connectable advertising with retry on transient BlueZ failures;
+- Nearby GATT slot plus weave write/notify characteristics;
+- bounded weave framing/reassembly and handshake validation;
+- the existing hardened UKEY2 / Sharing receive state machine generalized over `AsyncRead + AsyncWrite`;
+- a migratable BLE/TCP transport that preserves crypto keys and sequence counters;
+- encrypted `UPGRADE_PATH_AVAILABLE` negotiation after UKEY2 establishment;
+- validated plaintext `CLIENT_INTRODUCTION` / ACK on the new TCP socket;
+- LAST_WRITE / SAFE_TO_CLOSE prior-channel handoff;
+- LAN address selection that ignores Docker/VPN/tunnel interfaces;
+- Wi-Fi-LAN transport swap for the actual payload;
+- regression coverage for advertisement layout, weave handshake, framed lengths, LAN-interface filtering and BWU client-introduction validation.
 
-The prototype reports successful Pixel -> Linux transfers and is directly relevant to the original symptom that motivated this fork. Our existing BLE duty-cycle and visibility fixes do **not** implement this full receiver-side bootstrap.
+The stable `dev` branch remains green while this larger interoperability change is validated separately. PR #2 must pass its own preflight and a real Pixel -> Linux smoke test before it is merged into `dev`.
 
-This is a required interoperability gate before declaring the maintained fork complete. It will be ported as a separate, reviewable change set so the existing security hardening in `inbound.rs` is not overwritten.
+
+## Coverage audit
+
+Coverage is measured explicitly instead of inferring quality from test count. The detailed Mode B scope, inventory, branch map, Positive/N1-N12 matrix, interaction matrix and coverage map are maintained in `docs/mode-b-test-plan.md` and `docs/mode-b-inventory.md`.
+
+Current automated suite on the Pixel receiver branch:
+
+- **Rust:** 50 tests pass with `cargo test --all-features`.
+- **Frontend:** 25 Vitest tests pass across 6 test files.
+- **Total:** 75 automated tests before the separate package/live smoke checks.
+
+Final measured coverage after the Mode B regression expansion:
+
+- **Rust core:** 30.37% line coverage, 29.75% function coverage, 31.19% region coverage.
+- `hdl/inbound.rs`: 31.67% lines, up from 14.58% before the introduction/state tests.
+- `hdl/outbound.rs`: 30.67% lines, up from 2.38% before file-preparation and consent/wire tests.
+- `utils.rs`: 61.34% lines.
+- `hdl/bwu.rs`: 95.83% lines.
+- `hdl/migratable.rs`: 81.40% lines.
+- **Frontend:** 46.18% line/statement coverage, 82.71% branch coverage and 53.33% function coverage.
+- `SettingsModal.vue`: 98.05% lines, 90.62% branches, 100% functions.
+- `ContentStatus.vue`: 92.75% lines.
+- `Heading.vue`: 100% lines/functions/branches.
+- `SideMenu.vue`: 98.21% lines.
+
+The remaining low global percentages are concentrated in OS/service orchestration rather than pure protocol logic: BlueZ/GATT service lifecycle, mDNS daemons/discovery, Tauri startup/window/tray wiring and the monolithic `HomePage.vue` event bootstrap. These paths require package/live smoke or explicit dependency seams before unit coverage becomes representative.
+
+No arbitrary repository-wide percentage gate is being introduced in this pass. The useful gate is regression coverage for validated defects plus live Linux/Android smoke for OS-bound behavior. Coverage should rise further as the post-smoke refactors create testable seams.
 
 ## Remaining audit work
 
-- Finish residual network/state-machine `unwrap()`/panic review; peer-controlled crypto/size/path panic paths have already been removed.
-- Finish the upstream open PR/issue classification and keep large feature/refactor PRs separate from hardening.
-- Validate the new CSP/freezePrototype behavior in the packaged Linux smoke test.
-- Expand regression coverage around every bug fixed during this pass.
-- Identify only genuinely flaky/stability-sensitive tests for 10x Mode B repetition.
-- Run one manual Linux package build.
-- Perform install/start/send/receive smoke checks on Linux/Android.
-- Run the final Mode B gate.
+- Validate the new CSP/freezePrototype behavior in the packaged Linux UI smoke test.
+- Keep the regression coverage map aligned with fixes; current coverage includes mDNS compact records, P-256 normalization, inbound path/size guards, Wi-Fi credential parsing, clipboard fallback, log caps, BLE receiver advertisement, weave framing/handshake, BWU routing/introduction validation and LAN-interface filtering.
+- Complete PR #2 real-device validation: Pixel -> Linux BLE/GATT -> Wi-Fi-LAN receive, repeat receive without restarting the app, Linux -> Android send, and explicit FE2C/FEF3 BlueZ coexistence check.
+- Perform packaged install/start/window/tray/send/receive smoke checks on the target Ubuntu/KDE/Wayland machine.
+- Run the final Mode B gate after the hardware smoke. The pre-smoke Mode B run is already green and is not a substitute for this final post-smoke gate.
 - Fast-forward `dev` to `master` only after the above is complete.
 
 ## Mode B exit criteria
@@ -148,11 +192,72 @@ The maintenance pass is complete only when all of the following are true:
 
 1. Normal `dev` preflight is green.
 2. New regression tests for fixed defects are green.
-3. Stable tests pass once.
-4. Designated flaky/stability-sensitive tests pass 10 consecutive runs.
+3. The complete automated Rust and frontend suite passes 10 consecutive runs.
+4. The run is recorded against the final post-smoke head so no later production or test changes invalidate the evidence.
 5. Manual package build succeeds.
 6. Linux application smoke test succeeds.
 7. Android -> Linux receive path succeeds.
 8. Linux -> Android send path succeeds.
 9. No unresolved high-severity security/reliability finding remains in the audit.
 10. `dev` can be fast-forwarded to `master` without merge noise.
+
+## Refactoring audit
+
+Refactoring is required, but the work is split by risk.
+
+### Do after real-device smoke, before long-term maintenance work
+
+1. **Extract a shared secure-session layer from inbound/outbound.**
+   - `core_lib/src/hdl/inbound.rs` is about 2,059 lines.
+   - `core_lib/src/hdl/outbound.rs` is about 1,403 lines.
+   - Both implement parallel UKEY2 / D2D crypto responsibilities: key exchange finalization, encrypted frame send/decrypt, HMAC handling, sequence counters, keepalive and frame I/O.
+   - This duplication makes protocol/security fixes easy to apply on one direction and miss on the other.
+   - Recommended target: a shared `SecureSession`/crypto transport helper that owns derived keys, sequence counters, secure-message encode/decode and common frame I/O.
+   - **Do not perform this extraction before Pixel smoke** because it touches the most sensitive protocol path.
+
+2. **Split inbound state-machine responsibilities.**
+   - `process_offline_frame` is roughly 250 lines.
+   - `process_introduction` is roughly 200 lines.
+   - `do_bandwidth_upgrade` is roughly 130 lines.
+   - The current module combines connection negotiation, UKEY2, secure framing, consent, payload validation, filesystem output and bandwidth upgrade.
+   - Recommended split after smoke: `secure_session.rs`, `inbound_transfer.rs`, `bwu.rs`/routing helpers, keeping one explicit state-machine coordinator.
+
+3. **Split outbound transfer construction from secure transport.**
+   - `process_consent` is roughly 230 lines and mixes consent state, file metadata, file I/O and payload transmission.
+   - Text sending remains TODO in two outbound locations.
+   - Recommended split: transfer plan/payload source abstraction separate from crypto/channel transport.
+
+### Medium-priority cleanup
+
+4. **Break up GATT session orchestration.**
+   - `gatt.rs` is roughly 492 lines; `weave_session` alone is about 227 lines.
+   - Separate framing/reassembly, connection handshake and duplex bridge lifecycle once the Pixel path is proven on hardware.
+   - Keep the current bounded queue, disconnect handling and BLE->TCP migration invariants covered during any extraction.
+
+5. **Separate utility domains.**
+   - `utils.rs` currently mixes mDNS encoding, P-256 normalization, HKDF, random generation, download-directory lookup and LAN interface selection.
+   - Recommended modules: `mdns_codec`, `crypto_utils`, `network_utils`, `filesystem_utils`.
+   - This is maintainability work, not a release blocker.
+
+6. **Split desktop orchestration from UI rendering.**
+   - `HomePage.vue` is roughly 382 lines and currently combines rendering with settings bootstrap, notification permission, transfer/endpoint/visibility listeners and drag/drop registration.
+   - Recommended extraction after smoke: `useTransferEvents`, `useWindowDrop` and `useAppSettings` composables plus smaller transfer/device components.
+   - `app/main/src-tauri/src/main.rs` is roughly 387 lines; tray/window lifecycle and receiver-task wiring can become separate modules later.
+   - These are UX/maintainability improvements, not protocol blockers.
+
+### Low-risk refactoring already completed
+
+- Shared frame/payload size limits and validation were moved out of inbound/outbound into `core_lib/src/protocol.rs`.
+- Duplicate payload-size regression tests were collapsed into one shared test.
+- Inbound file-introduction validation was made transactional: the complete file set is validated/prepared before transfer state is mutated, avoiding partial state after malformed metadata.
+- Outbound file metadata/file-handle preparation was extracted from the protocol state machine into a dedicated preparation helper with temp-file regression coverage.
+- Both preparation helpers now return named result structs instead of opaque multi-value tuples.
+- A poisoned `CUSTOM_DOWNLOAD` lock now recovers the configured path instead of silently dropping back to the default directory.
+- BWU routing already has its own `BwuRouter` module instead of remaining embedded in the inbound state machine.
+- BLE/TCP transport switching already has a small `MigratableStream` abstraction.
+
+### Refactoring rule for this maintenance pass
+
+No broad architectural refactor should be merged solely to improve style before real Pixel smoke. Before the smoke test, only pure helpers, duplicated validation, tests and isolated infrastructure may be extracted. Protocol state-machine refactoring starts only after the current behavior is proven end-to-end.
+
+**Audit conclusion:** no additional architectural refactor is required before the real-device smoke. The next mandatory refactor for maintainability is the shared secure-session extraction, but it should begin only after the current Pixel send/receive behavior is proven so protocol regressions can be distinguished from structural changes.

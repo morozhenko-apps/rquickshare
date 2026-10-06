@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::anyhow;
 use channel::ChannelMessage;
-#[cfg(all(feature = "experimental", target_os = "linux"))]
-use hdl::BleAdvertiser;
 use hdl::MDnsDiscovery;
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+use hdl::{receiver_service_data, BleAdvertiser, ReceiverAdvertiser, ReceiverGattServer};
 use once_cell::sync::Lazy;
 use rand::distr::Alphanumeric;
 use rand::Rng;
@@ -26,6 +26,7 @@ pub mod channel;
 mod errors;
 mod hdl;
 mod manager;
+mod protocol;
 mod utils;
 
 pub use hdl::{EndpointInfo, OutboundPayload, State, Visibility};
@@ -128,12 +129,16 @@ impl RQS {
 
         // MPSC for the TcpServer
         let send_channel = mpsc::channel(10);
-        // Start TcpServer in own "task"
+        let bwu_router = crate::hdl::BwuRouter::new();
+
+        // Start TcpServer in own "task". The same listener also accepts
+        // Wi-Fi bandwidth-upgrade sockets routed from active BLE sessions.
         let mut server = TcpServer::new(
             endpoint_id[..4].try_into()?,
             tcp_listener,
             self.message_sender.clone(),
             send_channel.1,
+            bwu_router.clone(),
         )?;
         let ctk = ctoken.clone();
         tracker.spawn(async move { server.run(ctk).await });
@@ -161,6 +166,14 @@ impl RQS {
 
         #[cfg(all(feature = "experimental", target_os = "linux"))]
         {
+            let endpoint_id: [u8; 4] = endpoint_id[..4].try_into()?;
+            let hostname = sys_metrics::host::get_hostname()?;
+            let receiver_advertisement = receiver_service_data(
+                endpoint_id,
+                crate::utils::DeviceType::Laptop as u8,
+                &hostname,
+            );
+
             let visibility_rx = self.visibility_receiver.clone();
             let ctk = ctoken.clone();
             tracker.spawn(async move {
@@ -174,6 +187,41 @@ impl RQS {
 
                 if let Err(error) = blea.run(ctk).await {
                     error!("BleAdvertiser stopped with error: {error}");
+                }
+            });
+
+            let visibility_rx = self.visibility_receiver.clone();
+            let receiver_ctk = ctoken.clone();
+            tracker.spawn(async move {
+                match ReceiverAdvertiser::new(visibility_rx).await {
+                    Ok(advertiser) => {
+                        if let Err(error) = advertiser.run(receiver_ctk).await {
+                            error!("ReceiverAdvertiser stopped with error: {error}");
+                        }
+                    }
+                    Err(error) => error!("Couldn't init ReceiverAdvertiser: {error}"),
+                }
+            });
+
+            let gatt_ctk = ctoken.clone();
+            let gatt_sender = self.message_sender.clone();
+            let gatt_bwu_router = bwu_router.clone();
+            let gatt_tcp_port = binded_addr.port();
+            tracker.spawn(async move {
+                match ReceiverGattServer::new(
+                    receiver_advertisement,
+                    gatt_sender,
+                    gatt_tcp_port,
+                    gatt_bwu_router,
+                )
+                .await
+                {
+                    Ok(server) => {
+                        if let Err(error) = server.run(gatt_ctk).await {
+                            error!("ReceiverGattServer stopped with error: {error}");
+                        }
+                    }
+                    Err(error) => error!("Couldn't init ReceiverGattServer: {error}"),
                 }
             });
         }

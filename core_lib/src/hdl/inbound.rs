@@ -14,7 +14,7 @@ use p256::{EncodedPoint, PublicKey};
 use prost::Message;
 use rand::Rng;
 use sha2::{Digest, Sha256, Sha512};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast::{Receiver, Sender};
 
@@ -26,6 +26,7 @@ use crate::location_nearby_connections::payload_transfer_frame::{
     payload_header, PacketType, PayloadChunk, PayloadHeader,
 };
 use crate::location_nearby_connections::{KeepAliveFrame, OfflineFrame, PayloadTransferFrame};
+use crate::protocol::{checked_payload_buffer_size, SANE_FRAME_LENGTH, SANITY_DURATION};
 use crate::securegcm::ukey2_alert::AlertType;
 use crate::securegcm::{
     ukey2_message, DeviceToDeviceMessage, GcmMetadata, Type, Ukey2Alert, Ukey2ClientFinished,
@@ -47,9 +48,7 @@ use crate::{location_nearby_connections, sharing_nearby};
 
 type HmacSha256 = Hmac<Sha256>;
 
-const SANE_FRAME_LENGTH: i32 = 5 * 1024 * 1024;
 const MAX_RECEIVED_FILENAME_BYTES: usize = 255;
-const SANITY_DURATION: Duration = Duration::from_micros(10);
 
 fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
     if name.is_empty() {
@@ -79,14 +78,80 @@ fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
     }
 }
 
-fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> {
-    if total_size < 0 || total_size > i64::from(SANE_FRAME_LENGTH) {
-        return Err(anyhow!(
-            "Invalid byte payload size: {total_size}; expected 0..={SANE_FRAME_LENGTH}"
-        ));
+struct PreparedInboundFiles {
+    files: Vec<(i64, InternalFileInfo)>,
+    names: Vec<String>,
+    total_bytes: u64,
+}
+
+fn prepare_inbound_files(
+    files: &[sharing_nearby::FileMetadata],
+    existing_payload_ids: &HashSet<i64>,
+) -> Result<PreparedInboundFiles, anyhow::Error> {
+    let mut prepared = Vec::with_capacity(files.len());
+    let mut file_names = Vec::with_capacity(files.len());
+    let mut total_bytes = 0_u64;
+    let mut reserved_destinations = HashSet::new();
+    let mut payload_ids = existing_payload_ids.clone();
+
+    for file in files {
+        let file_name = file.name();
+        validate_received_file_name(file_name)?;
+
+        if file.size() < 0 {
+            return Err(anyhow!(
+                "Invalid negative file size for {file_name}: {}",
+                file.size()
+            ));
+        }
+
+        let payload_id = file.payload_id();
+        if !payload_ids.insert(payload_id) {
+            return Err(anyhow!("Duplicate file payload id: {payload_id}"));
+        }
+
+        let mut destination = get_download_dir();
+        destination.push(file_name);
+
+        if destination.exists() || reserved_destinations.contains(&destination) {
+            let mut counter = 1_u64;
+            destination.pop();
+
+            loop {
+                destination.push(format!("{counter}_{file_name}"));
+                if !destination.exists() && !reserved_destinations.contains(&destination) {
+                    break;
+                }
+                destination.pop();
+                counter = counter
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow!("Destination suffix overflow"))?;
+            }
+        }
+
+        reserved_destinations.insert(destination.clone());
+
+        let info = InternalFileInfo {
+            payload_id,
+            file_url: destination,
+            bytes_transferred: 0,
+            total_size: file.size(),
+            file: None,
+        };
+
+        total_bytes = total_bytes
+            .checked_add(info.total_size as u64)
+            .ok_or_else(|| anyhow!("Total transfer size overflow"))?;
+
+        prepared.push((payload_id, info));
+        file_names.push(file_name.to_owned());
     }
 
-    usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
+    Ok(PreparedInboundFiles {
+        files: prepared,
+        names: file_names,
+        total_bytes,
+    })
 }
 
 fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
@@ -130,16 +195,112 @@ fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
     Ok(password.to_owned())
 }
 
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+async fn read_plain_frame_from<R: AsyncRead + Unpin>(
+    stream: &mut R,
+) -> Result<Vec<u8>, anyhow::Error> {
+    let mut length = [0_u8; 4];
+    stream_read_exact(stream, &mut length).await?;
+    let frame_len = u32::from_be_bytes(length) as usize;
+    if frame_len == 0 || frame_len > SANE_FRAME_LENGTH as usize {
+        return Err(anyhow!("Invalid plaintext frame length: {frame_len}"));
+    }
+
+    let mut frame = vec![0_u8; frame_len];
+    stream_read_exact(stream, &mut frame).await?;
+    Ok(frame)
+}
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+async fn send_plain_frame_on<W: AsyncWrite + Unpin>(
+    stream: &mut W,
+    data: &[u8],
+) -> Result<(), anyhow::Error> {
+    let frame_len =
+        u32::try_from(data.len()).map_err(|_| anyhow!("Plaintext frame is too large"))?;
+    if data.is_empty() || data.len() > SANE_FRAME_LENGTH as usize {
+        return Err(anyhow!("Invalid plaintext frame length: {}", data.len()));
+    }
+
+    stream.write_all(&frame_len.to_be_bytes()).await?;
+    stream.write_all(data).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+fn validate_client_introduction(frame_data: &[u8]) -> Result<String, anyhow::Error> {
+    use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
+    use location_nearby_connections::v1_frame::FrameType;
+
+    let frame = OfflineFrame::decode(frame_data)?;
+    let v1 = frame
+        .v1
+        .as_ref()
+        .ok_or_else(|| anyhow!("Bandwidth-upgrade introduction has no v1 frame"))?;
+    if v1.r#type() != FrameType::BandwidthUpgradeNegotiation {
+        return Err(anyhow!(
+            "Expected bandwidth-upgrade introduction, got {:?}",
+            v1.r#type()
+        ));
+    }
+
+    let negotiation = v1
+        .bandwidth_upgrade_negotiation
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing bandwidth-upgrade negotiation payload"))?;
+    if negotiation.event_type() != EventType::ClientIntroduction {
+        return Err(anyhow!(
+            "Expected CLIENT_INTRODUCTION, got {:?}",
+            negotiation.event_type()
+        ));
+    }
+
+    let endpoint_id = negotiation
+        .client_introduction
+        .as_ref()
+        .map(|introduction| introduction.endpoint_id().to_owned())
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| anyhow!("CLIENT_INTRODUCTION has no endpoint id"))?;
+
+    Ok(endpoint_id)
+}
+
+/// Inspect a non-consuming TCP peek buffer for a complete bandwidth-upgrade
+/// CLIENT_INTRODUCTION. Returns None for incomplete or ordinary Quick Share
+/// frames so the primary listener can continue with the normal inbound path.
+pub fn peek_client_introduction(buffer: &[u8]) -> Result<Option<String>, anyhow::Error> {
+    if buffer.len() < 4 {
+        return Ok(None);
+    }
+
+    let frame_len = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+    if frame_len == 0 || frame_len > SANE_FRAME_LENGTH as usize {
+        return Ok(None);
+    }
+
+    let total = 4_usize
+        .checked_add(frame_len)
+        .ok_or_else(|| anyhow!("CLIENT_INTRODUCTION frame length overflow"))?;
+    if buffer.len() < total {
+        return Ok(None);
+    }
+
+    Ok(validate_client_introduction(&buffer[4..total]).ok())
+}
+
 #[derive(Debug)]
-pub struct InboundRequest {
-    socket: TcpStream,
+pub struct InboundRequest<S = TcpStream> {
+    socket: S,
     pub state: InnerState,
     sender: Sender<ChannelMessage>,
     receiver: Receiver<ChannelMessage>,
+    bandwidth_upgrade_enabled: bool,
+    bwu_pending: bool,
+    peer_endpoint_id: Option<String>,
 }
 
-impl InboundRequest {
-    pub fn new(socket: TcpStream, id: String, sender: Sender<ChannelMessage>) -> Self {
+impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
+    pub fn new(socket: S, id: String, sender: Sender<ChannelMessage>) -> Self {
         let receiver = sender.subscribe();
 
         Self {
@@ -154,7 +315,105 @@ impl InboundRequest {
             },
             sender,
             receiver,
+            bandwidth_upgrade_enabled: false,
+            bwu_pending: false,
+            peer_endpoint_id: None,
         }
+    }
+
+    pub fn enable_bandwidth_upgrade(&mut self) {
+        self.bandwidth_upgrade_enabled = true;
+    }
+
+    pub fn take_bwu_pending(&mut self) -> bool {
+        std::mem::take(&mut self.bwu_pending)
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    fn bandwidth_upgrade_frame(
+        event_type: location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType,
+        upgrade_path_info: Option<
+            location_nearby_connections::bandwidth_upgrade_negotiation_frame::UpgradePathInfo,
+        >,
+    ) -> OfflineFrame {
+        use location_nearby_connections::BandwidthUpgradeNegotiationFrame;
+
+        OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(
+                    location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeNegotiation
+                        .into(),
+                ),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(event_type.into()),
+                    upgrade_path_info,
+                    client_introduction: None,
+                    client_introduction_ack: None,
+                }),
+                ..Default::default()
+            }),
+        }
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    async fn send_upgrade_path_available(&mut self, port: u16) -> Result<(), anyhow::Error> {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+            upgrade_path_info::{Medium, WifiLanSocket},
+            EventType, UpgradePathInfo,
+        };
+
+        let ip = crate::utils::local_lan_ipv4()
+            .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
+        info!(
+            "BWU: offering WIFI_LAN at {}.{}.{}.{}:{port}",
+            ip[0], ip[1], ip[2], ip[3]
+        );
+
+        let frame = Self::bandwidth_upgrade_frame(
+            EventType::UpgradePathAvailable,
+            Some(UpgradePathInfo {
+                medium: Some(Medium::WifiLan.into()),
+                wifi_lan_socket: Some(WifiLanSocket {
+                    ip_address: Some(ip.to_vec()),
+                    wifi_port: Some(i32::from(port)),
+                }),
+                supports_client_introduction_ack: Some(true),
+                ..Default::default()
+            }),
+        );
+        self.encrypt_and_send(&frame).await
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    fn client_introduction_ack_frame() -> OfflineFrame {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+            ClientIntroductionAck, EventType,
+        };
+        use location_nearby_connections::BandwidthUpgradeNegotiationFrame;
+
+        OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(
+                    location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeNegotiation
+                        .into(),
+                ),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(EventType::ClientIntroductionAck.into()),
+                    client_introduction_ack: Some(ClientIntroductionAck {}),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        }
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    async fn read_encrypted_offline_frame(&mut self) -> Result<OfflineFrame, anyhow::Error> {
+        let frame_data = read_plain_frame_from(&mut self.socket).await?;
+        let secure_message = SecureMessage::decode(frame_data.as_slice())?;
+        self.decrypt_secure_message(&secure_message).await
     }
 
     pub async fn handle(&mut self) -> Result<(), anyhow::Error> {
@@ -291,6 +550,10 @@ impl InboundRequest {
                     false,
                 )
                 .await;
+
+                if self.bandwidth_upgrade_enabled {
+                    self.bwu_pending = true;
+                }
             }
             _ => {
                 debug!("Handling SecureMessage frame");
@@ -303,7 +566,7 @@ impl InboundRequest {
     }
 
     fn process_connection_request(
-        &self,
+        &mut self,
         frame: &location_nearby_connections::OfflineFrame,
     ) -> Result<RemoteDeviceInfo, anyhow::Error> {
         let v1_frame = frame
@@ -323,6 +586,12 @@ impl InboundRequest {
             .connection_request
             .as_ref()
             .ok_or_else(|| anyhow!("Missing required fields"))?;
+
+        let peer_endpoint_id = connection_request.endpoint_id();
+        if peer_endpoint_id.is_empty() {
+            return Err(anyhow!("Connection request has no endpoint id"));
+        }
+        self.peer_endpoint_id = Some(peer_endpoint_id.to_owned());
 
         let endpoint_info = connection_request
             .endpoint_info
@@ -558,10 +827,10 @@ impl InboundRequest {
         Ok(())
     }
 
-    async fn decrypt_and_process_secure_message(
+    async fn decrypt_secure_message(
         &mut self,
         smsg: &SecureMessage,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<OfflineFrame, anyhow::Error> {
         let recv_hmac_key = self
             .state
             .recv_hmac_key
@@ -606,7 +875,20 @@ impl InboundRequest {
             ));
         }
 
-        let offline = location_nearby_connections::OfflineFrame::decode(d2d_msg.message())?;
+        Ok(location_nearby_connections::OfflineFrame::decode(
+            d2d_msg.message(),
+        )?)
+    }
+
+    async fn decrypt_and_process_secure_message(
+        &mut self,
+        smsg: &SecureMessage,
+    ) -> Result<(), anyhow::Error> {
+        let offline = self.decrypt_secure_message(smsg).await?;
+        self.process_offline_frame(offline).await
+    }
+
+    async fn process_offline_frame(&mut self, offline: OfflineFrame) -> Result<(), anyhow::Error> {
         let v1_frame = offline
             .v1
             .as_ref()
@@ -903,7 +1185,14 @@ impl InboundRequest {
             }
             State::ReceivedPairedKeyResult => {
                 debug!("Processing State::ReceivedPairedKeyResult");
-                self.process_introduction(v1_frame).await?;
+                if v1_frame.introduction.is_some() {
+                    self.process_introduction(v1_frame).await?;
+                } else {
+                    debug!(
+                        "Ignoring interleaved sharing frame {:?} while waiting for Introduction",
+                        v1_frame.r#type()
+                    );
+                }
             }
             _ => {
                 info!(
@@ -971,62 +1260,22 @@ impl InboundRequest {
 
         if !introduction.file_metadata.is_empty() && introduction.text_metadata.is_empty() {
             trace!("process_introduction: handling file_metadata");
-            let mut files_name = Vec::with_capacity(introduction.file_metadata.len());
-            let mut total_bytes: u64 = 0;
-            let mut reserved_destinations = HashSet::new();
+            let existing_payload_ids = self
+                .state
+                .transferred_files
+                .keys()
+                .copied()
+                .collect::<HashSet<_>>();
+            let PreparedInboundFiles {
+                files: prepared_files,
+                names: files_name,
+                total_bytes,
+            } = prepare_inbound_files(&introduction.file_metadata, &existing_payload_ids)?;
 
-            for file in &introduction.file_metadata {
-                let file_name = file.name();
-                validate_received_file_name(file_name)?;
-                if file.size() < 0 {
-                    return Err(anyhow!(
-                        "Invalid negative file size for {file_name}: {}",
-                        file.size()
-                    ));
-                }
-                if self
-                    .state
-                    .transferred_files
-                    .contains_key(&file.payload_id())
-                {
-                    return Err(anyhow!("Duplicate file payload id: {}", file.payload_id()));
-                }
-
-                info!("File name: {}", file_name);
-
-                let mut dest = get_download_dir();
-                dest.push(file_name);
-
-                info!("Destination: {:?}", dest);
-                if dest.exists() || reserved_destinations.contains(&dest) {
-                    let mut counter = 1;
-                    dest.pop();
-
-                    loop {
-                        dest.push(format!("{}_{}", counter, file_name));
-                        if !dest.exists() && !reserved_destinations.contains(&dest) {
-                            break;
-                        }
-                        dest.pop();
-                        counter += 1;
-                    }
-
-                    info!("New destination: {:?}", dest);
-                }
-                reserved_destinations.insert(dest.clone());
-
-                let info = InternalFileInfo {
-                    payload_id: file.payload_id(),
-                    file_url: dest,
-                    bytes_transferred: 0,
-                    total_size: file.size(),
-                    file: None,
-                };
-                total_bytes = total_bytes
-                    .checked_add(info.total_size as u64)
-                    .ok_or_else(|| anyhow!("Total transfer size overflow"))?;
-                self.state.transferred_files.insert(file.payload_id(), info);
-                files_name.push(file_name.to_owned());
+            for ((payload_id, info), file_name) in prepared_files.into_iter().zip(files_name.iter())
+            {
+                info!("Prepared inbound file {file_name} -> {:?}", info.file_url);
+                self.state.transferred_files.insert(payload_id, info);
             }
 
             let metadata = TransferMetadata {
@@ -1565,6 +1814,141 @@ impl InboundRequest {
     }
 }
 
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+impl InboundRequest<crate::hdl::MigratableStream> {
+    /// Upgrade an established encrypted BLE session to Wi-Fi LAN.
+    ///
+    /// Failure before the transport swap leaves the existing BLE stream intact,
+    /// so callers can continue the session on BLE when an upgrade is unavailable.
+    pub async fn do_bandwidth_upgrade(
+        &mut self,
+        router: &crate::hdl::BwuRouter,
+        tcp_port: u16,
+    ) -> Result<(), anyhow::Error> {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
+        use location_nearby_connections::v1_frame::FrameType;
+
+        let expected_endpoint_id = self
+            .peer_endpoint_id
+            .clone()
+            .ok_or_else(|| anyhow!("BWU session has no peer endpoint id"))?;
+        let socket_receiver = router.register(expected_endpoint_id.clone()).await?;
+
+        if let Err(error) = self.send_upgrade_path_available(tcp_port).await {
+            router.cancel(&expected_endpoint_id).await;
+            return Err(error);
+        }
+
+        let mut tcp = match tokio::time::timeout(Duration::from_secs(15), socket_receiver).await {
+            Ok(Ok(socket)) => {
+                info!(
+                    "BWU: primary listener routed TCP connection for endpoint {expected_endpoint_id}"
+                );
+                socket
+            }
+            Ok(Err(_)) => {
+                router.cancel(&expected_endpoint_id).await;
+                return Err(anyhow!("BWU TCP route closed before a socket arrived"));
+            }
+            Err(_) => {
+                router.cancel(&expected_endpoint_id).await;
+                warn!("BWU: no routed TCP connection within timeout; continuing on BLE");
+                return Ok(());
+            }
+        };
+
+        let introduction = read_plain_frame_from(&mut tcp).await?;
+        let endpoint_id = validate_client_introduction(&introduction)?;
+        let expected_endpoint_id = expected_endpoint_id.as_str();
+        if endpoint_id != expected_endpoint_id {
+            return Err(anyhow!(
+                "BWU CLIENT_INTRODUCTION endpoint mismatch: expected {expected_endpoint_id}, got {endpoint_id}"
+            ));
+        }
+        debug!("BWU: validated CLIENT_INTRODUCTION for endpoint {endpoint_id}");
+
+        let ack = Self::client_introduction_ack_frame().encode_to_vec();
+        send_plain_frame_on(&mut tcp, &ack).await?;
+
+        self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
+            EventType::LastWriteToPriorChannel,
+            None,
+        ))
+        .await?;
+
+        for _ in 0..16 {
+            let offline = match tokio::time::timeout(
+                Duration::from_secs(5),
+                self.read_encrypted_offline_frame(),
+            )
+            .await
+            {
+                Ok(Ok(frame)) => frame,
+                Ok(Err(error)) => return Err(error),
+                Err(_) => {
+                    warn!("BWU: timed out while draining prior BLE channel");
+                    break;
+                }
+            };
+
+            let Some(v1) = offline.v1.as_ref() else {
+                return Err(anyhow!("BWU drain frame has no v1 payload"));
+            };
+
+            if v1.r#type() != FrameType::BandwidthUpgradeNegotiation {
+                self.process_offline_frame(offline).await?;
+                continue;
+            }
+
+            let event = v1
+                .bandwidth_upgrade_negotiation
+                .as_ref()
+                .map(|frame| frame.event_type());
+
+            match event {
+                Some(EventType::LastWriteToPriorChannel) => {
+                    debug!("BWU: peer sent LAST_WRITE; replying SAFE_TO_CLOSE");
+                    self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
+                        EventType::SafeToClosePriorChannel,
+                        None,
+                    ))
+                    .await?;
+                }
+                Some(EventType::SafeToClosePriorChannel) => {
+                    debug!("BWU: peer marked prior channel safe to close");
+                    break;
+                }
+                Some(other) => {
+                    debug!("BWU: ignoring drain event {other:?}");
+                }
+                None => {
+                    return Err(anyhow!("BWU negotiation frame has no event type"));
+                }
+            }
+        }
+
+        let disconnection = OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(FrameType::Disconnection.into()),
+                disconnection: Some(location_nearby_connections::DisconnectionFrame {
+                    request_safe_to_disconnect: Some(false),
+                    ack_safe_to_disconnect: Some(false),
+                }),
+                ..Default::default()
+            }),
+        };
+
+        // This final prior-channel DISCONNECTION is plaintext by protocol design.
+        self.send_frame(disconnection.encode_to_vec()).await?;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        self.socket = crate::hdl::MigratableStream::Tcp(tcp);
+        info!("BWU: migrated inbound session from BLE to Wi-Fi LAN");
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod security_tests {
     use super::*;
@@ -1600,14 +1984,16 @@ mod security_tests {
     }
 
     #[test]
-    fn payload_buffer_size_accepts_only_sane_non_negative_values() {
-        assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
-        assert_eq!(
-            checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH)).unwrap(),
-            SANE_FRAME_LENGTH as usize
-        );
-        assert!(checked_payload_buffer_size(-1).is_err());
-        assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
+    fn received_file_name_enforces_byte_length_boundary() {
+        let exact_ascii = "a".repeat(MAX_RECEIVED_FILENAME_BYTES);
+        let exact_multibyte = format!("{}a", "é".repeat(127));
+        let oversized_multibyte = "é".repeat(128);
+
+        assert_eq!(exact_ascii.len(), MAX_RECEIVED_FILENAME_BYTES);
+        assert_eq!(exact_multibyte.len(), MAX_RECEIVED_FILENAME_BYTES);
+        assert!(validate_received_file_name(&exact_ascii).is_ok());
+        assert!(validate_received_file_name(&exact_multibyte).is_ok());
+        assert!(validate_received_file_name(&oversized_multibyte).is_err());
     }
 
     #[test]
@@ -1629,5 +2015,286 @@ mod security_tests {
         assert!(parse_wifi_password_payload(&[0x09, 0, 0x10, 0]).is_err());
         assert!(parse_wifi_password_payload(&[0x0A, 5, b'a', 0x10, 0]).is_err());
         assert!(parse_wifi_password_payload(&[0x0A, 1, b'a', 0x11, 0]).is_err());
+        assert!(parse_wifi_password_payload(&[0x0A, 1, 0xff, 0x10, 0]).is_err());
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_frame_round_trip() {
+        let (mut writer, mut reader) = tokio::io::duplex(256);
+        let payload = b"bandwidth-upgrade";
+
+        send_plain_frame_on(&mut writer, payload).await.unwrap();
+        let received = read_plain_frame_from(&mut reader).await.unwrap();
+
+        assert_eq!(received, payload);
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_frame_rejects_zero_length() {
+        let (mut writer, mut reader) = tokio::io::duplex(16);
+        writer.write_all(&0_u32.to_be_bytes()).await.unwrap();
+        writer.flush().await.unwrap();
+
+        assert!(read_plain_frame_from(&mut reader).await.is_err());
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_frame_rejects_oversized_declared_length() {
+        let (mut writer, mut reader) = tokio::io::duplex(16);
+        writer
+            .write_all(&((SANE_FRAME_LENGTH as u32) + 1).to_be_bytes())
+            .await
+            .unwrap();
+        writer.flush().await.unwrap();
+
+        assert!(read_plain_frame_from(&mut reader).await.is_err());
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_send_rejects_empty_payload() {
+        let (mut writer, _reader) = tokio::io::duplex(16);
+
+        assert!(send_plain_frame_on(&mut writer, &[]).await.is_err());
+    }
+
+    fn test_request() -> InboundRequest<tokio::io::DuplexStream> {
+        let (socket, _peer) = tokio::io::duplex(4096);
+        let (sender, _receiver) = tokio::sync::broadcast::channel(16);
+        InboundRequest::new(socket, "test-transfer".to_owned(), sender)
+    }
+
+    #[test]
+    fn bandwidth_upgrade_flags_are_explicit_and_one_shot() {
+        let mut request = test_request();
+
+        assert!(!request.bandwidth_upgrade_enabled);
+        assert!(!request.take_bwu_pending());
+
+        request.enable_bandwidth_upgrade();
+        request.bwu_pending = true;
+
+        assert!(request.bandwidth_upgrade_enabled);
+        assert!(request.take_bwu_pending());
+        assert!(!request.take_bwu_pending());
+    }
+
+    fn introduction_frame(
+        files: Vec<sharing_nearby::FileMetadata>,
+        text: Vec<sharing_nearby::TextMetadata>,
+        wifi: Vec<sharing_nearby::WifiCredentialsMetadata>,
+    ) -> sharing_nearby::V1Frame {
+        sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Introduction.into()),
+            introduction: Some(sharing_nearby::IntroductionFrame {
+                file_metadata: files,
+                text_metadata: text,
+                wifi_credentials_metadata: wifi,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn file_metadata(name: &str, payload_id: i64, size: i64) -> sharing_nearby::FileMetadata {
+        sharing_nearby::FileMetadata {
+            name: Some(name.to_owned()),
+            payload_id: Some(payload_id),
+            size: Some(size),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn introduction_prepares_duplicate_file_names_with_unique_destinations() {
+        let mut request = test_request();
+        let frame = introduction_frame(
+            vec![
+                file_metadata("mode-b-duplicate.bin", 101, 5),
+                file_metadata("mode-b-duplicate.bin", 102, 7),
+            ],
+            vec![],
+            vec![],
+        );
+
+        request.process_introduction(&frame).await.unwrap();
+
+        assert_eq!(request.state.state, State::WaitingForUserConsent);
+        assert_eq!(request.state.transferred_files.len(), 2);
+
+        let first = &request.state.transferred_files[&101].file_url;
+        let second = &request.state.transferred_files[&102].file_url;
+        assert_ne!(first, second);
+        assert_eq!(first.parent(), second.parent());
+
+        let metadata = request.state.transfer_metadata.as_ref().unwrap();
+        assert_eq!(metadata.total_bytes, 12);
+        assert_eq!(
+            metadata.files.as_ref().unwrap(),
+            &vec![
+                "mode-b-duplicate.bin".to_owned(),
+                "mode-b-duplicate.bin".to_owned()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_file_introduction_is_transactional() {
+        let mut duplicate = test_request();
+        let duplicate_frame = introduction_frame(
+            vec![
+                file_metadata("first.bin", 201, 1),
+                file_metadata("second.bin", 201, 1),
+            ],
+            vec![],
+            vec![],
+        );
+
+        assert!(duplicate
+            .process_introduction(&duplicate_frame)
+            .await
+            .is_err());
+        assert!(duplicate.state.transferred_files.is_empty());
+        assert!(duplicate.state.transfer_metadata.is_none());
+
+        let mut negative = test_request();
+        let negative_frame =
+            introduction_frame(vec![file_metadata("negative.bin", 202, -1)], vec![], vec![]);
+
+        assert!(negative
+            .process_introduction(&negative_frame)
+            .await
+            .is_err());
+        assert!(negative.state.transferred_files.is_empty());
+        assert!(negative.state.transfer_metadata.is_none());
+    }
+
+    #[tokio::test]
+    async fn introduction_records_url_consent_metadata() {
+        let mut request = test_request();
+        let frame = introduction_frame(
+            vec![],
+            vec![sharing_nearby::TextMetadata {
+                text_title: Some("Example link".to_owned()),
+                r#type: Some(sharing_nearby::text_metadata::Type::Url.into()),
+                payload_id: Some(301),
+                size: Some(24),
+                ..Default::default()
+            }],
+            vec![],
+        );
+
+        request.process_introduction(&frame).await.unwrap();
+
+        assert!(matches!(
+            request.state.text_payload,
+            Some(TextPayloadInfo::Url(301))
+        ));
+        let metadata = request.state.transfer_metadata.as_ref().unwrap();
+        assert_eq!(metadata.text_description.as_deref(), Some("Example link"));
+        assert_eq!(request.state.state, State::WaitingForUserConsent);
+    }
+
+    #[tokio::test]
+    async fn introduction_records_wifi_consent_metadata() {
+        let mut request = test_request();
+        let frame = introduction_frame(
+            vec![],
+            vec![],
+            vec![sharing_nearby::WifiCredentialsMetadata {
+                ssid: Some("ModeB-WiFi".to_owned()),
+                security_type: Some(2),
+                payload_id: Some(401),
+                ..Default::default()
+            }],
+        );
+
+        request.process_introduction(&frame).await.unwrap();
+
+        match request.state.text_payload.as_ref().unwrap() {
+            TextPayloadInfo::Wifi {
+                payload_id,
+                ssid,
+                security_type,
+            } => {
+                assert_eq!(*payload_id, 401);
+                assert_eq!(ssid, "ModeB-WiFi");
+                assert_eq!(*security_type as i32, 2);
+            }
+            other => panic!("unexpected payload info: {other:?}"),
+        }
+
+        let metadata = request.state.transfer_metadata.as_ref().unwrap();
+        assert_eq!(metadata.text_description.as_deref(), Some("ModeB-WiFi"));
+        assert_eq!(request.state.state, State::WaitingForUserConsent);
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[test]
+    fn client_introduction_validation_accepts_only_bwu_intro() {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+            ClientIntroduction, EventType,
+        };
+        use location_nearby_connections::{
+            offline_frame, v1_frame, BandwidthUpgradeNegotiationFrame, V1Frame,
+        };
+
+        let frame = OfflineFrame {
+            version: Some(offline_frame::Version::V1.into()),
+            v1: Some(V1Frame {
+                r#type: Some(v1_frame::FrameType::BandwidthUpgradeNegotiation.into()),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(EventType::ClientIntroduction.into()),
+                    client_introduction: Some(ClientIntroduction {
+                        endpoint_id: Some("peer-1234".to_owned()),
+                        supports_disabling_encryption: Some(false),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+
+        assert_eq!(
+            validate_client_introduction(&frame.encode_to_vec()).unwrap(),
+            "peer-1234"
+        );
+
+        let encoded = frame.encode_to_vec();
+        let mut framed = (encoded.len() as u32).to_be_bytes().to_vec();
+        framed.extend_from_slice(&encoded);
+        assert_eq!(
+            peek_client_introduction(&framed).unwrap().as_deref(),
+            Some("peer-1234")
+        );
+        assert_eq!(peek_client_introduction(&framed[..3]).unwrap(), None);
+
+        let mut wrong_event = frame.clone();
+        wrong_event
+            .v1
+            .as_mut()
+            .unwrap()
+            .bandwidth_upgrade_negotiation
+            .as_mut()
+            .unwrap()
+            .event_type = Some(EventType::SafeToClosePriorChannel.into());
+        assert!(validate_client_introduction(&wrong_event.encode_to_vec()).is_err());
+
+        let mut empty_id = frame;
+        empty_id
+            .v1
+            .as_mut()
+            .unwrap()
+            .bandwidth_upgrade_negotiation
+            .as_mut()
+            .unwrap()
+            .client_introduction
+            .as_mut()
+            .unwrap()
+            .endpoint_id = Some(String::new());
+        assert!(validate_client_introduction(&empty_id.encode_to_vec()).is_err());
     }
 }

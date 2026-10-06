@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -31,6 +30,7 @@ use crate::location_nearby_connections::payload_transfer_frame::{
     payload_header, PacketType, PayloadChunk, PayloadHeader,
 };
 use crate::location_nearby_connections::{KeepAliveFrame, OfflineFrame, PayloadTransferFrame};
+use crate::protocol::{checked_payload_buffer_size, SANE_FRAME_LENGTH, SANITY_DURATION};
 use crate::securegcm::ukey2_alert::AlertType;
 use crate::securegcm::ukey2_client_init::CipherCommitment;
 use crate::securegcm::{
@@ -52,23 +52,108 @@ use crate::{location_nearby_connections, sharing_nearby};
 
 type HmacSha256 = Hmac<Sha256>;
 
-const SANE_FRAME_LENGTH: i32 = 5 * 1024 * 1024;
-const SANITY_DURATION: Duration = Duration::from_micros(10);
-
-fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> {
-    if total_size < 0 || total_size > i64::from(SANE_FRAME_LENGTH) {
-        return Err(anyhow!(
-            "Invalid byte payload size: {total_size}; expected 0..={SANE_FRAME_LENGTH}"
-        ));
-    }
-
-    usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
-}
-
 fn is_cancel_request(message: &ChannelMessage, transfer_id: &str) -> bool {
     message.direction == ChannelDirection::FrontToLib
         && message.id == transfer_id
         && message.action == Some(ChannelAction::CancelTransfer)
+}
+
+struct PreparedOutboundFiles {
+    metadata: Vec<FileMetadata>,
+    files: HashMap<i64, InternalFileInfo>,
+    total_bytes: u64,
+}
+
+fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, anyhow::Error> {
+    let mut file_metadata = Vec::with_capacity(files.len());
+    let mut transferred_files = HashMap::new();
+    let mut total_to_send = 0_u64;
+
+    for file_path in files {
+        let path = Path::new(file_path);
+        if !path.is_file() {
+            warn!("Path is not a file: {file_path}");
+            continue;
+        }
+
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) => {
+                error!("Failed to open file: {file_path}: {error:?}");
+                continue;
+            }
+        };
+        let metadata = match file.metadata() {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                error!("Failed to get metadata for: {file_path}: {error:?}");
+                continue;
+            }
+        };
+
+        let mime_type = mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string();
+        let attachment_type = if mime_type.starts_with("image/") {
+            file_metadata::Type::Image
+        } else if mime_type.starts_with("video/") {
+            file_metadata::Type::Video
+        } else if mime_type.starts_with("audio/") {
+            file_metadata::Type::Audio
+        } else if path.extension().is_some_and(|extension| extension == "apk") {
+            file_metadata::Type::App
+        } else {
+            file_metadata::Type::Unknown
+        };
+
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| anyhow!("Failed to get file_name for {file_path}"))?
+            .to_str()
+            .ok_or_else(|| anyhow!("File name is not valid UTF-8: {file_path}"))?
+            .to_owned();
+
+        let payload_id = loop {
+            let candidate = rand::rng().random::<i64>();
+            if !transferred_files.contains_key(&candidate) {
+                break candidate;
+            }
+        };
+
+        let file_size = i64::try_from(metadata.size())
+            .map_err(|_| anyhow!("File is too large to represent in the protocol: {file_path}"))?;
+
+        let protocol_metadata = FileMetadata {
+            payload_id: Some(payload_id),
+            name: Some(file_name),
+            size: Some(file_size),
+            mime_type: Some(mime_type),
+            r#type: Some(attachment_type.into()),
+            ..Default::default()
+        };
+
+        transferred_files.insert(
+            payload_id,
+            InternalFileInfo {
+                payload_id,
+                file_url: path.to_path_buf(),
+                bytes_transferred: 0,
+                total_size: file_size,
+                file: Some(file),
+            },
+        );
+        file_metadata.push(protocol_metadata);
+
+        total_to_send = total_to_send
+            .checked_add(metadata.size())
+            .ok_or_else(|| anyhow!("Total outbound transfer size overflow"))?;
+    }
+
+    Ok(PreparedOutboundFiles {
+        metadata: file_metadata,
+        files: transferred_files,
+        total_bytes: total_to_send,
+    })
 }
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -703,92 +788,14 @@ impl OutboundRequest {
             return Err(anyhow!("Missing required fields"));
         }
 
-        let mut file_metadata: Vec<FileMetadata> = vec![];
-        let mut transferred_files: HashMap<i64, InternalFileInfo> = HashMap::new();
-        let mut total_to_send: u64 = 0;
         // TODO - Handle sending Text
-        match &self.payload {
-            OutboundPayload::Files(files) => {
-                for f in files {
-                    let path = Path::new(f);
-                    if !path.is_file() {
-                        warn!("Path is not a file: {}", f);
-                        continue;
-                    }
-
-                    let file = match File::open(f) {
-                        Ok(_f) => _f,
-                        Err(e) => {
-                            error!("Failed to open file: {f}: {:?}", e);
-                            continue;
-                        }
-                    };
-                    let fmetadata = match file.metadata() {
-                        Ok(_fm) => _fm,
-                        Err(e) => {
-                            error!("Failed to get metadata for: {f}: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    let ftype = mime_guess::from_path(path)
-                        .first_or_octet_stream()
-                        .to_string();
-
-                    let meta_type = if ftype.starts_with("image/") {
-                        file_metadata::Type::Image
-                    } else if ftype.starts_with("video/") {
-                        file_metadata::Type::Video
-                    } else if ftype.starts_with("audio/") {
-                        file_metadata::Type::Audio
-                    } else if path.extension().unwrap_or_default() == "apk" {
-                        file_metadata::Type::App
-                    } else {
-                        file_metadata::Type::Unknown
-                    };
-
-                    info!("File type to send: {}", ftype);
-                    let fname = path
-                        .file_name()
-                        .ok_or_else(|| anyhow!("Failed to get file_name for {f}"))?;
-                    let payload_id = loop {
-                        let candidate = rand::rng().random::<i64>();
-                        if !transferred_files.contains_key(&candidate) {
-                            break candidate;
-                        }
-                    };
-                    let file_size = i64::try_from(fmetadata.size()).map_err(|_| {
-                        anyhow!("File is too large to represent in the protocol: {f}")
-                    })?;
-                    let file_name = fname
-                        .to_str()
-                        .ok_or_else(|| anyhow!("File name is not valid UTF-8: {f}"))?
-                        .to_owned();
-                    let fmeta = FileMetadata {
-                        payload_id: Some(payload_id),
-                        name: Some(file_name),
-                        size: Some(file_size),
-                        mime_type: Some(ftype),
-                        r#type: Some(meta_type.into()),
-                        ..Default::default()
-                    };
-                    transferred_files.insert(
-                        fmeta.payload_id(),
-                        InternalFileInfo {
-                            payload_id: fmeta.payload_id(),
-                            file_url: path.to_path_buf(),
-                            bytes_transferred: 0,
-                            total_size: fmeta.size(),
-                            file: Some(file),
-                        },
-                    );
-                    file_metadata.push(fmeta);
-                    total_to_send = total_to_send
-                        .checked_add(fmetadata.size())
-                        .ok_or_else(|| anyhow!("Total outbound transfer size overflow"))?;
-                }
-            }
-        }
+        let PreparedOutboundFiles {
+            metadata: file_metadata,
+            files: transferred_files,
+            total_bytes: total_to_send,
+        } = match &self.payload {
+            OutboundPayload::Files(files) => prepare_outbound_files(files)?,
+        };
 
         self.update_state(
             |e| {
@@ -1388,14 +1395,207 @@ mod security_tests {
     use super::*;
 
     #[test]
-    fn payload_buffer_size_accepts_only_sane_non_negative_values() {
-        assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
-        assert_eq!(
-            checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH)).unwrap(),
-            SANE_FRAME_LENGTH as usize
+    fn outbound_file_preparation_classifies_files_and_skips_missing_paths() {
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let image = root.join("photo.png");
+        let app = root.join("client.apk");
+        let text = root.join("notes.txt");
+        let missing = root.join("missing.bin");
+
+        std::fs::write(&image, [1_u8, 2, 3]).unwrap();
+        std::fs::write(&app, [4_u8, 5]).unwrap();
+        std::fs::write(&text, [6_u8]).unwrap();
+
+        let inputs = vec![
+            image.to_string_lossy().into_owned(),
+            app.to_string_lossy().into_owned(),
+            text.to_string_lossy().into_owned(),
+            missing.to_string_lossy().into_owned(),
+        ];
+
+        let prepared = prepare_outbound_files(&inputs).unwrap();
+        let metadata = prepared.metadata;
+        let transferred = prepared.files;
+
+        assert_eq!(metadata.len(), 3);
+        assert_eq!(transferred.len(), 3);
+        assert_eq!(prepared.total_bytes, 6);
+
+        let by_name = metadata
+            .iter()
+            .map(|item| (item.name().to_owned(), item))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(by_name["photo.png"].r#type(), file_metadata::Type::Image);
+        assert_eq!(by_name["client.apk"].r#type(), file_metadata::Type::App);
+        assert_eq!(by_name["notes.txt"].r#type(), file_metadata::Type::Unknown);
+
+        let payload_ids = metadata
+            .iter()
+            .map(FileMetadata::payload_id)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(payload_ids.len(), 3);
+
+        for item in metadata {
+            let internal = &transferred[&item.payload_id()];
+            assert_eq!(internal.total_size, item.size());
+            assert!(internal.file.is_some());
+            assert_eq!(
+                internal.file_url.file_name().unwrap().to_string_lossy(),
+                item.name()
+            );
+        }
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn outbound_file_preparation_classifies_audio_and_video() {
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-media-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let video = root.join("clip.mp4");
+        let audio = root.join("sound.mp3");
+        std::fs::write(&video, [1_u8]).unwrap();
+        std::fs::write(&audio, [2_u8]).unwrap();
+
+        let prepared = prepare_outbound_files(&[
+            video.to_string_lossy().into_owned(),
+            audio.to_string_lossy().into_owned(),
+        ])
+        .unwrap();
+
+        let by_name = prepared
+            .metadata
+            .iter()
+            .map(|item| (item.name().to_owned(), item.r#type()))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(by_name["clip.mp4"], file_metadata::Type::Video);
+        assert_eq!(by_name["sound.mp3"], file_metadata::Type::Audio);
+        assert_eq!(prepared.total_bytes, 2);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn outbound_file_preparation_handles_empty_input() {
+        let prepared = prepare_outbound_files(&[]).unwrap();
+
+        assert!(prepared.metadata.is_empty());
+        assert!(prepared.files.is_empty());
+        assert_eq!(prepared.total_bytes, 0);
+    }
+
+    async fn test_request(files: Vec<String>) -> (OutboundRequest, tokio::net::TcpStream) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let peer = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
+        let (sender, _receiver) = tokio::sync::broadcast::channel(16);
+
+        let mut request = OutboundRequest::new(
+            [1, 2, 3, 4],
+            socket,
+            "test-outbound".to_owned(),
+            sender,
+            OutboundPayload::Files(files),
+            RemoteDeviceInfo {
+                name: "Test phone".to_owned(),
+                device_type: DeviceType::Phone,
+            },
         );
-        assert!(checked_payload_buffer_size(-1).is_err());
-        assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
+        request.state.encryption_done = false;
+        (request, peer)
+    }
+
+    fn consent_frame(
+        status: sharing_nearby::connection_response_frame::Status,
+    ) -> sharing_nearby::V1Frame {
+        sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
+            connection_response: Some(sharing_nearby::ConnectionResponseFrame {
+                status: Some(status.into()),
+            }),
+            ..Default::default()
+        }
+    }
+
+    async fn read_offline_frame(
+        socket: &mut tokio::net::TcpStream,
+    ) -> location_nearby_connections::OfflineFrame {
+        use tokio::io::AsyncReadExt;
+
+        let mut length = [0_u8; 4];
+        socket.read_exact(&mut length).await.unwrap();
+        let length = u32::from_be_bytes(length) as usize;
+        let mut payload = vec![0_u8; length];
+        socket.read_exact(&mut payload).await.unwrap();
+        location_nearby_connections::OfflineFrame::decode(payload.as_slice()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn accepted_empty_transfer_finishes_and_disconnects() {
+        let (mut request, mut peer) = test_request(vec![]).await;
+        let frame = consent_frame(sharing_nearby::connection_response_frame::Status::Accept);
+
+        request.process_consent(&frame).await.unwrap();
+
+        assert_eq!(request.state.state, State::Finished);
+        let disconnect = read_offline_frame(&mut peer).await;
+        assert_eq!(
+            disconnect.v1.unwrap().r#type(),
+            location_nearby_connections::v1_frame::FrameType::Disconnection
+        );
+    }
+
+    #[tokio::test]
+    async fn denied_consent_disconnects_cleanly() {
+        for status in [
+            sharing_nearby::connection_response_frame::Status::Reject,
+            sharing_nearby::connection_response_frame::Status::NotEnoughSpace,
+            sharing_nearby::connection_response_frame::Status::UnsupportedAttachmentType,
+            sharing_nearby::connection_response_frame::Status::TimedOut,
+        ] {
+            let (mut request, mut peer) = test_request(vec![]).await;
+            let result = request.process_consent(&consent_frame(status)).await;
+
+            assert!(result.is_err());
+            assert_eq!(request.state.state, State::Disconnected);
+
+            let disconnect = read_offline_frame(&mut peer).await;
+            assert_eq!(
+                disconnect.v1.unwrap().r#type(),
+                location_nearby_connections::v1_frame::FrameType::Disconnection
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn malformed_consent_response_is_rejected() {
+        let (mut request, _peer) = test_request(vec![]).await;
+
+        let wrong_type = sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Introduction.into()),
+            ..Default::default()
+        };
+        assert!(request.process_consent(&wrong_type).await.is_err());
+        assert_eq!(request.state.state, State::Initial);
+
+        let missing_response = sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
+            ..Default::default()
+        };
+        assert!(request.process_consent(&missing_response).await.is_err());
+        assert_eq!(request.state.state, State::Initial);
     }
 
     #[test]
