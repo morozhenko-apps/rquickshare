@@ -285,3 +285,68 @@ impl TcpServer {
         Ok(())
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use prost::Message;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::*;
+    use crate::location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+        ClientIntroduction, EventType,
+    };
+    use crate::location_nearby_connections::{
+        offline_frame, v1_frame, BandwidthUpgradeNegotiationFrame, OfflineFrame, V1Frame,
+    };
+
+    fn client_introduction(endpoint_id: &str) -> Vec<u8> {
+        let frame = OfflineFrame {
+            version: Some(offline_frame::Version::V1.into()),
+            v1: Some(V1Frame {
+                r#type: Some(v1_frame::FrameType::BandwidthUpgradeNegotiation.into()),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(EventType::ClientIntroduction.into()),
+                    client_introduction: Some(ClientIntroduction {
+                        endpoint_id: Some(endpoint_id.to_owned()),
+                        supports_disabling_encryption: Some(false),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+
+        let encoded = frame.encode_to_vec();
+        let mut framed = (encoded.len() as u32).to_be_bytes().to_vec();
+        framed.extend_from_slice(&encoded);
+        framed
+    }
+
+    #[tokio::test]
+    async fn routes_bwu_socket_without_consuming_client_introduction() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-1234".to_owned()).await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        let framed = client_introduction("peer-1234");
+        client.write_all(&framed).await.unwrap();
+        client.flush().await.unwrap();
+
+        assert!(
+            route_bandwidth_upgrade_if_pending(server, &router)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let mut routed = receiver.await.unwrap();
+        let mut received = vec![0_u8; framed.len()];
+        routed.read_exact(&mut received).await.unwrap();
+        assert_eq!(received, framed);
+    }
+}
