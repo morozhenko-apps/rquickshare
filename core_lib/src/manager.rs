@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast::Sender;
@@ -7,7 +9,9 @@ use ts_rs::TS;
 
 use crate::channel::{ChannelDirection, ChannelMessage};
 use crate::errors::AppError;
-use crate::hdl::{InboundRequest, OutboundPayload, OutboundRequest, State};
+use crate::hdl::{
+    peek_client_introduction, BwuRouter, InboundRequest, OutboundPayload, OutboundRequest, State,
+};
 use crate::utils::RemoteDeviceInfo;
 
 const INNER_NAME: &str = "TcpServer";
@@ -31,6 +35,7 @@ pub struct TcpServer {
     tcp_listener: TcpListener,
     sender: Sender<ChannelMessage>,
     connect_receiver: Receiver<SendInfo>,
+    bwu_router: BwuRouter,
 }
 
 impl TcpServer {
@@ -39,12 +44,14 @@ impl TcpServer {
         tcp_listener: TcpListener,
         sender: Sender<ChannelMessage>,
         connect_receiver: Receiver<SendInfo>,
+        bwu_router: BwuRouter,
     ) -> Result<Self, anyhow::Error> {
         Ok(Self {
             endpoint_id,
             tcp_listener,
             sender,
             connect_receiver,
+            bwu_router,
         })
     }
 
@@ -79,8 +86,30 @@ impl TcpServer {
                             info!("{INNER_NAME}: accepted inbound client from {remote_addr}");
                             let esender = self.sender.clone();
                             let csender = self.sender.clone();
+                            let bwu_router = self.bwu_router.clone();
 
                             tokio::spawn(async move {
+                                let socket = match route_bandwidth_upgrade_if_pending(
+                                    socket,
+                                    &bwu_router,
+                                )
+                                .await
+                                {
+                                    Ok(Some(socket)) => socket,
+                                    Ok(None) => {
+                                        info!(
+                                            "{INNER_NAME}: routed bandwidth-upgrade client from {remote_addr}"
+                                        );
+                                        return;
+                                    }
+                                    Err(error) => {
+                                        warn!(
+                                            "{INNER_NAME}: failed to classify inbound client {remote_addr}: {error}"
+                                        );
+                                        return;
+                                    }
+                                };
+
                                 let mut ir = InboundRequest::new(socket, remote_addr.to_string(), csender);
 
                                 loop {
