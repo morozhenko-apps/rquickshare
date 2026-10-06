@@ -44,6 +44,7 @@ use crate::securemessage::{
 use crate::sharing_nearby::{
     file_metadata, paired_key_result_frame, FileMetadata, IntroductionFrame,
 };
+use crate::protocol::{checked_payload_buffer_size, SANE_FRAME_LENGTH, SANITY_DURATION};
 use crate::utils::{
     encode_point, gen_ecdsa_keypair, gen_random, hkdf_extract_expand, normalize_p256_coordinate,
     stream_read_exact, to_four_digit_string, DeviceType, RemoteDeviceInfo,
@@ -52,18 +53,6 @@ use crate::{location_nearby_connections, sharing_nearby};
 
 type HmacSha256 = Hmac<Sha256>;
 
-const SANE_FRAME_LENGTH: i32 = 5 * 1024 * 1024;
-const SANITY_DURATION: Duration = Duration::from_micros(10);
-
-fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> {
-    if total_size < 0 || total_size > i64::from(SANE_FRAME_LENGTH) {
-        return Err(anyhow!(
-            "Invalid byte payload size: {total_size}; expected 0..={SANE_FRAME_LENGTH}"
-        ));
-    }
-
-    usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
-}
 
 fn is_cancel_request(message: &ChannelMessage, transfer_id: &str) -> bool {
     message.direction == ChannelDirection::FrontToLib
@@ -1386,17 +1375,6 @@ impl OutboundRequest {
 #[cfg(test)]
 mod security_tests {
     use super::*;
-
-    #[test]
-    fn payload_buffer_size_accepts_only_sane_non_negative_values() {
-        assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
-        assert_eq!(
-            checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH)).unwrap(),
-            SANE_FRAME_LENGTH as usize
-        );
-        assert!(checked_payload_buffer_size(-1).is_err());
-        assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
-    }
 
     #[test]
     fn test_is_cancel_request_matches_only_current_frontend_transfer() {
