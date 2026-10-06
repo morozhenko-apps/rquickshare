@@ -574,10 +574,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         Ok(())
     }
 
-    async fn decrypt_and_process_secure_message(
+    async fn decrypt_secure_message(
         &mut self,
         smsg: &SecureMessage,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<OfflineFrame, anyhow::Error> {
         let recv_hmac_key = self
             .state
             .recv_hmac_key
@@ -622,7 +622,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             ));
         }
 
-        let offline = location_nearby_connections::OfflineFrame::decode(d2d_msg.message())?;
+        Ok(location_nearby_connections::OfflineFrame::decode(
+            d2d_msg.message(),
+        )?)
+    }
+
+    async fn decrypt_and_process_secure_message(
+        &mut self,
+        smsg: &SecureMessage,
+    ) -> Result<(), anyhow::Error> {
+        let offline = self.decrypt_secure_message(smsg).await?;
         self.process_offline_frame(offline).await
     }
 
