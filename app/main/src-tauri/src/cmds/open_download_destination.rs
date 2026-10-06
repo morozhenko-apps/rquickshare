@@ -21,16 +21,38 @@ fn validate_download_destination(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_received_basename(file_name: &str) -> Result<(), String> {
-    if file_name.is_empty() {
-        return Err("received file name is empty".to_owned());
+fn validate_received_relative_path(value: &str) -> Result<Vec<&str>, String> {
+    if value.is_empty() || value.len() > 4096 {
+        return Err("received relative path is empty or too long".to_owned());
     }
 
-    let mut components = Path::new(file_name).components();
-    match (components.next(), components.next()) {
-        (Some(Component::Normal(_)), None) => Ok(()),
-        _ => Err("received file name must be a single path component".to_owned()),
+    let segments = value.split('/').collect::<Vec<_>>();
+    if segments.len() > 64 {
+        return Err("received relative path is too deep".to_owned());
     }
+
+    for segment in &segments {
+        if segment.is_empty()
+            || *segment == "."
+            || *segment == ".."
+            || segment.len() > 255
+            || segment
+                .chars()
+                .any(|character| character == '\\' || character == '\0' || character.is_control())
+        {
+            return Err("received relative path contains an unsafe component".to_owned());
+        }
+
+        let mut components = Path::new(segment).components();
+        if !matches!(
+            (components.next(), components.next()),
+            (Some(Component::Normal(_)), None)
+        ) {
+            return Err("received relative path contains an unsafe component".to_owned());
+        }
+    }
+
+    Ok(segments)
 }
 
 fn resolve_download_destination(app: &AppHandle) -> Result<PathBuf, String> {
@@ -48,10 +70,15 @@ fn resolve_download_destination(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|error| format!("unable to resolve the download destination: {error}"))
 }
 
-fn resolve_received_item(destination: &Path, file_name: &str) -> Result<Option<PathBuf>, String> {
-    validate_received_basename(file_name)?;
+fn resolve_received_item(
+    destination: &Path,
+    relative_path: &str,
+) -> Result<Option<PathBuf>, String> {
+    let segments = validate_received_relative_path(relative_path)?;
+    let candidate = segments
+        .iter()
+        .fold(destination.to_path_buf(), |path, segment| path.join(segment));
 
-    let candidate = destination.join(file_name);
     if !candidate.exists() {
         return Ok(None);
     }
@@ -139,16 +166,25 @@ mod tests {
     }
 
     #[test]
-    fn received_basename_rejects_traversal_and_nested_paths() {
-        for value in ["", ".", "..", "../secret", "/tmp/secret", "folder/file.png"] {
+    fn received_relative_path_accepts_nested_items_and_rejects_traversal() {
+        for value in [
+            "",
+            ".",
+            "..",
+            "../secret",
+            "/tmp/secret",
+            "folder//file.png",
+            "folder/../file.png",
+            "folder\\file.png",
+        ] {
             assert!(
-                validate_received_basename(value).is_err(),
+                validate_received_relative_path(value).is_err(),
                 "unsafe path unexpectedly accepted: {value}"
             );
         }
 
-        assert!(validate_received_basename("photo 01.png").is_ok());
-        assert!(validate_received_basename("данные.txt").is_ok());
+        assert!(validate_received_relative_path("photo 01.png").is_ok());
+        assert!(validate_received_relative_path("Trip/photos/данные.txt").is_ok());
     }
 
     #[test]
@@ -162,16 +198,18 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let destination = root.canonicalize().unwrap();
 
-        let file = destination.join("photo.png");
+        let nested = destination.join("Trip").join("photos");
+        std::fs::create_dir_all(&nested).unwrap();
+        let file = nested.join("photo.png");
         std::fs::write(&file, b"test").unwrap();
 
         assert_eq!(
-            resolve_received_item(&destination, "photo.png")
+            resolve_received_item(&destination, "Trip/photos/photo.png")
                 .unwrap()
                 .unwrap(),
             file.canonicalize().unwrap()
         );
-        assert!(resolve_received_item(&destination, "missing.png")
+        assert!(resolve_received_item(&destination, "Trip/photos/missing.png")
             .unwrap()
             .is_none());
         assert!(resolve_received_item(&destination, "../photo.png").is_err());
