@@ -69,7 +69,7 @@ describe('ContentStatus', () => {
 		});
 
 		const clipboardButton = wrapper.findAll('button').find((button) =>
-			button.text().includes('Paste text'),
+			button.text().includes('Paste clipboard'),
 		)!;
 		await clipboardButton.trigger('click');
 		await flushPromises();
@@ -81,17 +81,41 @@ describe('ContentStatus', () => {
 		expect(wrapper.emitted('discoveryRunning')).toHaveLength(1);
 	});
 
-	test('shows an inline error for empty clipboard text', async () => {
-		readTextMock.mockResolvedValueOnce('   ');
-		const wrapper = mount(ContentStatus, { props: { vm: vm() } });
+	test('falls back to a clipboard image when text is unavailable', async () => {
+		readTextMock.mockRejectedValueOnce(new Error('not text'));
+		const invoke = vi.fn(async (command: string) => {
+			if (command === 'save_clipboard_image') return '/tmp/rquickshare-clipboard-test.png';
+			return undefined;
+		});
+		const wrapper = mount(ContentStatus, { props: { vm: vm({ invoke }) } });
 
 		const clipboardButton = wrapper.findAll('button').find((button) =>
-			button.text().includes('Paste text'),
+			button.text().includes('Paste clipboard'),
 		)!;
 		await clipboardButton.trigger('click');
 		await flushPromises();
 
-		expect(wrapper.text()).toContain('Clipboard does not contain text.');
+		expect(wrapper.emitted('outboundPayload')).toEqual([
+			[{ EphemeralFiles: ['/tmp/rquickshare-clipboard-test.png'] }],
+		]);
+		expect(invoke).toHaveBeenCalledWith('start_discovery');
+	});
+
+	test('shows an inline error when clipboard has no shareable content', async () => {
+		readTextMock.mockResolvedValueOnce('   ');
+		const invoke = vi.fn(async (command: string) => {
+			if (command === 'save_clipboard_image') throw new Error('not image');
+			return undefined;
+		});
+		const wrapper = mount(ContentStatus, { props: { vm: vm({ invoke }) } });
+
+		const clipboardButton = wrapper.findAll('button').find((button) =>
+			button.text().includes('Paste clipboard'),
+		)!;
+		await clipboardButton.trigger('click');
+		await flushPromises();
+
+		expect(wrapper.text()).toContain('Clipboard does not contain shareable text or an image.');
 		expect(wrapper.emitted('outboundPayload')).toBeUndefined();
 	});
 
