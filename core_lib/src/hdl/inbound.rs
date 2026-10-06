@@ -209,6 +209,7 @@ pub struct InboundRequest<S = TcpStream> {
     receiver: Receiver<ChannelMessage>,
     bandwidth_upgrade_enabled: bool,
     bwu_pending: bool,
+    peer_endpoint_id: Option<String>,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
@@ -229,6 +230,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             receiver,
             bandwidth_upgrade_enabled: false,
             bwu_pending: false,
+            peer_endpoint_id: None,
         }
     }
 
@@ -477,7 +479,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
     }
 
     fn process_connection_request(
-        &self,
+        &mut self,
         frame: &location_nearby_connections::OfflineFrame,
     ) -> Result<RemoteDeviceInfo, anyhow::Error> {
         let v1_frame = frame
@@ -497,6 +499,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             .connection_request
             .as_ref()
             .ok_or_else(|| anyhow!("Missing required fields"))?;
+
+        let peer_endpoint_id = connection_request.endpoint_id();
+        if peer_endpoint_id.is_empty() {
+            return Err(anyhow!("Connection request has no endpoint id"));
+        }
+        self.peer_endpoint_id = Some(peer_endpoint_id.to_owned());
 
         let endpoint_info = connection_request
             .endpoint_info
@@ -1789,6 +1797,15 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
         let introduction = read_plain_frame_from(&mut tcp).await?;
         let endpoint_id = validate_client_introduction(&introduction)?;
+        let expected_endpoint_id = self
+            .peer_endpoint_id
+            .as_deref()
+            .ok_or_else(|| anyhow!("BWU session has no peer endpoint id"))?;
+        if endpoint_id != expected_endpoint_id {
+            return Err(anyhow!(
+                "BWU CLIENT_INTRODUCTION endpoint mismatch: expected {expected_endpoint_id}, got {endpoint_id}"
+            ));
+        }
         debug!("BWU: validated CLIENT_INTRODUCTION for endpoint {endpoint_id}");
 
         let ack = Self::client_introduction_ack_frame().encode_to_vec();
