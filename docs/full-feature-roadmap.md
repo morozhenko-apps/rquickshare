@@ -11,7 +11,7 @@ The maintained fork is no longer scoped to "make upstream rQuickShare work again
 - Prefer local/offline behavior. Google sign-in must never be required for ordinary nearby file/text sharing.
 - Do not fake Google Account semantics: local trusted devices are a separate feature from Google's Contacts/Your devices identity.
 - Keep OS-bound behavior (BlueZ, mDNS, Tauri desktop lifecycle) behind explicit seams so it can be smoke-tested and later unit-tested.
-- New functionality is developed on `feat/full-quickshare`, stacked on the hardened Pixel/BLE foundation.
+- New functionality is developed directly on `dev`. `master` remains release-only; long-lived feature branches are not used.
 
 ## Capability matrix
 
@@ -144,10 +144,9 @@ The maintained fork is no longer scoped to "make upstream rQuickShare work again
 ## Test policy
 
 - Every fixed protocol bug gets a regression test.
-- Normal feature-branch/dev commits run the fast preflight once.
-- Mode B stable suite runs once.
-- Only stability-sensitive async/network tests run 10x.
-- Package build is a separate 1x gate.
+- Normal `dev` commits run the fast preflight once.
+- The final Mode B gate runs the complete Rust and frontend automated suite 10 consecutive times.
+- Package build is a separate manual 1x gate.
 - Hardware/OS-bound features retain an explicit smoke matrix: Ubuntu/KDE Wayland + target Pixel first, then additional Android/Linux combinations.
 - Coverage is used as a diagnostic map, not an arbitrary vanity threshold.
 
