@@ -20,6 +20,11 @@ const outboundFiles = computed(() => {
 	if ('EphemeralFiles' in payload) return payload.EphemeralFiles;
 	return undefined;
 });
+
+const outboundText = computed(() => {
+	const payload = props.vm.outboundPayload;
+	return payload && 'Text' in payload ? payload.Text : undefined;
+});
 </script>
 
 <template>
@@ -65,7 +70,9 @@ const outboundFiles = computed(() => {
 				</p>
 			</template>
 			<template v-else>
-				<p class="font-semibold">Sharing text</p>
+				<p class="font-semibold">
+					Sharing text
+				</p>
 			</template>
 
 			<div class="icon-surface w-24 h-24 rounded-2xl my-4 flex justify-center items-center">
@@ -87,9 +94,9 @@ const outboundFiles = computed(() => {
 				</p>
 			</template>
 			<p
-				v-else
+				v-else-if="outboundText"
 				class="text-sm text-muted whitespace-pre-wrap break-words line-clamp-6">
-				{{ props.vm.outboundPayload.Text }}
+				{{ outboundText }}
 			</p>
 
 			<p class="text-xs text-muted leading-5 mt-4">
