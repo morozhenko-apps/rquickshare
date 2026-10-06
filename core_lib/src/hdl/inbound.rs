@@ -1132,6 +1132,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 trace!("Sending keepalive");
                 self.send_keepalive(true).await?;
             }
+            location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeRetry => {
+                debug!("BWU: peer requested bandwidth-upgrade retry; continuing current transport");
+            }
+            location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeNegotiation => {
+                let event = v1_frame
+                    .bandwidth_upgrade_negotiation
+                    .as_ref()
+                    .map(|frame| frame.event_type());
+                debug!("BWU: peer negotiation event on current transport: {event:?}");
+            }
             _ => {
                 error!("Unhandled offline frame encrypted: {:?}", offline);
             }
