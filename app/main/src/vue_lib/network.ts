@@ -3,8 +3,8 @@ export interface ListeningPortParseResult {
 	error: string | null;
 }
 
-export function parseListeningPort(raw: string): ListeningPortParseResult {
-	const value = raw.trim();
+export function parseListeningPort(raw: string | number): ListeningPortParseResult {
+	const value = String(raw).trim();
 
 	if (value === '') {
 		return { port: null, error: null };
