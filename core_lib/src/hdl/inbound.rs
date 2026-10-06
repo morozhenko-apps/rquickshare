@@ -415,8 +415,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         let (secret_key, public_key) = gen_ecdsa_keypair();
 
         let encoded_point = public_key.to_encoded_point(false);
-        let x = encoded_point.x().ok_or_else(|| anyhow!("Generated P-256 point has no X coordinate"))?;
-        let y = encoded_point.y().ok_or_else(|| anyhow!("Generated P-256 point has no Y coordinate"))?;
+        let x = encoded_point
+            .x()
+            .ok_or_else(|| anyhow!("Generated P-256 point has no X coordinate"))?;
+        let y = encoded_point
+            .y()
+            .ok_or_else(|| anyhow!("Generated P-256 point has no Y coordinate"))?;
 
         let pkey = GenericPublicKey {
             r#type: PublicKeyType::EcP256.into(),
