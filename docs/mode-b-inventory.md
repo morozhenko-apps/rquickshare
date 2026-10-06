@@ -451,3 +451,22 @@ Estimated delta: **24-37 scenarios**, preferably table-driven where the branch/r
 | `app/main/src/vue_lib/utils.ts` | ephemeral cleanup during clear/reset | Missing direct coverage | Deterministic unit seam already exists through VM invoke contract |
 
 The final Mode B gate must use this extension together with the original Stage 3-8 inventory. Hardware smoke does not replace these deterministic cases.
+
+## Hardware smoke findings - 2026-10-06
+
+Real Pixel-to-Linux and Linux-to-Pixel smoke on Ubuntu 26.04 KDE/Wayland produced the following evidence:
+
+- Linux -> Pixel clipboard-image transfer succeeds over the normal LAN path and managed clipboard temporary files are removed after completion.
+- Pixel -> Linux file receive establishes the BLE Weave session and completes UKEY2, but the offered Wi-Fi LAN bandwidth upgrade times out after 15 seconds. No TCP connection reaches the application's listener before the timeout, so the transfer falls back to BLE and progresses in roughly 509-byte payload chunks.
+- The peer sends `BANDWIDTH_UPGRADE_RETRY` / `UPGRADE_FAILURE` after the failed Wi-Fi handoff. These frames are currently logged as unhandled and should be treated as expected fallback diagnostics rather than protocol-fatal errors.
+- Two Pixel -> Linux text attempts fail before a receiver GATT/Weave session is opened. No `TextMetadata` reaches `InboundRequest::process_introduction`, so the current evidence does not support changing the inbound text parser.
+- The completed-file `Open` action passes a local destination path to the frontend shell URL opener. This violates the shell opener scope and produces an invalid-URI/open failure. Local receive destinations need a dedicated backend capability rather than broad shell URL permissions.
+
+Next deterministic/live checks:
+
+1. Add FEF3 slot-0 read, Weave write/notify-subscription, and negotiated packet-size diagnostics without logging payload contents.
+2. Keep inbound text parser unchanged until the next instrumented hardware run proves that a sharing frame reaches it.
+3. Verify Linux firewall/listener reachability for the advertised BWU TCP port before changing the BWU router or protocol.
+4. Fix local received-destination opening through a backend-only command that computes the configured/default download directory itself; do not accept an arbitrary filesystem path from the frontend.
+5. Re-run Pixel -> Linux text and repeated Pixel -> Linux file receive without restarting the application.
+
