@@ -1957,6 +1957,28 @@ mod security_tests {
     }
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_frame_round_trip() {
+        let (mut writer, mut reader) = tokio::io::duplex(256);
+        let payload = b"bandwidth-upgrade";
+
+        send_plain_frame_on(&mut writer, payload).await.unwrap();
+        let received = read_plain_frame_from(&mut reader).await.unwrap();
+
+        assert_eq!(received, payload);
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_frame_rejects_zero_length() {
+        let (mut writer, mut reader) = tokio::io::duplex(16);
+        writer.write_all(&0_u32.to_be_bytes()).await.unwrap();
+        writer.flush().await.unwrap();
+
+        assert!(read_plain_frame_from(&mut reader).await.is_err());
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
     #[test]
     fn client_introduction_validation_accepts_only_bwu_intro() {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
