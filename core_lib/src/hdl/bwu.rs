@@ -62,9 +62,7 @@ mod tests {
         let router = BwuRouter::new();
         let receiver = router.register("peer-route".to_owned()).await.unwrap();
 
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let client = tokio::net::TcpStream::connect(address).await.unwrap();
         let (server, _) = listener.accept().await.unwrap();
