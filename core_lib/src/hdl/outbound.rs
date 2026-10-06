@@ -81,9 +81,9 @@ impl ManagedEphemeralFile {
 
         let mut parts = token.split('-');
         let valid_token = (0..3).all(|_| {
-            parts
-                .next()
-                .is_some_and(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+            parts.next().is_some_and(|part| {
+                !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
+            })
         }) && parts.next().is_none();
 
         if !valid_token {
@@ -108,7 +108,6 @@ impl ManagedEphemeralFile {
         }
     }
 }
-
 
 fn is_cancel_request(message: &ChannelMessage, transfer_id: &str) -> bool {
     message.direction == ChannelDirection::FrontToLib
@@ -369,7 +368,10 @@ impl Drop for OutboundRequest {
     fn drop(&mut self) {
         for file in self.cleanup_files.drain(..) {
             match file.remove() {
-                Ok(()) => debug!("Removed managed ephemeral outbound file: {}", file.path().display()),
+                Ok(()) => debug!(
+                    "Removed managed ephemeral outbound file: {}",
+                    file.path().display()
+                ),
                 Err(error) => warn!("{error}"),
             }
         }

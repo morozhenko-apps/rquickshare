@@ -99,16 +99,16 @@ mod tests {
         remove_ephemeral_file(path.to_string_lossy().into_owned())
             .await
             .unwrap();
-        assert!(remove_ephemeral_file("/etc/passwd".to_owned()).await.is_err());
-        assert!(
-            remove_ephemeral_file(
-                std::env::temp_dir()
-                    .join("other-app.png")
-                    .to_string_lossy()
-                    .into_owned()
-            )
+        assert!(remove_ephemeral_file("/etc/passwd".to_owned())
             .await
-            .is_err()
-        );
+            .is_err());
+        assert!(remove_ephemeral_file(
+            std::env::temp_dir()
+                .join("other-app.png")
+                .to_string_lossy()
+                .into_owned()
+        )
+        .await
+        .is_err());
     }
 }
