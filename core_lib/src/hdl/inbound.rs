@@ -1988,6 +1988,19 @@ mod security_tests {
     }
 
     #[test]
+    fn received_file_name_enforces_byte_length_boundary() {
+        let exact_ascii = "a".repeat(MAX_RECEIVED_FILENAME_BYTES);
+        let exact_multibyte = format!("{}a", "é".repeat(127));
+        let oversized_multibyte = "é".repeat(128);
+
+        assert_eq!(exact_ascii.len(), MAX_RECEIVED_FILENAME_BYTES);
+        assert_eq!(exact_multibyte.len(), MAX_RECEIVED_FILENAME_BYTES);
+        assert!(validate_received_file_name(&exact_ascii).is_ok());
+        assert!(validate_received_file_name(&exact_multibyte).is_ok());
+        assert!(validate_received_file_name(&oversized_multibyte).is_err());
+    }
+
+    #[test]
     fn test_parse_wifi_password_payload_handles_16_byte_password() {
         let password = b"1234567890abcdef";
         let mut payload = vec![0x0A, password.len() as u8];
@@ -2006,6 +2019,7 @@ mod security_tests {
         assert!(parse_wifi_password_payload(&[0x09, 0, 0x10, 0]).is_err());
         assert!(parse_wifi_password_payload(&[0x0A, 5, b'a', 0x10, 0]).is_err());
         assert!(parse_wifi_password_payload(&[0x0A, 1, b'a', 0x11, 0]).is_err());
+        assert!(parse_wifi_password_payload(&[0x0A, 1, 0xff, 0x10, 0]).is_err());
     }
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
@@ -2030,10 +2044,46 @@ mod security_tests {
         assert!(read_plain_frame_from(&mut reader).await.is_err());
     }
 
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_frame_rejects_oversized_declared_length() {
+        let (mut writer, mut reader) = tokio::io::duplex(16);
+        writer
+            .write_all(&((SANE_FRAME_LENGTH as u32) + 1).to_be_bytes())
+            .await
+            .unwrap();
+        writer.flush().await.unwrap();
+
+        assert!(read_plain_frame_from(&mut reader).await.is_err());
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    #[tokio::test]
+    async fn plaintext_bwu_send_rejects_empty_payload() {
+        let (mut writer, _reader) = tokio::io::duplex(16);
+
+        assert!(send_plain_frame_on(&mut writer, &[]).await.is_err());
+    }
+
     fn test_request() -> InboundRequest<tokio::io::DuplexStream> {
         let (socket, _peer) = tokio::io::duplex(4096);
         let (sender, _receiver) = tokio::sync::broadcast::channel(16);
         InboundRequest::new(socket, "test-transfer".to_owned(), sender)
+    }
+
+    #[test]
+    fn bandwidth_upgrade_flags_are_explicit_and_one_shot() {
+        let mut request = test_request();
+
+        assert!(!request.bandwidth_upgrade_enabled);
+        assert!(!request.take_bwu_pending());
+
+        request.enable_bandwidth_upgrade();
+        request.bwu_pending = true;
+
+        assert!(request.bandwidth_upgrade_enabled);
+        assert!(request.take_bwu_pending());
+        assert!(!request.take_bwu_pending());
     }
 
     fn introduction_frame(
