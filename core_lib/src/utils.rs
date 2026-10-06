@@ -267,16 +267,18 @@ fn is_virtual_interface(name: &str) -> bool {
 ///
 /// Virtual/tunnel interfaces are intentionally ignored so a VPN, Docker bridge,
 /// or WireGuard-style adapter is not advertised to a nearby Android device.
-pub fn local_lan_ipv4() -> Option<[u8; 4]> {
-    let interfaces = get_if_addrs().ok()?;
+fn select_lan_ipv4<I>(interfaces: I) -> Option<[u8; 4]>
+where
+    I: IntoIterator<Item = (String, std::net::IpAddr)>,
+{
     let mut fallback = None;
 
-    for interface in interfaces {
-        if is_virtual_interface(&interface.name) {
+    for (name, address) in interfaces {
+        if is_virtual_interface(&name) {
             continue;
         }
 
-        let std::net::IpAddr::V4(ip) = interface.ip() else {
+        let std::net::IpAddr::V4(ip) = address else {
             continue;
         };
         if ip.is_loopback() || ip.is_link_local() {
@@ -291,6 +293,15 @@ pub fn local_lan_ipv4() -> Option<[u8; 4]> {
     }
 
     fallback
+}
+
+pub fn local_lan_ipv4() -> Option<[u8; 4]> {
+    let interfaces = get_if_addrs().ok()?;
+    select_lan_ipv4(
+        interfaces
+            .into_iter()
+            .map(|interface| (interface.name, interface.ip())),
+    )
 }
 
 pub fn is_not_self_ip(ip_address: &Ipv4Addr) -> bool {
@@ -412,5 +423,72 @@ mod tests {
                 "{name} should be eligible for LAN selection"
             );
         }
+    }
+
+    #[test]
+    fn virtual_interface_filter_is_case_insensitive() {
+        for name in ["Docker0", "Wg0", "TAILSCALE0", "Warp0"] {
+            assert!(is_virtual_interface(name));
+        }
+    }
+
+    #[test]
+    fn lan_selector_prefers_private_physical_ipv4() {
+        let selected = select_lan_ipv4([
+            (
+                "docker0".to_owned(),
+                "172.17.0.1".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "eth0".to_owned(),
+                "203.0.113.10".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "wlan0".to_owned(),
+                "192.168.1.25".parse::<std::net::IpAddr>().unwrap(),
+            ),
+        ]);
+
+        assert_eq!(selected, Some([192, 168, 1, 25]));
+    }
+
+    #[test]
+    fn lan_selector_uses_first_public_ipv4_as_fallback() {
+        let selected = select_lan_ipv4([
+            (
+                "eth0".to_owned(),
+                "203.0.113.10".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "eth1".to_owned(),
+                "198.51.100.20".parse::<std::net::IpAddr>().unwrap(),
+            ),
+        ]);
+
+        assert_eq!(selected, Some([203, 0, 113, 10]));
+    }
+
+    #[test]
+    fn lan_selector_ignores_ipv6_loopback_link_local_and_tunnels() {
+        let selected = select_lan_ipv4([
+            (
+                "lo".to_owned(),
+                "127.0.0.1".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "eth0".to_owned(),
+                "169.254.10.20".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "wlan0".to_owned(),
+                "2001:db8::1".parse::<std::net::IpAddr>().unwrap(),
+            ),
+            (
+                "wg0".to_owned(),
+                "10.0.0.5".parse::<std::net::IpAddr>().unwrap(),
+            ),
+        ]);
+
+        assert_eq!(selected, None);
     }
 }
