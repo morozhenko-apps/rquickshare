@@ -51,9 +51,14 @@ const pluralize = (n: number, s: string) => n === 1 ? s : `${s}s`;
 			<p class="text-xs font-semibold uppercase tracking-[0.12em] text-muted mb-3">
 				Sending
 			</p>
-			<p class="font-semibold">
-				{{ props.vm.outboundPayload.Files.length }} {{ pluralize(props.vm.outboundPayload.Files.length, "file") }}
-			</p>
+			<template v-if="'Files' in props.vm.outboundPayload">
+				<p class="font-semibold">
+					{{ props.vm.outboundPayload.Files.length }} {{ pluralize(props.vm.outboundPayload.Files.length, "file") }}
+				</p>
+			</template>
+			<template v-else>
+				<p class="font-semibold">Sharing text</p>
+			</template>
 
 			<div class="icon-surface w-24 h-24 rounded-2xl my-4 flex justify-center items-center">
 				<svg
@@ -65,11 +70,18 @@ const pluralize = (n: number, s: string) => n === 1 ? s : `${s}s`;
 				</svg>
 			</div>
 
+			<template v-if="'Files' in props.vm.outboundPayload">
+				<p
+					v-for="f in props.vm.outboundPayload.Files"
+					:key="f"
+					class="overflow-hidden whitespace-nowrap text-ellipsis text-sm">
+					{{ f.split('/').pop() }}
+				</p>
+			</template>
 			<p
-				v-for="f in props.vm.outboundPayload.Files"
-				:key="f"
-				class="overflow-hidden whitespace-nowrap text-ellipsis text-sm">
-				{{ f.split('/').pop() }}
+				v-else
+				class="text-sm text-muted whitespace-pre-wrap break-words line-clamp-6">
+				{{ props.vm.outboundPayload.Text }}
 			</p>
 
 			<p class="text-xs text-muted leading-5 mt-4">
