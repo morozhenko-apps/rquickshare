@@ -221,15 +221,17 @@ pub fn gen_random(size: usize) -> Vec<u8> {
 }
 
 pub fn get_download_dir() -> PathBuf {
-    let cdown = CUSTOM_DOWNLOAD.read();
-    match cdown {
-        Ok(mg) => {
-            if let Some(path) = mg.as_ref() {
+    match CUSTOM_DOWNLOAD.read() {
+        Ok(guard) => {
+            if let Some(path) = guard.as_ref() {
                 return path.to_path_buf();
             }
         }
-        Err(_) => {
-            // TODO: fall back to the user download directory if the lock is poisoned.
+        Err(poisoned) => {
+            warn!("CUSTOM_DOWNLOAD lock is poisoned; recovering the stored path");
+            if let Some(path) = poisoned.into_inner().as_ref() {
+                return path.to_path_buf();
+            }
         }
     }
 
