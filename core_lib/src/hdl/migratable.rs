@@ -77,7 +77,32 @@ mod tests {
         stream.flush().await.unwrap();
 
         let mut outbound = [0_u8; 14];
-        peer.read_exact(&mut outbound).await.unwrap();
+        tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            peer.read_exact(&mut outbound),
+        )
+        .await
+        .expect("write was not forwarded to the underlying BLE stream")
+        .unwrap();
         assert_eq!(&outbound, b"linux-to-phone");
+    }
+
+    #[tokio::test]
+    async fn ble_shutdown_is_forwarded_to_the_underlying_stream() {
+        let (mut peer, transport) = tokio::io::duplex(128);
+        let mut stream = MigratableStream::Ble(transport);
+
+        stream.shutdown().await.unwrap();
+
+        let mut byte = [0_u8; 1];
+        let read = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            peer.read(&mut byte),
+        )
+        .await
+        .expect("shutdown was not forwarded to the underlying BLE stream")
+        .unwrap();
+
+        assert_eq!(read, 0);
     }
 }
