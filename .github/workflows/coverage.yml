@@ -1,5 +1,7 @@
 name: Coverage baseline
 
+# Final Mode B coverage measurement.
+
 # Re-measure after component tests and protocol helper extraction.
 
 on:
