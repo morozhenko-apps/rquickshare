@@ -163,7 +163,6 @@ async fn send_plain_frame_on<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-#[cfg(all(feature = "experimental", target_os = "linux"))]
 fn validate_client_introduction(frame_data: &[u8]) -> Result<String, anyhow::Error> {
     use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
     use location_nearby_connections::v1_frame::FrameType;
@@ -199,6 +198,29 @@ fn validate_client_introduction(frame_data: &[u8]) -> Result<String, anyhow::Err
         .ok_or_else(|| anyhow!("CLIENT_INTRODUCTION has no endpoint id"))?;
 
     Ok(endpoint_id)
+}
+
+/// Inspect a non-consuming TCP peek buffer for a complete bandwidth-upgrade
+/// CLIENT_INTRODUCTION. Returns None for incomplete or ordinary Quick Share
+/// frames so the primary listener can continue with the normal inbound path.
+pub fn peek_client_introduction(buffer: &[u8]) -> Result<Option<String>, anyhow::Error> {
+    if buffer.len() < 4 {
+        return Ok(None);
+    }
+
+    let frame_len = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+    if frame_len == 0 || frame_len > SANE_FRAME_LENGTH as usize {
+        return Ok(None);
+    }
+
+    let total = 4_usize
+        .checked_add(frame_len)
+        .ok_or_else(|| anyhow!("CLIENT_INTRODUCTION frame length overflow"))?;
+    if buffer.len() < total {
+        return Ok(None);
+    }
+
+    Ok(validate_client_introduction(&buffer[4..total]).ok())
 }
 
 #[derive(Debug)]
@@ -1773,34 +1795,46 @@ impl InboundRequest<crate::hdl::MigratableStream> {
     ///
     /// Failure before the transport swap leaves the existing BLE stream intact,
     /// so callers can continue the session on BLE when an upgrade is unavailable.
-    pub async fn do_bandwidth_upgrade(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn do_bandwidth_upgrade(
+        &mut self,
+        router: &crate::hdl::BwuRouter,
+        tcp_port: u16,
+    ) -> Result<(), anyhow::Error> {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
         use location_nearby_connections::v1_frame::FrameType;
 
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await?;
-        let port = listener.local_addr()?.port();
-        self.send_upgrade_path_available(port).await?;
+        let expected_endpoint_id = self
+            .peer_endpoint_id
+            .clone()
+            .ok_or_else(|| anyhow!("BWU session has no peer endpoint id"))?;
+        let socket_receiver = router.register(expected_endpoint_id.clone()).await?;
 
-        let mut tcp = match tokio::time::timeout(Duration::from_secs(15), listener.accept()).await {
-            Ok(Ok((socket, peer))) => {
-                info!("BWU: peer connected over TCP from {peer}");
+        if let Err(error) = self.send_upgrade_path_available(tcp_port).await {
+            router.cancel(&expected_endpoint_id).await;
+            return Err(error);
+        }
+
+        let mut tcp = match tokio::time::timeout(Duration::from_secs(15), socket_receiver).await {
+            Ok(Ok(socket)) => {
+                info!(
+                    "BWU: primary listener routed TCP connection for endpoint {expected_endpoint_id}"
+                );
                 socket
             }
-            Ok(Err(error)) => {
-                return Err(anyhow!("BWU TCP accept failed: {error}"));
+            Ok(Err(_)) => {
+                router.cancel(&expected_endpoint_id).await;
+                return Err(anyhow!("BWU TCP route closed before a socket arrived"));
             }
             Err(_) => {
-                warn!("BWU: no TCP connection within timeout; continuing on BLE");
+                router.cancel(&expected_endpoint_id).await;
+                warn!("BWU: no routed TCP connection within timeout; continuing on BLE");
                 return Ok(());
             }
         };
 
         let introduction = read_plain_frame_from(&mut tcp).await?;
         let endpoint_id = validate_client_introduction(&introduction)?;
-        let expected_endpoint_id = self
-            .peer_endpoint_id
-            .as_deref()
-            .ok_or_else(|| anyhow!("BWU session has no peer endpoint id"))?;
+        let expected_endpoint_id = expected_endpoint_id.as_str();
         if endpoint_id != expected_endpoint_id {
             return Err(anyhow!(
                 "BWU CLIENT_INTRODUCTION endpoint mismatch: expected {expected_endpoint_id}, got {endpoint_id}"
@@ -2008,6 +2042,15 @@ mod security_tests {
             validate_client_introduction(&frame.encode_to_vec()).unwrap(),
             "peer-1234"
         );
+
+        let encoded = frame.encode_to_vec();
+        let mut framed = (encoded.len() as u32).to_be_bytes().to_vec();
+        framed.extend_from_slice(&encoded);
+        assert_eq!(
+            peek_client_introduction(&framed).unwrap().as_deref(),
+            Some("peer-1234")
+        );
+        assert_eq!(peek_client_introduction(&framed[..3]).unwrap(), None);
 
         let mut wrong_event = frame.clone();
         wrong_event
