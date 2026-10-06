@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use bluer::gatt::local::{
-    Application, Characteristic, CharacteristicNotify, CharacteristicNotifyMethod,
-    CharacteristicNotifier, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod,
+    Application, Characteristic, CharacteristicNotifier, CharacteristicNotify,
+    CharacteristicNotifyMethod, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod,
     Service,
 };
 use bluer::{Adapter, Uuid, UuidExt};
@@ -153,9 +153,9 @@ impl ReceiverGattServer {
                                 move |value, _request| {
                                     let packet_sender = packet_sender.clone();
                                     Box::pin(async move {
-                                        packet_sender.send(value).map_err(|_| {
-                                            bluer::gatt::local::ReqError::Failed
-                                        })?;
+                                        packet_sender
+                                            .send(value)
+                                            .map_err(|_| bluer::gatt::local::ReqError::Failed)?;
                                         Ok(())
                                     })
                                 },
@@ -174,9 +174,12 @@ impl ReceiverGattServer {
                                 let channel_sender = channel_sender.clone();
                                 Box::pin(async move {
                                     if let Err(error) =
-                                        weave_session(notifier, packet_receiver, channel_sender).await
+                                        weave_session(notifier, packet_receiver, channel_sender)
+                                            .await
                                     {
-                                        warn!("{INNER_NAME}: weave session ended with error: {error}");
+                                        warn!(
+                                            "{INNER_NAME}: weave session ended with error: {error}"
+                                        );
                                     }
                                 })
                             })),
@@ -417,12 +420,8 @@ mod tests {
     #[test]
     fn rejects_unsupported_or_malformed_connection_requests() {
         assert!(parse_connection_request(&[0x80]).is_err());
-        assert!(
-            parse_connection_request(&[0x80, 0x00, 0x02, 0x00, 0x02, 0x01, 0xfd]).is_err()
-        );
-        assert!(
-            parse_connection_request(&[0x00, 0x00, 0x01, 0x00, 0x01, 0x01, 0xfd]).is_err()
-        );
+        assert!(parse_connection_request(&[0x80, 0x00, 0x02, 0x00, 0x02, 0x01, 0xfd]).is_err());
+        assert!(parse_connection_request(&[0x00, 0x00, 0x01, 0x00, 0x01, 0x01, 0xfd]).is_err());
     }
 
     #[test]
