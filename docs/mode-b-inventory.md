@@ -314,3 +314,138 @@ Estimated additional automated scenarios before hardware smoke: **29-40**. This 
 | Frontend components | settings/status/header/menu flows | High component coverage | OS/plugin/window lifecycle remains smoke/integration territory |
 
 Stages 3-8 are now documented. Test implementation may start from the planned deterministic gaps without waiting for hardware smoke.
+
+
+## Consolidated dev scope extension - Full Quick Share
+
+After PR #3 was integrated into `dev`, the Mode B scope expanded. The following artifacts are mandatory before the final completion gate.
+
+### Stage 3 extension - Test inventory
+
+| Artifact | Risk | Level | Current evidence | Planned delta |
+|---|---|---|---|---|
+| Modern `sharing.nearby` protobuf fields | P1 | Contract | Round-trip tests cover modern introduction fields, QR handshake material, and resume attachment details | Add explicit backward-compatibility decode of legacy/minimal frames and enum/default-field boundaries where generated-code behavior can regress |
+| `classify_outbound_text` | P1 | Unit | URL, phone number, plain text covered | Add case/whitespace boundaries, false-positive phone inputs, short digit strings, address-like text |
+| `prepare_outbound_text` | P0 | Unit | Empty rejection and UTF-8 byte-size preservation covered | Add max/max+1 payload-size boundary, URL payload type, 64-character title truncation, whitespace-only policy |
+| `byte_payload_frames` | P0 | Unit/Contract | Multi-chunk framing, offsets, final marker, reconstruction covered | Add empty body, exact chunk, chunk+1, max/max+1 payload boundaries and sensitive/header invariants |
+| `OutboundPayload::EphemeralFiles` / `OutboundRequest::drop` | P1 | FS integration | Temporary file removed on request drop | Add missing-file idempotence and ensure normal `Files` payload never deletes source files |
+| Tauri `managed_temp_path` | P0 | Unit/Security | Prefix restriction test exists | Add path traversal / sibling path / extension / non-temp-root abuse cases |
+| Tauri `save_clipboard_image` | P1 | Integration/Smoke | No deterministic clipboard backend seam | Package/live smoke with image clipboard; keep backend integration smoke-only unless DI is introduced |
+| Tauri `remove_ephemeral_file` | P0 | Unit/Integration | Prefix guard is shared but command path is not directly covered | Add allowed managed path removal, missing-file idempotence, forbidden path rejection |
+| `ContentStatus.shareClipboard` | P1 | Component | Text success, image fallback, no-content error covered | Add whitespace text + valid image fallback and discovery-already-running for clipboard path |
+| Frontend `clearSending` ephemeral cleanup | P0 | Unit | No direct test found | Add EphemeralFiles cleanup, cleanup failure resilience, normal Files no-delete, state reset invariants |
+| Outbound text consent/send state machine | P0 | Integration | Existing consent tests cover file/empty flows; text helper tests do not prove state-machine integration | Add accepted text sends BYTE payload then Finished+disconnect; cancellation before text send; rejected text follows normal rejection path |
+| Wi-Fi SAE inbound handling | P1 | Unit/Integration | SAE branch added to production parsing | Add SAE password payload regression matching WPA/WEP parsing behavior |
+
+### Stage 4 extension - Branch map
+
+#### Outbound text classification
+1. Trim surrounding whitespace for classification only.
+2. `http://` and `https://`, case-insensitive -> URL.
+3. Phone candidate strips whitespace, `-`, `(`, `)`.
+4. At least seven digits and only digits/optional `+` -> phone number.
+5. Short/invalid phone-like input -> plain text.
+6. Everything else -> plain text.
+
+#### Outbound text preparation
+1. Empty string -> reject.
+2. Non-empty UTF-8 -> preserve original payload bytes.
+3. Payload byte length > protocol maximum -> reject.
+4. URL classification -> `TextPayloadType::Url`; other classifications -> `Text`.
+5. Metadata title uses at most 64 Unicode scalar values.
+6. Metadata size equals byte length, not character count.
+7. Generated payload id is copied consistently into metadata.
+
+#### BYTE payload framing
+1. Body length 0 -> terminal frame only.
+2. 1..256 KiB -> one DATA frame + terminal frame.
+3. Exact 256 KiB -> one DATA frame + terminal frame.
+4. 256 KiB + 1 -> two DATA frames + terminal frame.
+5. Body at protocol max -> accepted.
+6. Body > protocol max -> reject before frame allocation.
+7. Every DATA frame carries same payload id/total size/type.
+8. Offsets are monotonic and exact.
+9. Nonterminal chunks have flags=0.
+10. Final empty chunk has offset=total size and flags=1.
+
+#### Ephemeral outbound cleanup
+1. `EphemeralFiles` -> managed source paths are cleanup candidates.
+2. Normal `Files` -> no cleanup candidates.
+3. Existing ephemeral file -> removed on drop.
+4. Already missing ephemeral file -> no error propagation.
+5. Removal failure -> warn, never panic.
+6. Frontend cancellation/reset also asks Tauri to remove each ephemeral file.
+7. Cleanup-command failure must not prevent discovery/state reset.
+
+#### Clipboard UI
+1. Nonblank clipboard text -> emit Text, ensure discovery.
+2. Blank text -> try image.
+3. Text backend error -> try image.
+4. Image saved -> emit EphemeralFiles, ensure discovery.
+5. Image backend error -> inline error, emit no payload.
+6. Discovery already running -> do not restart it.
+7. Clipboard error is cleared before a new attempt.
+
+#### Managed clipboard-image path
+1. File must live under application temp root.
+2. Filename must match the application-owned PNG prefix.
+3. Sibling/parent traversal or arbitrary temp file -> reject.
+4. Missing managed file removal -> idempotent success.
+5. Existing managed file removal -> delete exactly that file.
+
+### Stage 5 extension - Positive/N1-N12 matrix
+
+| Artifact | Positive | N1 | N2 | N3 | N4 | N5 | N6 | N7 | N8 | N9 | N10 | N11 | N12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Modern protobuf compatibility | C | P | P | NA(pure encode/decode) | C(round-trip) | NA(pure) | P(legacy/missing fields) | P(malformed enum/fields) | NA(no time semantics in scoped fields) | NA(no UI) | P(sensitive flags must preserve semantics) | NA(no billing) | NA(no storage) |
+| Outbound text classification/preparation | C | P | P | NA(pure) | NA(no retry) | NA(pure) | NA(no persisted data) | P(untrusted text input) | NA(no time) | NA(no UI) | P(text must not be logged as secret content) | NA(no billing) | NA(no storage) |
+| BYTE payload framing | C | P | P | NA(pure framing) | P(re-send/idempotent frame construction) | NA(pure) | P(malformed sizes) | P(peer/protocol boundary) | NA(no time) | NA(no UI) | P(sensitive/header invariant) | NA(no billing) | NA(no storage) |
+| Ephemeral file cleanup | C | P | P | NA(no network) | P(double cleanup) | P(drop vs frontend cleanup) | P(missing file) | C(prefix/path ownership boundary) | NA(no time) | C(cancel/reset) | C(do not delete arbitrary user file) | NA(no billing) | P(remove failure/read-only path) |
+| Clipboard UI flow | C | C | NA(no numeric limit) | P(plugin/backend failure) | P(repeated paste) | P(rapid retry) | P(stale clipboard/backend state) | NA(no auth) | NA(no time) | C(error/retry/reset) | P(no clipboard content in logs) | NA(no billing) | P(temp-file failure) |
+| Outbound text state machine | P | P | P | P(peer disconnect) | P(cancel/retry) | P(cancel vs accept) | P(malformed consent) | P(protocol misuse) | NA(no time) | P(cancel) | P(text secrecy/log review) | NA(no billing) | NA(no persistent storage) |
+| Wi-Fi SAE receive | P | P | P | P(truncated transfer) | NA(no retry) | NA(single session parser) | P | P(malformed credentials) | NA(no time) | P(reject/cancel) | P(password must not be logged) | NA(no billing) | NA(no storage) |
+
+### Stage 6 extension - Interaction matrix
+
+9. Clipboard content x backend state x discovery state:
+   - text/image/empty x text-plugin success/failure x image-command success/failure x discovery idle/running.
+   - Exactly one outbound payload may be emitted per user action.
+
+10. Outbound text size x chunk boundary x classification:
+   - plain/URL/phone x 0/1/chunk/chunk+1/max/max+1 bytes.
+   - Classification must not affect byte framing or size validation.
+
+11. Ephemeral ownership x cleanup trigger:
+   - managed/unmanaged path x frontend clear/drop/double cleanup x exists/missing/removal error.
+   - Arbitrary user files must never be deleted.
+
+12. Protocol generation compatibility:
+   - legacy absent fields / modern populated fields x encode/decode.
+   - New optional fields must not change defaults of old peers.
+
+### Stage 7 extension - Coverage estimation
+
+Additional deterministic scenarios for the consolidated Full Quick Share scope:
+
+- text classification/preparation: 6-9 cases;
+- BYTE framing boundaries: 5-7 cases;
+- ephemeral cleanup security/idempotence: 5-7 cases;
+- clipboard component interactions: 2-4 cases beyond existing coverage;
+- outbound text state-machine integration: 3-4 cases;
+- SAE receive regression: 1-2 cases;
+- protobuf backward/default compatibility: 2-4 cases.
+
+Estimated delta: **24-37 scenarios**, preferably table-driven where the branch/rule is identical.
+
+### Stage 8 extension - Coverage map
+
+| Production file | Important functions/branches | Current state | Remaining reason |
+|---|---|---|---|
+| `core_lib/src/proto_src/wire_format.proto` | modern optional fields/enums/default compatibility | Partial contract coverage | Legacy/default-field compatibility and malformed boundaries remain |
+| `core_lib/src/hdl/outbound.rs` | text classification, metadata, BYTE framing, ephemeral cleanup, text consent/send | Partial | Pure helpers covered; state-machine and boundary matrix incomplete |
+| `core_lib/src/hdl/inbound.rs` | SAE credential parsing | Partial | Explicit SAE regression missing |
+| `app/main/src-tauri/src/cmds/clipboard_image.rs` | path ownership, image save, removal | Partial | Path abuse/removal branches deterministic; clipboard backend smoke-bound |
+| `app/main/src/composables/ContentStatus.vue` | clipboard text/image/error/discovery interaction | Good | Blank-text image fallback + already-running interaction remain |
+| `app/main/src/vue_lib/utils.ts` | ephemeral cleanup during clear/reset | Missing direct coverage | Deterministic unit seam already exists through VM invoke contract |
+
+The final Mode B gate must use this extension together with the original Stage 3-8 inventory. Hardware smoke does not replace these deterministic cases.
