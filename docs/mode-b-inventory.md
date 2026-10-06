@@ -470,3 +470,14 @@ Next deterministic/live checks:
 4. Fix local received-destination opening through a backend-only command that computes the configured/default download directory itself; do not accept an arbitrary filesystem path from the frontend.
 5. Re-run Pixel -> Linux text and repeated Pixel -> Linux file receive without restarting the application.
 
+### Follow-up smoke evidence
+
+A later Pixel -> Linux text attempt reached the receiver successfully and exposed a separate state-machine bug:
+
+- The text `IntroductionFrame` is decoded and the UI is moved to `WaitingForUserConsent`.
+- Before the user clicks Accept, the peer sends another completed BYTES payload with a different payload ID. The current receiver sees `text_payload.is_some()` and incorrectly assumes every completed BYTES payload is the announced text body, then terminates the BLE session with `Unexpected text payload id`.
+- Reference Quick Share receiver behavior (NearDrop) first matches the completed BYTES payload ID against the announced text payload ID; non-matching BYTES payloads continue through the transfer-setup frame decoder. rQuickShare must preserve that distinction.
+- The frontend currently remains in `WaitingForUserConsent` after this GATT session error, so subsequent Accept clicks are sent into a dead session. GATT inbound failures must surface `Disconnected` to the frontend.
+
+The same run also proved the Wi-Fi BWU reachability failure is host-firewall related on the smoke machine: UFW is active with default incoming deny, while rQuickShare is listening on a random high TCP port (40119 in the retest; 42971 in the earlier run). No rQuickShare rule is present. For the current smoke, use the existing fixed-port setting plus an explicit UFW rule; do not change the user's firewall automatically from the application.
+
