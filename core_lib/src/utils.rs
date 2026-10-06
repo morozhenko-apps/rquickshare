@@ -244,6 +244,44 @@ pub fn get_download_dir() -> PathBuf {
     Path::new("/").to_path_buf()
 }
 
+
+fn is_virtual_interface(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    ["docker", "veth", "br-", "virbr", "tun", "tap", "wg", "tailscale", "warp"]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+}
+
+/// Pick a LAN IPv4 suitable for advertising a Wi-Fi bandwidth-upgrade endpoint.
+///
+/// Virtual/tunnel interfaces are intentionally ignored so a VPN, Docker bridge,
+/// or WireGuard-style adapter is not advertised to a nearby Android device.
+pub fn local_lan_ipv4() -> Option<[u8; 4]> {
+    let interfaces = get_if_addrs().ok()?;
+    let mut fallback = None;
+
+    for interface in interfaces {
+        if is_virtual_interface(&interface.name) {
+            continue;
+        }
+
+        let std::net::IpAddr::V4(ip) = interface.ip() else {
+            continue;
+        };
+        if ip.is_loopback() || ip.is_link_local() {
+            continue;
+        }
+
+        if ip.is_private() {
+            return Some(ip.octets());
+        }
+
+        fallback.get_or_insert(ip.octets());
+    }
+
+    fallback
+}
+
 pub fn is_not_self_ip(ip_address: &Ipv4Addr) -> bool {
     if let Ok(if_addrs) = get_if_addrs() {
         for if_addr in if_addrs {
@@ -336,5 +374,16 @@ mod tests {
         assert!(normalize_p256_coordinate(&[]).is_err());
         assert!(normalize_p256_coordinate(&[1_u8; 33]).is_err());
         assert!(normalize_p256_coordinate(&[0_u8; 34]).is_err());
+    }
+
+    #[test]
+    fn virtual_interface_filter_rejects_tunnels() {
+        for name in ["docker0", "veth1234", "br-abcd", "virbr0", "tun0", "tap0", "wg0", "tailscale0", "warp0"] {
+            assert!(is_virtual_interface(name), "{name} should be treated as virtual");
+        }
+
+        for name in ["wlan0", "wlp3s0", "eth0", "enp4s0"] {
+            assert!(!is_virtual_interface(name), "{name} should be eligible for LAN selection");
+        }
     }
 }
