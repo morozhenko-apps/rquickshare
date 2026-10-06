@@ -1,13 +1,7 @@
 name: Mode B validation
 
-# Pre-smoke rerun after BWU mutation regression fixes.
-
 on:
   push:
-    branches:
-      - "feat/pixel-ble-receiver"
-    paths:
-      - ".github/workflows/mode-b.yml"
     tags:
       - "mode-b-*"
   workflow_dispatch:
