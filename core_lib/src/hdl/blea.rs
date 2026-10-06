@@ -230,8 +230,20 @@ impl ReceiverAdvertiser {
                     max_interval: Some(std::time::Duration::from_millis(150)),
                     ..Default::default()
                 };
-                handle = Some(self.adapter.advertise(advertisement).await?);
-                info!("{RX_INNER_NAME}: started advertising");
+                match self.adapter.advertise(advertisement).await {
+                    Ok(advertisement_handle) => {
+                        handle = Some(advertisement_handle);
+                        info!("{RX_INNER_NAME}: started advertising");
+                    }
+                    Err(error) => {
+                        warn!("{RX_INNER_NAME}: advertise failed ({error}); retrying");
+                        tokio::select! {
+                            _ = ctk.cancelled() => break,
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {}
+                        }
+                        continue;
+                    }
+                }
             } else if !BleAdvertiser::should_advertise(visibility) && handle.take().is_some() {
                 info!("{RX_INNER_NAME}: stopped advertising");
             }
