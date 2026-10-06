@@ -170,3 +170,58 @@ The maintenance pass is complete only when all of the following are true:
 8. Linux -> Android send path succeeds.
 9. No unresolved high-severity security/reliability finding remains in the audit.
 10. `dev` can be fast-forwarded to `master` without merge noise.
+
+## Refactoring audit
+
+Refactoring is required, but the work is split by risk.
+
+### Do after real-device smoke, before long-term maintenance work
+
+1. **Extract a shared secure-session layer from inbound/outbound.**
+   - `core_lib/src/hdl/inbound.rs` is about 2,059 lines.
+   - `core_lib/src/hdl/outbound.rs` is about 1,403 lines.
+   - Both implement parallel UKEY2 / D2D crypto responsibilities: key exchange finalization, encrypted frame send/decrypt, HMAC handling, sequence counters, keepalive and frame I/O.
+   - This duplication makes protocol/security fixes easy to apply on one direction and miss on the other.
+   - Recommended target: a shared `SecureSession`/crypto transport helper that owns derived keys, sequence counters, secure-message encode/decode and common frame I/O.
+   - **Do not perform this extraction before Pixel smoke** because it touches the most sensitive protocol path.
+
+2. **Split inbound state-machine responsibilities.**
+   - `process_offline_frame` is roughly 250 lines.
+   - `process_introduction` is roughly 200 lines.
+   - `do_bandwidth_upgrade` is roughly 130 lines.
+   - The current module combines connection negotiation, UKEY2, secure framing, consent, payload validation, filesystem output and bandwidth upgrade.
+   - Recommended split after smoke: `secure_session.rs`, `inbound_transfer.rs`, `bwu.rs`/routing helpers, keeping one explicit state-machine coordinator.
+
+3. **Split outbound transfer construction from secure transport.**
+   - `process_consent` is roughly 230 lines and mixes consent state, file metadata, file I/O and payload transmission.
+   - Text sending remains TODO in two outbound locations.
+   - Recommended split: transfer plan/payload source abstraction separate from crypto/channel transport.
+
+### Medium-priority cleanup
+
+4. **Break up GATT session orchestration.**
+   - `gatt.rs` is roughly 492 lines; `weave_session` alone is about 227 lines.
+   - Separate framing/reassembly, connection handshake and duplex bridge lifecycle once the Pixel path is proven on hardware.
+   - Keep the current bounded queue, disconnect handling and BLE->TCP migration invariants covered during any extraction.
+
+5. **Separate utility domains.**
+   - `utils.rs` currently mixes mDNS encoding, P-256 normalization, HKDF, random generation, download-directory lookup and LAN interface selection.
+   - Recommended modules: `mdns_codec`, `crypto_utils`, `network_utils`, `filesystem_utils`.
+   - This is maintainability work, not a release blocker.
+
+6. **Split desktop orchestration from UI rendering.**
+   - `HomePage.vue` is roughly 382 lines and renders the complete device/transfer state card inline.
+   - Recommended component extraction: `TransferCard.vue` / `DeviceCard.vue`, leaving event/state orchestration in the page.
+   - `app/main/src-tauri/src/main.rs` is roughly 387 lines; tray/window lifecycle and receiver-task wiring can become separate modules later.
+   - These are UX/maintainability improvements, not protocol blockers.
+
+### Low-risk refactoring already completed
+
+- Shared frame/payload size limits and validation were moved out of inbound/outbound into `core_lib/src/protocol.rs`.
+- Duplicate payload-size regression tests were collapsed into one shared test.
+- BWU routing already has its own `BwuRouter` module instead of remaining embedded in the inbound state machine.
+- BLE/TCP transport switching already has a small `MigratableStream` abstraction.
+
+### Refactoring rule for this maintenance pass
+
+No broad architectural refactor should be merged solely to improve style before real Pixel smoke. Before the smoke test, only pure helpers, duplicated validation, tests and isolated infrastructure may be extracted. Protocol state-machine refactoring starts only after the current behavior is proven end-to-end.
