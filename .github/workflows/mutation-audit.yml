@@ -1,5 +1,7 @@
 name: Targeted mutation audit
 
+# Re-run after mutation-driven regression tests.
+
 on:
   push:
     branches: [ "feat/pixel-ble-receiver" ]
