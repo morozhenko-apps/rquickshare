@@ -130,6 +130,77 @@ fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
     Ok(password.to_owned())
 }
 
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+async fn read_plain_frame_from<R: AsyncRead + Unpin>(
+    stream: &mut R,
+) -> Result<Vec<u8>, anyhow::Error> {
+    let mut length = [0_u8; 4];
+    stream_read_exact(stream, &mut length).await?;
+    let frame_len = u32::from_be_bytes(length) as usize;
+    if frame_len == 0 || frame_len > SANE_FRAME_LENGTH as usize {
+        return Err(anyhow!("Invalid plaintext frame length: {frame_len}"));
+    }
+
+    let mut frame = vec![0_u8; frame_len];
+    stream_read_exact(stream, &mut frame).await?;
+    Ok(frame)
+}
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+async fn send_plain_frame_on<W: AsyncWrite + Unpin>(
+    stream: &mut W,
+    data: &[u8],
+) -> Result<(), anyhow::Error> {
+    let frame_len =
+        u32::try_from(data.len()).map_err(|_| anyhow!("Plaintext frame is too large"))?;
+    if data.is_empty() || data.len() > SANE_FRAME_LENGTH as usize {
+        return Err(anyhow!("Invalid plaintext frame length: {}", data.len()));
+    }
+
+    stream.write_all(&frame_len.to_be_bytes()).await?;
+    stream.write_all(data).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+fn validate_client_introduction(frame_data: &[u8]) -> Result<String, anyhow::Error> {
+    use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
+    use location_nearby_connections::v1_frame::FrameType;
+
+    let frame = OfflineFrame::decode(frame_data)?;
+    let v1 = frame
+        .v1
+        .as_ref()
+        .ok_or_else(|| anyhow!("Bandwidth-upgrade introduction has no v1 frame"))?;
+    if v1.r#type() != FrameType::BandwidthUpgradeNegotiation {
+        return Err(anyhow!(
+            "Expected bandwidth-upgrade introduction, got {:?}",
+            v1.r#type()
+        ));
+    }
+
+    let negotiation = v1
+        .bandwidth_upgrade_negotiation
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing bandwidth-upgrade negotiation payload"))?;
+    if negotiation.event_type() != EventType::ClientIntroduction {
+        return Err(anyhow!(
+            "Expected CLIENT_INTRODUCTION, got {:?}",
+            negotiation.event_type()
+        ));
+    }
+
+    let endpoint_id = negotiation
+        .client_introduction
+        .as_ref()
+        .map(|introduction| introduction.endpoint_id().to_owned())
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| anyhow!("CLIENT_INTRODUCTION has no endpoint id"))?;
+
+    Ok(endpoint_id)
+}
+
 #[derive(Debug)]
 pub struct InboundRequest<S = TcpStream> {
     socket: S,
