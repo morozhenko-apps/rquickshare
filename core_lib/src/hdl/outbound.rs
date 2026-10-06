@@ -58,6 +58,96 @@ fn is_cancel_request(message: &ChannelMessage, transfer_id: &str) -> bool {
         && message.action == Some(ChannelAction::CancelTransfer)
 }
 
+fn prepare_outbound_files(
+    files: &[String],
+) -> Result<(Vec<FileMetadata>, HashMap<i64, InternalFileInfo>, u64), anyhow::Error> {
+    let mut file_metadata = Vec::with_capacity(files.len());
+    let mut transferred_files = HashMap::new();
+    let mut total_to_send = 0_u64;
+
+    for file_path in files {
+        let path = Path::new(file_path);
+        if !path.is_file() {
+            warn!("Path is not a file: {file_path}");
+            continue;
+        }
+
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) => {
+                error!("Failed to open file: {file_path}: {error:?}");
+                continue;
+            }
+        };
+        let metadata = match file.metadata() {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                error!("Failed to get metadata for: {file_path}: {error:?}");
+                continue;
+            }
+        };
+
+        let mime_type = mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string();
+        let attachment_type = if mime_type.starts_with("image/") {
+            file_metadata::Type::Image
+        } else if mime_type.starts_with("video/") {
+            file_metadata::Type::Video
+        } else if mime_type.starts_with("audio/") {
+            file_metadata::Type::Audio
+        } else if path.extension().is_some_and(|extension| extension == "apk") {
+            file_metadata::Type::App
+        } else {
+            file_metadata::Type::Unknown
+        };
+
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| anyhow!("Failed to get file_name for {file_path}"))?
+            .to_str()
+            .ok_or_else(|| anyhow!("File name is not valid UTF-8: {file_path}"))?
+            .to_owned();
+
+        let payload_id = loop {
+            let candidate = rand::rng().random::<i64>();
+            if !transferred_files.contains_key(&candidate) {
+                break candidate;
+            }
+        };
+
+        let file_size = i64::try_from(metadata.size())
+            .map_err(|_| anyhow!("File is too large to represent in the protocol: {file_path}"))?;
+
+        let protocol_metadata = FileMetadata {
+            payload_id: Some(payload_id),
+            name: Some(file_name),
+            size: Some(file_size),
+            mime_type: Some(mime_type),
+            r#type: Some(attachment_type.into()),
+            ..Default::default()
+        };
+
+        transferred_files.insert(
+            payload_id,
+            InternalFileInfo {
+                payload_id,
+                file_url: path.to_path_buf(),
+                bytes_transferred: 0,
+                total_size: file_size,
+                file: Some(file),
+            },
+        );
+        file_metadata.push(protocol_metadata);
+
+        total_to_send = total_to_send
+            .checked_add(metadata.size())
+            .ok_or_else(|| anyhow!("Total outbound transfer size overflow"))?;
+    }
+
+    Ok((file_metadata, transferred_files, total_to_send))
+}
+
 #[derive(Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub enum OutboundPayload {
@@ -690,92 +780,10 @@ impl OutboundRequest {
             return Err(anyhow!("Missing required fields"));
         }
 
-        let mut file_metadata: Vec<FileMetadata> = vec![];
-        let mut transferred_files: HashMap<i64, InternalFileInfo> = HashMap::new();
-        let mut total_to_send: u64 = 0;
         // TODO - Handle sending Text
-        match &self.payload {
-            OutboundPayload::Files(files) => {
-                for f in files {
-                    let path = Path::new(f);
-                    if !path.is_file() {
-                        warn!("Path is not a file: {}", f);
-                        continue;
-                    }
-
-                    let file = match File::open(f) {
-                        Ok(_f) => _f,
-                        Err(e) => {
-                            error!("Failed to open file: {f}: {:?}", e);
-                            continue;
-                        }
-                    };
-                    let fmetadata = match file.metadata() {
-                        Ok(_fm) => _fm,
-                        Err(e) => {
-                            error!("Failed to get metadata for: {f}: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    let ftype = mime_guess::from_path(path)
-                        .first_or_octet_stream()
-                        .to_string();
-
-                    let meta_type = if ftype.starts_with("image/") {
-                        file_metadata::Type::Image
-                    } else if ftype.starts_with("video/") {
-                        file_metadata::Type::Video
-                    } else if ftype.starts_with("audio/") {
-                        file_metadata::Type::Audio
-                    } else if path.extension().unwrap_or_default() == "apk" {
-                        file_metadata::Type::App
-                    } else {
-                        file_metadata::Type::Unknown
-                    };
-
-                    info!("File type to send: {}", ftype);
-                    let fname = path
-                        .file_name()
-                        .ok_or_else(|| anyhow!("Failed to get file_name for {f}"))?;
-                    let payload_id = loop {
-                        let candidate = rand::rng().random::<i64>();
-                        if !transferred_files.contains_key(&candidate) {
-                            break candidate;
-                        }
-                    };
-                    let file_size = i64::try_from(fmetadata.size()).map_err(|_| {
-                        anyhow!("File is too large to represent in the protocol: {f}")
-                    })?;
-                    let file_name = fname
-                        .to_str()
-                        .ok_or_else(|| anyhow!("File name is not valid UTF-8: {f}"))?
-                        .to_owned();
-                    let fmeta = FileMetadata {
-                        payload_id: Some(payload_id),
-                        name: Some(file_name),
-                        size: Some(file_size),
-                        mime_type: Some(ftype),
-                        r#type: Some(meta_type.into()),
-                        ..Default::default()
-                    };
-                    transferred_files.insert(
-                        fmeta.payload_id(),
-                        InternalFileInfo {
-                            payload_id: fmeta.payload_id(),
-                            file_url: path.to_path_buf(),
-                            bytes_transferred: 0,
-                            total_size: fmeta.size(),
-                            file: Some(file),
-                        },
-                    );
-                    file_metadata.push(fmeta);
-                    total_to_send = total_to_send
-                        .checked_add(fmetadata.size())
-                        .ok_or_else(|| anyhow!("Total outbound transfer size overflow"))?;
-                }
-            }
-        }
+        let (file_metadata, transferred_files, total_to_send) = match &self.payload {
+            OutboundPayload::Files(files) => prepare_outbound_files(files)?,
+        };
 
         self.update_state(
             |e| {
