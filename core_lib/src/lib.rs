@@ -128,12 +128,16 @@ impl RQS {
 
         // MPSC for the TcpServer
         let send_channel = mpsc::channel(10);
-        // Start TcpServer in own "task"
+        let bwu_router = crate::hdl::BwuRouter::new();
+
+        // Start TcpServer in own "task". The same listener also accepts
+        // Wi-Fi bandwidth-upgrade sockets routed from active BLE sessions.
         let mut server = TcpServer::new(
             endpoint_id[..4].try_into()?,
             tcp_listener,
             self.message_sender.clone(),
             send_channel.1,
+            bwu_router.clone(),
         )?;
         let ctk = ctoken.clone();
         tracker.spawn(async move { server.run(ctk).await });
@@ -201,8 +205,17 @@ impl RQS {
 
             let gatt_ctk = ctoken.clone();
             let gatt_sender = self.message_sender.clone();
+            let gatt_bwu_router = bwu_router.clone();
+            let gatt_tcp_port = binded_addr.port();
             tracker.spawn(async move {
-                match ReceiverGattServer::new(receiver_advertisement, gatt_sender).await {
+                match ReceiverGattServer::new(
+                    receiver_advertisement,
+                    gatt_sender,
+                    gatt_tcp_port,
+                    gatt_bwu_router,
+                )
+                .await
+                {
                     Ok(server) => {
                         if let Err(error) = server.run(gatt_ctk).await {
                             error!("ReceiverGattServer stopped with error: {error}");
