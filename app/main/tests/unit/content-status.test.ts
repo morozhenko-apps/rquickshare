@@ -101,6 +101,35 @@ describe('ContentStatus', () => {
 		expect(invoke).toHaveBeenCalledWith('start_discovery');
 	});
 
+
+	test('uses image fallback for blank text without restarting active discovery', async () => {
+		readTextMock.mockResolvedValueOnce('   ');
+		const invoke = vi.fn(async (command: string) => {
+			if (command === 'save_clipboard_image') {
+				return '/tmp/rquickshare-clipboard-1-2-0.png';
+			}
+			return undefined;
+		});
+		const wrapper = mount(ContentStatus, {
+			props: {
+				vm: vm({ invoke, discoveryRunning: true }),
+			},
+		});
+
+		const clipboardButton = wrapper.findAll('button').find((button) =>
+			button.text().includes('Paste clipboard'),
+		)!;
+		await clipboardButton.trigger('click');
+		await flushPromises();
+
+		expect(wrapper.emitted('outboundPayload')).toEqual([
+			[{ EphemeralFiles: ['/tmp/rquickshare-clipboard-1-2-0.png'] }],
+		]);
+		expect(invoke).toHaveBeenCalledWith('save_clipboard_image');
+		expect(invoke).not.toHaveBeenCalledWith('start_discovery');
+		expect(wrapper.emitted('discoveryRunning')).toHaveLength(1);
+	});
+
 	test('shows an inline error when clipboard has no shareable content', async () => {
 		readTextMock.mockResolvedValueOnce('   ');
 		const invoke = vi.fn(async (command: string) => {
