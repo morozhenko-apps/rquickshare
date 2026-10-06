@@ -285,8 +285,18 @@ async fn weave_session(
     let mut send_counter: u8 = 1;
     let mut read_buffer = [0_u8; 2048];
 
+    // A peer can disappear without sending a final weave control packet. Observe
+    // the GATT subscription lifecycle explicitly so the session mutex is released
+    // and a later transfer can start without restarting the application.
+    let notification_stopped = notifier.stopped();
+    tokio::pin!(notification_stopped);
+
     let result = loop {
         tokio::select! {
+            _ = &mut notification_stopped => {
+                debug!("{INNER_NAME}: peer stopped GATT notifications");
+                break Ok(());
+            }
             maybe_packet = receiver.recv() => {
                 let Some(packet) = maybe_packet else {
                     break Ok(());
