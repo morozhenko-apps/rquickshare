@@ -292,6 +292,7 @@ fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, any
 #[ts(export)]
 pub enum OutboundPayload {
     Files(Vec<String>),
+    EphemeralFiles(Vec<String>),
     Text(String),
 }
 
@@ -304,6 +305,22 @@ pub struct OutboundRequest {
     receiver: Receiver<ChannelMessage>,
     payload: OutboundPayload,
     text_payload_id: Option<i64>,
+    cleanup_paths: Vec<std::path::PathBuf>,
+}
+
+impl Drop for OutboundRequest {
+    fn drop(&mut self) {
+        for path in self.cleanup_paths.drain(..) {
+            match std::fs::remove_file(&path) {
+                Ok(()) => debug!("Removed ephemeral outbound file: {}", path.display()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => warn!(
+                    "Could not remove ephemeral outbound file {}: {error}",
+                    path.display()
+                ),
+            }
+        }
+    }
 }
 
 impl OutboundRequest {
@@ -316,9 +333,14 @@ impl OutboundRequest {
         rdi: RemoteDeviceInfo,
     ) -> Self {
         let receiver = sender.subscribe();
-        let (files, text_payload) = match &payload {
-            OutboundPayload::Files(files) => (Some(files.clone()), None),
-            OutboundPayload::Text(text) => (None, Some(text.clone())),
+        let (files, text_payload, cleanup_paths) = match &payload {
+            OutboundPayload::Files(files) => (Some(files.clone()), None, Vec::new()),
+            OutboundPayload::EphemeralFiles(files) => (
+                Some(files.clone()),
+                None,
+                files.iter().map(std::path::PathBuf::from).collect(),
+            ),
+            OutboundPayload::Text(text) => (None, Some(text.clone()), Vec::new()),
         };
 
         Self {
@@ -343,6 +365,7 @@ impl OutboundRequest {
             receiver,
             payload,
             text_payload_id: None,
+            cleanup_paths,
         }
     }
 
@@ -928,7 +951,7 @@ impl OutboundRequest {
         }
 
         let introduction = match &self.payload {
-            OutboundPayload::Files(files) => {
+            OutboundPayload::Files(files) | OutboundPayload::EphemeralFiles(files) => {
                 let PreparedOutboundFiles {
                     metadata: file_metadata,
                     files: transferred_files,
@@ -1734,6 +1757,41 @@ mod security_tests {
         assert_eq!(final_chunk.offset(), body.len() as i64);
         assert_eq!(final_chunk.flags(), 1);
         assert!(final_chunk.body().is_empty());
+    }
+
+    #[tokio::test]
+    async fn ephemeral_files_are_removed_when_request_is_dropped() {
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-ephemeral-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let image = root.join("clipboard.png");
+        std::fs::write(&image, [1_u8, 2, 3, 4]).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _peer = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
+        let (sender, _receiver) = tokio::sync::broadcast::channel(16);
+
+        let request = OutboundRequest::new(
+            [1, 2, 3, 4],
+            socket,
+            "ephemeral-transfer".to_owned(),
+            sender,
+            OutboundPayload::EphemeralFiles(vec![image.to_string_lossy().into_owned()]),
+            RemoteDeviceInfo {
+                name: "Test phone".to_owned(),
+                device_type: DeviceType::Phone,
+            },
+        );
+
+        assert!(image.exists());
+        drop(request);
+        assert!(!image.exists());
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     async fn test_request(files: Vec<String>) -> (OutboundRequest, tokio::net::TcpStream) {
