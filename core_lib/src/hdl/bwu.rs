@@ -96,4 +96,66 @@ mod tests {
 
         assert!(router.register("peer-1234".to_owned()).await.is_ok());
     }
+    #[tokio::test]
+    async fn empty_endpoint_registration_is_rejected() {
+        let router = BwuRouter::new();
+
+        assert!(router.register(String::new()).await.is_err());
+        assert!(!router.has_pending().await);
+    }
+
+    #[tokio::test]
+    async fn routing_unknown_endpoint_returns_socket() {
+        let router = BwuRouter::new();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        assert!(router.route("missing-peer", server).await.is_err());
+        assert!(!router.has_pending().await);
+    }
+
+    #[tokio::test]
+    async fn dropped_route_receiver_returns_socket_and_consumes_registration() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-dropped".to_owned()).await.unwrap();
+        drop(receiver);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        assert!(router.route("peer-dropped", server).await.is_err());
+        assert!(!router.has_pending().await);
+    }
+
+    #[tokio::test]
+    async fn concurrent_duplicate_registration_allows_only_one_owner() {
+        let router = BwuRouter::new();
+        let first_router = router.clone();
+        let second_router = router.clone();
+
+        let (first, second) = tokio::join!(
+            first_router.register("peer-race".to_owned()),
+            second_router.register("peer-race".to_owned())
+        );
+
+        assert_ne!(first.is_ok(), second.is_ok());
+        assert!(router.has_pending().await);
+        router.cancel("peer-race").await;
+        assert!(!router.has_pending().await);
+    }
+
+    #[tokio::test]
+    async fn cancelling_unknown_endpoint_is_idempotent() {
+        let router = BwuRouter::new();
+
+        router.cancel("missing-peer").await;
+        router.cancel("missing-peer").await;
+
+        assert!(!router.has_pending().await);
+    }
+
 }
