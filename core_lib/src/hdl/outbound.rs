@@ -1982,8 +1982,7 @@ mod security_tests {
         std::fs::write(root.join("public.txt"), [1_u8]).unwrap();
         symlink(&outside, root.join("linked-secret.txt")).unwrap();
 
-        let prepared =
-            prepare_outbound_files(&[root.to_string_lossy().into_owned()]).unwrap();
+        let prepared = prepare_outbound_files(&[root.to_string_lossy().into_owned()]).unwrap();
 
         assert_eq!(prepared.metadata.len(), 1);
         assert_eq!(prepared.metadata[0].name(), "public.txt");
