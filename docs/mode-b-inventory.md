@@ -328,7 +328,7 @@ After PR #3 was integrated into `dev`, the Mode B scope expanded. The following 
 | `classify_outbound_text` | P1 | Unit | URL, phone number, plain text covered | Add case/whitespace boundaries, false-positive phone inputs, short digit strings, address-like text |
 | `prepare_outbound_text` | P0 | Unit | Empty rejection and UTF-8 byte-size preservation covered | Add max/max+1 payload-size boundary, URL payload type, 64-character title truncation, whitespace-only policy |
 | `byte_payload_frames` | P0 | Unit/Contract | Multi-chunk framing, offsets, final marker, reconstruction covered | Add empty body, exact chunk, chunk+1, max/max+1 payload boundaries and sensitive/header invariants |
-| `OutboundPayload::EphemeralFiles` / `OutboundRequest::drop` | P1 | FS integration | Temporary file removed on request drop | Add missing-file idempotence and ensure normal `Files` payload never deletes source files |
+| `ManagedEphemeralFile` / `OutboundPayload::EphemeralFiles` | P0 | Unit/FS integration | Security defect identified: raw strings previously acquired deletion capability | Add constructor path-boundary abuse cases, missing-file idempotence, verified cleanup, and ensure normal `Files` payload never deletes source files |
 | Tauri `managed_temp_path` | P0 | Unit/Security | Prefix restriction test exists | Add path traversal / sibling path / extension / non-temp-root abuse cases |
 | Tauri `save_clipboard_image` | P1 | Integration/Smoke | No deterministic clipboard backend seam | Package/live smoke with image clipboard; keep backend integration smoke-only unless DI is introduced |
 | Tauri `remove_ephemeral_file` | P0 | Unit/Integration | Prefix guard is shared but command path is not directly covered | Add allowed managed path removal, missing-file idempotence, forbidden path rejection |
@@ -369,13 +369,15 @@ After PR #3 was integrated into `dev`, the Mode B scope expanded. The following 
 10. Final empty chunk has offset=total size and flags=1.
 
 #### Ephemeral outbound cleanup
-1. `EphemeralFiles` -> managed source paths are cleanup candidates.
-2. Normal `Files` -> no cleanup candidates.
-3. Existing ephemeral file -> removed on drop.
-4. Already missing ephemeral file -> no error propagation.
-5. Removal failure -> warn, never panic.
-6. Frontend cancellation/reset also asks Tauri to remove each ephemeral file.
-7. Cleanup-command failure must not prevent discovery/state reset.
+1. Raw `EphemeralFiles` strings have no deletion authority.
+2. Each raw path must pass `ManagedEphemeralFile` validation before `OutboundRequest` construction succeeds.
+3. Only a direct child of the system temp directory with the application-owned `rquickshare-clipboard-*.png` name may become managed.
+4. Normal `Files` never acquire deletion authority.
+5. Existing managed ephemeral file -> removed on drop or explicit cleanup.
+6. Already missing managed file -> idempotent success.
+7. Traversal, sibling, wrong-prefix, wrong-extension and ordinary user paths -> reject.
+8. Removal failure -> warn/error without panic and without broadening the allowed boundary.
+9. Frontend cancellation/reset asks Tauri to remove only managed ephemeral files; Tauri delegates the same core validation instead of duplicating policy.
 
 #### Clipboard UI
 1. Nonblank clipboard text -> emit Text, ensure discovery.
