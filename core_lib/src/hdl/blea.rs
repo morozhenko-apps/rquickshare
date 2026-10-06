@@ -121,7 +121,9 @@ mod tests {
 
         assert_eq!(data[0], 0x48);
         assert_eq!(&data[1..4], &QS_SVC_HASH);
-        assert!(data.windows(endpoint.len()).any(|window| window == endpoint));
+        assert!(data
+            .windows(endpoint.len())
+            .any(|window| window == endpoint));
         assert!(data
             .windows("Alcotester".len())
             .any(|window| window == b"Alcotester"));
@@ -136,7 +138,6 @@ mod tests {
         assert!(!data.windows(256).any(|window| window == vec![b'x'; 256]));
     }
 }
-
 
 // Quick Share receiver discovery over BLE (service UUID 0xFEF3).
 const RX_INNER_NAME: &str = "ReceiverAdvertiser";
