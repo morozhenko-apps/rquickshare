@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::os::unix::fs::FileExt;
 use std::path::{Component, Path};
@@ -49,25 +49,35 @@ use crate::{location_nearby_connections, sharing_nearby};
 type HmacSha256 = Hmac<Sha256>;
 
 const MAX_RECEIVED_FILENAME_BYTES: usize = 255;
+const MAX_RECEIVED_PARENT_FOLDER_BYTES: usize = 4096;
+const MAX_RECEIVED_FOLDER_DEPTH: usize = 64;
 
-fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
-    if name.is_empty() {
-        return Err(anyhow!("Received file name is empty"));
+fn validate_received_path_component(value: &str, kind: &str) -> Result<(), anyhow::Error> {
+    if value.is_empty() {
+        return Err(anyhow!("Received {kind} is empty"));
     }
 
-    if name.len() > MAX_RECEIVED_FILENAME_BYTES {
+    if value.len() > MAX_RECEIVED_FILENAME_BYTES {
         return Err(anyhow!(
-            "Received file name is too long: {} bytes",
-            name.len()
+            "Received {kind} is too long: {} bytes",
+            value.len()
         ));
     }
 
-    if name
-        .chars()
-        .any(|c| c == '/' || c == '\\' || c == '\0' || c.is_control())
+    if value == "."
+        || value == ".."
+        || value
+            .chars()
+            .any(|c| c == '/' || c == '\\' || c == '\0' || c.is_control())
     {
-        return Err(anyhow!("Received file name contains unsafe characters"));
+        return Err(anyhow!("Received {kind} contains unsafe characters"));
     }
+
+    Ok(())
+}
+
+fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
+    validate_received_path_component(name, "file name")?;
 
     let mut components = Path::new(name).components();
     match (components.next(), components.next()) {
@@ -78,20 +88,96 @@ fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
     }
 }
 
+fn normalize_received_parent_folder(value: &str) -> Result<Vec<String>, anyhow::Error> {
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if value.len() > MAX_RECEIVED_PARENT_FOLDER_BYTES {
+        return Err(anyhow!(
+            "Received parent folder is too long: {} bytes",
+            value.len()
+        ));
+    }
+
+    let segments = value
+        .split(['/', '\\'])
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+
+    if segments.len() > MAX_RECEIVED_FOLDER_DEPTH {
+        return Err(anyhow!(
+            "Received parent folder exceeds maximum depth of {MAX_RECEIVED_FOLDER_DEPTH}"
+        ));
+    }
+
+    for segment in &segments {
+        validate_received_path_component(segment, "folder component")?;
+    }
+
+    Ok(segments)
+}
+
+fn path_is_occupied(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok()
+}
+
+fn unique_child_path(
+    parent: &Path,
+    name: &str,
+    reserved: &HashSet<std::path::PathBuf>,
+) -> Result<std::path::PathBuf, anyhow::Error> {
+    let direct = parent.join(name);
+    if !path_is_occupied(&direct) && !reserved.contains(&direct) {
+        return Ok(direct);
+    }
+
+    let mut counter = 1_u64;
+    loop {
+        let candidate = parent.join(format!("{counter}_{name}"));
+        if !path_is_occupied(&candidate) && !reserved.contains(&candidate) {
+            return Ok(candidate);
+        }
+        counter = counter
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("Destination suffix overflow"))?;
+    }
+}
+
+fn wire_relative_path(path: &Path) -> Result<String, anyhow::Error> {
+    let mut segments = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                let value = value
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Destination path is not valid UTF-8"))?;
+                validate_received_path_component(value, "destination component")?;
+                segments.push(value.to_owned());
+            }
+            _ => return Err(anyhow!("Destination path is not safely relative")),
+        }
+    }
+
+    Ok(segments.join("/"))
+}
+
 struct PreparedInboundFiles {
     files: Vec<(i64, InternalFileInfo)>,
     names: Vec<String>,
     total_bytes: u64,
 }
 
-fn prepare_inbound_files(
+fn prepare_inbound_files_at(
+    download_dir: &Path,
     files: &[sharing_nearby::FileMetadata],
     existing_payload_ids: &HashSet<i64>,
 ) -> Result<PreparedInboundFiles, anyhow::Error> {
     let mut prepared = Vec::with_capacity(files.len());
-    let mut file_names = Vec::with_capacity(files.len());
+    let mut display_paths = Vec::with_capacity(files.len());
     let mut total_bytes = 0_u64;
     let mut reserved_destinations = HashSet::new();
+    let mut root_aliases = HashMap::<String, String>::new();
     let mut payload_ids = existing_payload_ids.clone();
 
     for file in files {
@@ -110,31 +196,58 @@ fn prepare_inbound_files(
             return Err(anyhow!("Duplicate file payload id: {payload_id}"));
         }
 
-        let mut destination = get_download_dir();
-        destination.push(file_name);
+        let parent_segments = normalize_received_parent_folder(file.parent_folder())?;
 
-        if destination.exists() || reserved_destinations.contains(&destination) {
-            let mut counter = 1_u64;
-            destination.pop();
+        let (destination, normalized_parent) = if parent_segments.is_empty() {
+            (
+                unique_child_path(download_dir, file_name, &reserved_destinations)?,
+                None,
+            )
+        } else {
+            let original_root = parent_segments
+                .first()
+                .ok_or_else(|| anyhow!("Missing parent-folder root"))?
+                .clone();
 
-            loop {
-                destination.push(format!("{counter}_{file_name}"));
-                if !destination.exists() && !reserved_destinations.contains(&destination) {
-                    break;
-                }
-                destination.pop();
-                counter = counter
-                    .checked_add(1)
-                    .ok_or_else(|| anyhow!("Destination suffix overflow"))?;
-            }
-        }
+            let chosen_root = if let Some(chosen) = root_aliases.get(&original_root) {
+                chosen.clone()
+            } else {
+                let chosen_path =
+                    unique_child_path(download_dir, &original_root, &reserved_destinations)?;
+                let chosen = chosen_path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .ok_or_else(|| anyhow!("Resolved root folder name is not valid UTF-8"))?
+                    .to_owned();
+                reserved_destinations.insert(chosen_path);
+                root_aliases.insert(original_root.clone(), chosen.clone());
+                chosen
+            };
+
+            let mut remapped_parent = Vec::with_capacity(parent_segments.len());
+            remapped_parent.push(chosen_root);
+            remapped_parent.extend(parent_segments.iter().skip(1).cloned());
+
+            let parent_dir = remapped_parent
+                .iter()
+                .fold(download_dir.to_path_buf(), |path, segment| path.join(segment));
+            let destination =
+                unique_child_path(&parent_dir, file_name, &reserved_destinations)?;
+
+            (destination, Some(remapped_parent.join("/")))
+        };
 
         reserved_destinations.insert(destination.clone());
+
+        let relative = destination
+            .strip_prefix(download_dir)
+            .map_err(|_| anyhow!("Prepared destination escaped download directory"))?;
+        display_paths.push(wire_relative_path(relative)?);
 
         let info = InternalFileInfo {
             payload_id,
             file_url: destination,
-            parent_folder: None,
+            parent_folder: normalized_parent,
             bytes_transferred: 0,
             total_size: file.size(),
             file: None,
@@ -145,14 +258,84 @@ fn prepare_inbound_files(
             .ok_or_else(|| anyhow!("Total transfer size overflow"))?;
 
         prepared.push((payload_id, info));
-        file_names.push(file_name.to_owned());
     }
 
     Ok(PreparedInboundFiles {
         files: prepared,
-        names: file_names,
+        names: display_paths,
         total_bytes,
     })
+}
+
+fn prepare_inbound_files(
+    files: &[sharing_nearby::FileMetadata],
+    existing_payload_ids: &HashSet<i64>,
+) -> Result<PreparedInboundFiles, anyhow::Error> {
+    let download_dir = get_download_dir();
+    prepare_inbound_files_at(&download_dir, files, existing_payload_ids)
+}
+
+fn materialize_safe_destination_at(
+    download_dir: &Path,
+    destination: &Path,
+) -> Result<std::path::PathBuf, anyhow::Error> {
+    let relative = destination
+        .strip_prefix(download_dir)
+        .map_err(|_| anyhow!("Destination escaped the configured download directory"))?;
+    let file_name = relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow!("Destination file name is invalid"))?;
+    validate_received_file_name(file_name)?;
+
+    let canonical_root = download_dir
+        .canonicalize()
+        .map_err(|error| anyhow!("Unable to resolve download directory: {error}"))?;
+    if !canonical_root.is_dir() {
+        return Err(anyhow!("Download directory is not a directory"));
+    }
+
+    let mut safe_parent = canonical_root.clone();
+    if let Some(parent) = relative.parent() {
+        for component in parent.components() {
+            let Component::Normal(component) = component else {
+                return Err(anyhow!("Destination parent contains unsafe components"));
+            };
+            let component = component
+                .to_str()
+                .ok_or_else(|| anyhow!("Destination parent is not valid UTF-8"))?;
+            validate_received_path_component(component, "destination folder component")?;
+
+            safe_parent.push(component);
+            match std::fs::symlink_metadata(&safe_parent) {
+                Ok(metadata) => {
+                    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                        return Err(anyhow!(
+                            "Destination parent is not a safe directory: {}",
+                            safe_parent.display()
+                        ));
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    std::fs::create_dir(&safe_parent)?;
+                }
+                Err(error) => return Err(error.into()),
+            }
+
+            let canonical_parent = safe_parent.canonicalize()?;
+            if !canonical_parent.starts_with(&canonical_root) {
+                return Err(anyhow!("Destination parent escaped download directory"));
+            }
+            safe_parent = canonical_parent;
+        }
+    }
+
+    Ok(safe_parent.join(file_name))
+}
+
+fn materialize_safe_destination(destination: &Path) -> Result<std::path::PathBuf, anyhow::Error> {
+    let download_dir = get_download_dir();
+    materialize_safe_destination_at(&download_dir, destination)
 }
 
 fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
@@ -1449,22 +1632,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 .get_mut(&id)
                 .ok_or_else(|| anyhow!("Missing transfer metadata for payload {id}"))?;
 
-            let parent = mfi
-                .file_url
-                .parent()
-                .ok_or_else(|| anyhow!("Destination has no parent directory"))?;
-            if !parent.is_dir() {
-                return Err(anyhow!(
-                    "Download directory is unavailable: {}",
-                    parent.display()
-                ));
-            }
+            let safe_destination = materialize_safe_destination(&mfi.file_url)?;
 
             let file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(&mfi.file_url)?;
-            info!("Created file: {:?}", &file);
+                .open(&safe_destination)?;
+            info!("Created file: {:?}", &safe_destination);
+            mfi.file_url = safe_destination;
             mfi.file = Some(file);
         }
 
@@ -2118,10 +2293,20 @@ mod security_tests {
     }
 
     fn file_metadata(name: &str, payload_id: i64, size: i64) -> sharing_nearby::FileMetadata {
+        file_metadata_with_parent(name, payload_id, size, "")
+    }
+
+    fn file_metadata_with_parent(
+        name: &str,
+        payload_id: i64,
+        size: i64,
+        parent_folder: &str,
+    ) -> sharing_nearby::FileMetadata {
         sharing_nearby::FileMetadata {
             name: Some(name.to_owned()),
             payload_id: Some(payload_id),
             size: Some(size),
+            parent_folder: (!parent_folder.is_empty()).then(|| parent_folder.to_owned()),
             ..Default::default()
         }
     }
@@ -2154,9 +2339,135 @@ mod security_tests {
             metadata.files.as_ref().unwrap(),
             &vec![
                 "mode-b-duplicate.bin".to_owned(),
-                "mode-b-duplicate.bin".to_owned()
+                "1_mode-b-duplicate.bin".to_owned()
             ]
         );
+    }
+
+    #[test]
+    fn parent_folder_normalization_accepts_both_separators_and_rejects_traversal() {
+        assert_eq!(
+            normalize_received_parent_folder("Trip/photos").unwrap(),
+            vec!["Trip".to_owned(), "photos".to_owned()]
+        );
+        assert_eq!(
+            normalize_received_parent_folder("Trip\\photos").unwrap(),
+            vec!["Trip".to_owned(), "photos".to_owned()]
+        );
+
+        for invalid in [
+            "/absolute",
+            "Trip//photos",
+            "Trip/../secret",
+            "Trip/./photos",
+            "Trip/evil\nname",
+        ] {
+            assert!(
+                normalize_received_parent_folder(invalid).is_err(),
+                "unsafe parent folder unexpectedly accepted: {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn inbound_folder_preparation_preserves_tree_without_creating_directories() {
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-inbound-folder-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+
+        let files = vec![
+            file_metadata_with_parent("readme.txt", 501, 1, "Trip"),
+            file_metadata_with_parent("sunset.jpg", 502, 2, "Trip/photos"),
+        ];
+        let prepared = prepare_inbound_files_at(&base, &files, &HashSet::new()).unwrap();
+
+        assert_eq!(
+            prepared.names,
+            vec![
+                "Trip/readme.txt".to_owned(),
+                "Trip/photos/sunset.jpg".to_owned()
+            ]
+        );
+        assert_eq!(
+            prepared.files[0].1.parent_folder.as_deref(),
+            Some("Trip")
+        );
+        assert_eq!(
+            prepared.files[1].1.parent_folder.as_deref(),
+            Some("Trip/photos")
+        );
+        assert!(!base.join("Trip").exists());
+
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn inbound_folder_root_collision_is_remapped_consistently() {
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-inbound-root-collision-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(base.join("Trip")).unwrap();
+
+        let files = vec![
+            file_metadata_with_parent("one.txt", 601, 1, "Trip"),
+            file_metadata_with_parent("two.txt", 602, 1, "Trip/nested"),
+        ];
+        let prepared = prepare_inbound_files_at(&base, &files, &HashSet::new()).unwrap();
+
+        assert_eq!(
+            prepared.names,
+            vec![
+                "1_Trip/one.txt".to_owned(),
+                "1_Trip/nested/two.txt".to_owned()
+            ]
+        );
+        assert!(!base.join("1_Trip").exists());
+
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_destination_materialization_rejects_symlink_parent() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-inbound-materialize-test-{}",
+            rand::random::<u64>()
+        ));
+        let outside = std::env::temp_dir().join(format!(
+            "rquickshare-inbound-outside-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, base.join("Trip")).unwrap();
+
+        let destination = base.join("Trip").join("secret.txt");
+        assert!(materialize_safe_destination_at(&base, &destination).is_err());
+
+        std::fs::remove_dir_all(base).unwrap();
+        std::fs::remove_dir_all(outside).unwrap();
+    }
+
+    #[test]
+    fn safe_destination_materialization_creates_parent_tree_only_on_accept_path() {
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-inbound-materialize-create-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        let destination = base.join("Trip").join("photos").join("sunset.jpg");
+
+        let safe = materialize_safe_destination_at(&base, &destination).unwrap();
+
+        assert_eq!(safe.file_name().unwrap(), "sunset.jpg");
+        assert!(base.join("Trip").join("photos").is_dir());
+
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[tokio::test]
