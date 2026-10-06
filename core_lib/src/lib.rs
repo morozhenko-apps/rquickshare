@@ -192,8 +192,7 @@ impl RQS {
             let visibility_rx = self.visibility_receiver.clone();
             let receiver_ctk = ctoken.clone();
             tracker.spawn(async move {
-                match ReceiverAdvertiser::new(visibility_rx).await
-                {
+                match ReceiverAdvertiser::new(visibility_rx).await {
                     Ok(advertiser) => {
                         if let Err(error) = advertiser.run(receiver_ctk).await {
                             error!("ReceiverAdvertiser stopped with error: {error}");
