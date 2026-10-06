@@ -13,9 +13,9 @@ use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use crate::channel::ChannelMessage;
+use crate::channel::{ChannelDirection, ChannelMessage, TransferType};
 use crate::errors::AppError;
-use crate::hdl::{BwuRouter, InboundRequest, MigratableStream};
+use crate::hdl::{BwuRouter, InboundRequest, MigratableStream, State};
 
 const INNER_NAME: &str = "ReceiverGattServer";
 
@@ -91,6 +91,17 @@ fn complete_framed_message_len(buffer: &[u8]) -> Result<Option<usize>, anyhow::E
         .checked_add(frame_len)
         .ok_or_else(|| anyhow!("framed message length overflow"))?;
     Ok((buffer.len() >= total).then_some(total))
+}
+
+fn inbound_disconnected_message(id: &str, error: impl Into<String>) -> ChannelMessage {
+    ChannelMessage {
+        id: id.to_owned(),
+        direction: ChannelDirection::LibToFront,
+        rtype: Some(TransferType::Inbound),
+        state: Some(State::Disconnected),
+        error: Some(error.into()),
+        ..Default::default()
+    }
 }
 
 pub struct ReceiverGattServer {
@@ -273,6 +284,7 @@ async fn weave_session(
     let (inbound_side, weave_side) = tokio::io::duplex(64 * 1024);
     let (mut weave_read, mut weave_write) = tokio::io::split(weave_side);
     let inbound_sender = sender.clone();
+    let inbound_error_sender = sender.clone();
     let inbound_bwu_router = bwu_router.clone();
 
     let inbound_task = tokio::spawn(async move {
@@ -300,6 +312,10 @@ async fn weave_session(
                 Err(error) => {
                     if !matches!(error.downcast_ref(), Some(AppError::NotAnError)) {
                         debug!("{INNER_NAME}: BLE inbound ended: {error}");
+                        let _ = inbound_error_sender.send(inbound_disconnected_message(
+                            "ble-weave",
+                            error.to_string(),
+                        ));
                     }
                     break;
                 }
@@ -462,6 +478,17 @@ async fn weave_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inbound_error_message_surfaces_disconnected_state() {
+        let message = inbound_disconnected_message("ble-weave", "protocol failure");
+
+        assert_eq!(message.id, "ble-weave");
+        assert_eq!(message.direction, ChannelDirection::LibToFront);
+        assert_eq!(message.rtype, Some(TransferType::Inbound));
+        assert_eq!(message.state, Some(State::Disconnected));
+        assert_eq!(message.error.as_deref(), Some("protocol failure"));
+    }
 
     #[test]
     fn parses_supported_connection_request_and_clamps_packet_size() {
