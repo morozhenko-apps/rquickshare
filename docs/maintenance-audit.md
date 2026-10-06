@@ -112,7 +112,16 @@ Reviewed or identified as relevant:
 - Issue #268 — unbounded active log growth. Fixed with a 5 MiB runtime file cap.
 - PR #420 — large transport/protobuf refactor. Deferred until the maintained fork is green because it is too broad to merge as a bugfix.
 
-Upstream backlog is not considered closed yet. Remaining open PRs/issues must be classified as: applicable, already covered, obsolete/duplicate, feature request, or deferred refactor.
+Upstream backlog classification for this maintenance pass:
+
+- **Covered by equivalent fixes in this fork:** PRs #439/#433, #430, #418, #408, #404, #380, #334 and #333; issues #431, #429/#369, #423/#195, #421/#407, #268 and #440.
+- **Covered by the isolated Pixel receiver work in PR #2:** issue #425 and the modern BLE/GATT receiver bootstrap path; older discovery reports #358/#311/#270 are smoke-test targets because they overlap with the same mDNS/BLE/TCP chain but do not provide enough evidence for separate code changes.
+- **Linux packaged-smoke targets rather than speculative code fixes:** #422 (Wayland close/hide behavior), #357/#390/#328 (blank/partial WebKit rendering across mixed GPU/font/EGL causes), #307 (window reopen/GTK lifecycle), #426/#365 (package dependency variance), #325/#394 (generic transfer failures without a single reproducible root cause).
+- **Feature requests, not Mode B blockers:** #435/#436 folder hierarchy, #432 multi-file UX, #434 AirDrop interoperability, #428/#363/#246 outbound clipboard/text, #388/#347/#310 custom device name, #387/#384/#224 trusted devices, #386/#383 sorting, #385/#382 tray indicators, #356/#395 localization, #370 visibility tray menu, #411 decorations, #405 update-check toggle, #375 sender image, #368 QR, #366 silent flag, #364 double-click tray, #354/#374 icon variants, #329 Flatpak, #326 Homebrew, #295/#412/#413/#414/#415/#416 Windows work, #264 dock behavior, #245/#182 notification actions.
+- **Dependency/packaging PRs superseded or handled independently:** #424, #419, #417, #410, #402, #400, #399, #391, #371, #342, #276 and #241.
+- **Deferred architecture work:** PR #420 transport/protobuf refactor. It is intentionally not merged into this hardening pass because PR #2 introduces the minimum transport abstraction required for modern Pixel receive without replacing the hardened state machine.
+
+No remaining upstream item is treated as an automatic blocker solely because it is open; only reproducible defects that overlap the maintained Linux/Android scope can block Mode B.
 
 ## Modern Pixel receiver BLE/GATT bootstrap
 
@@ -138,9 +147,8 @@ The stable `dev` branch remains green while this larger interoperability change 
 ## Remaining audit work
 
 - Finish residual network/state-machine `unwrap()`/panic review; peer-controlled crypto/size/path panic paths have already been removed.
-- Finish the upstream open PR/issue classification and keep large feature/refactor PRs separate from hardening.
 - Validate the new CSP/freezePrototype behavior in the packaged Linux smoke test.
-- Expand regression coverage around every bug fixed during this pass.
+- Keep the regression coverage map aligned with fixes; current coverage includes mDNS compact records, P-256 normalization, inbound path/size guards, Wi-Fi credential parsing, clipboard fallback, log caps, BLE receiver advertisement, weave framing/handshake, BWU introduction validation and LAN-interface filtering.
 - Identify only genuinely flaky/stability-sensitive tests for 10x Mode B repetition.
 - Run one manual Linux package build.
 - Complete PR #2 validation and real Pixel -> Linux BLE/GATT -> Wi-Fi-LAN smoke.
