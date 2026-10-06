@@ -22,7 +22,10 @@ const MAX_NOTIFICATION_PREVIEW_CHARS: usize = 180;
 fn bounded_preview(value: &str) -> String {
     let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut chars = compact.chars();
-    let preview: String = chars.by_ref().take(MAX_NOTIFICATION_PREVIEW_CHARS).collect();
+    let preview: String = chars
+        .by_ref()
+        .take(MAX_NOTIFICATION_PREVIEW_CHARS)
+        .collect();
 
     if chars.next().is_some() {
         format!("{preview}…")
@@ -261,15 +264,15 @@ mod tests {
         let input = "é".repeat(MAX_NOTIFICATION_PREVIEW_CHARS + 5);
         let preview = bounded_preview(&input);
 
-        assert_eq!(
-            preview.chars().count(),
-            MAX_NOTIFICATION_PREVIEW_CHARS + 1
-        );
+        assert_eq!(preview.chars().count(), MAX_NOTIFICATION_PREVIEW_CHARS + 1);
         assert!(preview.ends_with('…'));
     }
 
     #[test]
     fn bounded_preview_compacts_whitespace() {
-        assert_eq!(bounded_preview("hello\n\tworld   again"), "hello world again");
+        assert_eq!(
+            bounded_preview("hello\n\tworld   again"),
+            "hello world again"
+        );
     }
 }
