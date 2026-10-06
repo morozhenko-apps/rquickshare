@@ -1382,6 +1382,79 @@ impl OutboundRequest {
 mod security_tests {
     use super::*;
 
+    #[test]
+    fn outbound_file_preparation_classifies_files_and_skips_missing_paths() {
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let image = root.join("photo.png");
+        let app = root.join("client.apk");
+        let text = root.join("notes.txt");
+        let missing = root.join("missing.bin");
+
+        std::fs::write(&image, [1_u8, 2, 3]).unwrap();
+        std::fs::write(&app, [4_u8, 5]).unwrap();
+        std::fs::write(&text, [6_u8]).unwrap();
+
+        let inputs = vec![
+            image.to_string_lossy().into_owned(),
+            app.to_string_lossy().into_owned(),
+            text.to_string_lossy().into_owned(),
+            missing.to_string_lossy().into_owned(),
+        ];
+
+        let (metadata, transferred, total) = prepare_outbound_files(&inputs).unwrap();
+
+        assert_eq!(metadata.len(), 3);
+        assert_eq!(transferred.len(), 3);
+        assert_eq!(total, 6);
+
+        let by_name = metadata
+            .iter()
+            .map(|item| (item.name().to_owned(), item))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(
+            by_name["photo.png"].r#type(),
+            file_metadata::Type::Image
+        );
+        assert_eq!(by_name["client.apk"].r#type(), file_metadata::Type::App);
+        assert_eq!(
+            by_name["notes.txt"].r#type(),
+            file_metadata::Type::Unknown
+        );
+
+        let payload_ids = metadata
+            .iter()
+            .map(FileMetadata::payload_id)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(payload_ids.len(), 3);
+
+        for item in metadata {
+            let internal = &transferred[&item.payload_id()];
+            assert_eq!(internal.total_size, item.size());
+            assert!(internal.file.is_some());
+            assert_eq!(
+                internal.file_url.file_name().unwrap().to_string_lossy(),
+                item.name()
+            );
+        }
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn outbound_file_preparation_handles_empty_input() {
+        let (metadata, transferred, total) = prepare_outbound_files(&[]).unwrap();
+
+        assert!(metadata.is_empty());
+        assert!(transferred.is_empty());
+        assert_eq!(total, 0);
+    }
+
     async fn test_request(
         files: Vec<String>,
     ) -> (OutboundRequest, tokio::net::TcpStream) {
