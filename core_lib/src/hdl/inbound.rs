@@ -240,6 +240,93 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         std::mem::take(&mut self.bwu_pending)
     }
 
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    fn bandwidth_upgrade_frame(
+        event_type: location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType,
+        upgrade_path_info: Option<
+            location_nearby_connections::bandwidth_upgrade_negotiation_frame::UpgradePathInfo,
+        >,
+    ) -> OfflineFrame {
+        use location_nearby_connections::BandwidthUpgradeNegotiationFrame;
+
+        OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(
+                    location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeNegotiation
+                        .into(),
+                ),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(event_type.into()),
+                    upgrade_path_info,
+                    client_introduction: None,
+                    client_introduction_ack: None,
+                }),
+                ..Default::default()
+            }),
+        }
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    async fn send_upgrade_path_available(&mut self, port: u16) -> Result<(), anyhow::Error> {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+            upgrade_path_info::{Medium, WifiLanSocket},
+            EventType, UpgradePathInfo,
+        };
+
+        let ip = crate::utils::local_lan_ipv4()
+            .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
+        info!(
+            "BWU: offering WIFI_LAN at {}.{}.{}.{}:{port}",
+            ip[0], ip[1], ip[2], ip[3]
+        );
+
+        let frame = Self::bandwidth_upgrade_frame(
+            EventType::UpgradePathAvailable,
+            Some(UpgradePathInfo {
+                medium: Some(Medium::WifiLan.into()),
+                wifi_lan_socket: Some(WifiLanSocket {
+                    ip_address: Some(ip.to_vec()),
+                    wifi_port: Some(i32::from(port)),
+                }),
+                supports_client_introduction_ack: Some(true),
+                ..Default::default()
+            }),
+        );
+        self.encrypt_and_send(&frame).await
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    fn client_introduction_ack_frame() -> OfflineFrame {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
+            ClientIntroductionAck, EventType,
+        };
+        use location_nearby_connections::BandwidthUpgradeNegotiationFrame;
+
+        OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(
+                    location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeNegotiation
+                        .into(),
+                ),
+                bandwidth_upgrade_negotiation: Some(BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(EventType::ClientIntroductionAck.into()),
+                    client_introduction_ack: Some(ClientIntroductionAck {}),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        }
+    }
+
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    async fn read_encrypted_offline_frame(&mut self) -> Result<OfflineFrame, anyhow::Error> {
+        let frame_data = read_plain_frame_from(&mut self.socket).await?;
+        let secure_message = SecureMessage::decode(frame_data.as_slice())?;
+        self.decrypt_secure_message(&secure_message).await
+    }
+
     pub async fn handle(&mut self) -> Result<(), anyhow::Error> {
         // Buffer for the 4-byte length
         let mut length_buf = [0u8; 4];
