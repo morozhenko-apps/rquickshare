@@ -68,6 +68,12 @@ mod tests {
         let (server, _) = listener.accept().await.unwrap();
 
         router.route("peer-route", server).await.unwrap();
+        let pending_after_route = router.has_pending().await;
+        eprintln!("BWU route completed; pending_after_route={pending_after_route}");
+        assert!(
+            !pending_after_route,
+            "successful BWU routing must consume the pending endpoint"
+        );
 
         let delivered = tokio::time::timeout(std::time::Duration::from_millis(250), receiver)
             .await
@@ -75,7 +81,6 @@ mod tests {
             .expect("BWU route sender dropped without a socket");
 
         assert_eq!(delivered.local_addr().unwrap(), client.peer_addr().unwrap());
-        assert!(!router.has_pending().await);
     }
 
     #[tokio::test]
