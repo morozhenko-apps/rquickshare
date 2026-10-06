@@ -348,7 +348,7 @@ mod tests {
         let (device_type, device_name) = parse_mdns_endpoint_info(&info).unwrap();
 
         assert_eq!(device_type, DeviceType::Laptop);
-        assert_eq!(device_name.as_bytes().len(), 254);
+        assert_eq!(device_name.len(), 254);
         assert_eq!(device_name, "é".repeat(127));
     }
 
