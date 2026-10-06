@@ -105,6 +105,13 @@ fn normalize_received_parent_folder(value: &str) -> Result<Vec<String>, anyhow::
         .map(str::to_owned)
         .collect::<Vec<_>>();
 
+    if segments.first().is_some_and(|segment| {
+        let bytes = segment.as_bytes();
+        bytes.len() == 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+    }) {
+        return Err(anyhow!("Received parent folder must be relative"));
+    }
+
     if segments.len() > MAX_RECEIVED_FOLDER_DEPTH {
         return Err(anyhow!(
             "Received parent folder exceeds maximum depth of {MAX_RECEIVED_FOLDER_DEPTH}"
@@ -2358,6 +2365,8 @@ mod security_tests {
 
         for invalid in [
             "/absolute",
+            "C:\\Windows\\Temp",
+            "D:/Downloads",
             "Trip//photos",
             "Trip/../secret",
             "Trip/./photos",

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read;
@@ -349,6 +349,7 @@ fn collect_outbound_file_candidates(
     inputs: &[String],
 ) -> Result<Vec<OutboundFileCandidate>, anyhow::Error> {
     let mut output = Vec::new();
+    let mut reserved_root_names = HashSet::new();
 
     for input in inputs {
         let path = Path::new(input);
@@ -381,7 +382,18 @@ fn collect_outbound_file_candidates(
                 .file_name()
                 .ok_or_else(|| anyhow!("Selected folder has no root name: {input}"))
                 .and_then(validate_outbound_path_component)?;
-            collect_directory_files(path, path, &root_name, 0, &mut output)?;
+
+            let mut chosen_root = root_name.clone();
+            let mut counter = 1_u64;
+            while !reserved_root_names.insert(chosen_root.clone()) {
+                chosen_root = format!("{counter}_{root_name}");
+                validate_outbound_path_component(OsStr::new(&chosen_root))?;
+                counter = counter
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow!("Outbound folder root suffix overflow"))?;
+            }
+
+            collect_directory_files(path, path, &chosen_root, 0, &mut output)?;
             continue;
         }
 
@@ -1949,6 +1961,38 @@ mod security_tests {
                 metadata.parent_folder.as_deref()
             );
         }
+
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn outbound_duplicate_selected_root_names_are_kept_separate() {
+        let base = std::env::temp_dir().join(format!(
+            "rquickshare-outbound-duplicate-root-test-{}",
+            rand::random::<u64>()
+        ));
+        let first = base.join("one").join("Trip");
+        let second = base.join("two").join("Trip");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        std::fs::write(first.join("one.txt"), [1_u8]).unwrap();
+        std::fs::write(second.join("two.txt"), [2_u8]).unwrap();
+
+        let prepared = prepare_outbound_files(&[
+            first.to_string_lossy().into_owned(),
+            second.to_string_lossy().into_owned(),
+        ])
+        .unwrap();
+
+        let parents = prepared
+            .metadata
+            .iter()
+            .map(|metadata| metadata.parent_folder().to_owned())
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            parents,
+            HashSet::from(["Trip".to_owned(), "1_Trip".to_owned()])
+        );
 
         std::fs::remove_dir_all(base).unwrap();
     }
