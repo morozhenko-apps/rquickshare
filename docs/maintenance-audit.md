@@ -144,6 +144,35 @@ The implementation is now isolated in draft PR #2 (`feat/pixel-ble-receiver -> d
 
 The stable `dev` branch remains green while this larger interoperability change is validated separately. PR #2 must pass its own preflight and a real Pixel -> Linux smoke test before it is merged into `dev`.
 
+
+## Coverage audit
+
+Coverage is measured explicitly instead of inferring quality from test count.
+
+Current automated suite on the Pixel receiver branch:
+
+- **Rust:** 50 tests pass with `cargo test --all-features`.
+- **Frontend:** 25 Vitest tests pass across 6 test files.
+- **Total:** 75 automated tests before the separate package/live smoke checks.
+
+Final measured coverage after the Mode B regression expansion:
+
+- **Rust core:** 30.37% line coverage, 29.75% function coverage, 31.19% region coverage.
+- `hdl/inbound.rs`: 31.67% lines, up from 14.58% before the introduction/state tests.
+- `hdl/outbound.rs`: 30.67% lines, up from 2.38% before file-preparation and consent/wire tests.
+- `utils.rs`: 61.34% lines.
+- `hdl/bwu.rs`: 95.83% lines.
+- `hdl/migratable.rs`: 81.40% lines.
+- **Frontend:** 46.18% line/statement coverage, 82.71% branch coverage and 53.33% function coverage.
+- `SettingsModal.vue`: 98.05% lines, 90.62% branches, 100% functions.
+- `ContentStatus.vue`: 92.75% lines.
+- `Heading.vue`: 100% lines/functions/branches.
+- `SideMenu.vue`: 98.21% lines.
+
+The remaining low global percentages are concentrated in OS/service orchestration rather than pure protocol logic: BlueZ/GATT service lifecycle, mDNS daemons/discovery, Tauri startup/window/tray wiring and the monolithic `HomePage.vue` event bootstrap. These paths require package/live smoke or explicit dependency seams before unit coverage becomes representative.
+
+No arbitrary repository-wide percentage gate is being introduced in this pass. The useful gate is regression coverage for validated defects plus live Linux/Android smoke for OS-bound behavior. Coverage should rise further as the post-smoke refactors create testable seams.
+
 ## Remaining audit work
 
 - Finish residual network/state-machine `unwrap()`/panic review; peer-controlled crypto/size/path panic paths have already been removed.
@@ -210,8 +239,8 @@ Refactoring is required, but the work is split by risk.
    - This is maintainability work, not a release blocker.
 
 6. **Split desktop orchestration from UI rendering.**
-   - `HomePage.vue` is roughly 382 lines and renders the complete device/transfer state card inline.
-   - Recommended component extraction: `TransferCard.vue` / `DeviceCard.vue`, leaving event/state orchestration in the page.
+   - `HomePage.vue` is roughly 382 lines and currently combines rendering with settings bootstrap, notification permission, transfer/endpoint/visibility listeners and drag/drop registration.
+   - Recommended extraction after smoke: `useTransferEvents`, `useWindowDrop` and `useAppSettings` composables plus smaller transfer/device components.
    - `app/main/src-tauri/src/main.rs` is roughly 387 lines; tray/window lifecycle and receiver-task wiring can become separate modules later.
    - These are UX/maintainability improvements, not protocol blockers.
 
@@ -219,9 +248,15 @@ Refactoring is required, but the work is split by risk.
 
 - Shared frame/payload size limits and validation were moved out of inbound/outbound into `core_lib/src/protocol.rs`.
 - Duplicate payload-size regression tests were collapsed into one shared test.
+- Inbound file-introduction validation was made transactional: the complete file set is validated/prepared before transfer state is mutated, avoiding partial state after malformed metadata.
+- Outbound file metadata/file-handle preparation was extracted from the protocol state machine into a dedicated preparation helper with temp-file regression coverage.
+- Both preparation helpers now return named result structs instead of opaque multi-value tuples.
+- A poisoned `CUSTOM_DOWNLOAD` lock now recovers the configured path instead of silently dropping back to the default directory.
 - BWU routing already has its own `BwuRouter` module instead of remaining embedded in the inbound state machine.
 - BLE/TCP transport switching already has a small `MigratableStream` abstraction.
 
 ### Refactoring rule for this maintenance pass
 
 No broad architectural refactor should be merged solely to improve style before real Pixel smoke. Before the smoke test, only pure helpers, duplicated validation, tests and isolated infrastructure may be extracted. Protocol state-machine refactoring starts only after the current behavior is proven end-to-end.
+
+**Audit conclusion:** no additional architectural refactor is required before the real-device smoke. The next mandatory refactor for maintainability is the shared secure-session extraction, but it should begin only after the current Pixel send/receive behavior is proven so protocol regressions can be distinguished from structural changes.
