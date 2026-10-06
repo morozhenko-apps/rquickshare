@@ -374,6 +374,18 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_mdns_info_rejects_invalid_base64() {
+        assert!(parse_mdns_endpoint_info("%%%not-base64%%%").is_err());
+    }
+
+    #[test]
+    fn test_parse_mdns_info_rejects_invalid_utf8_name() {
+        let info = encoded_endpoint(DeviceType::Laptop, &[1, 0xff]);
+
+        assert!(parse_mdns_endpoint_info(&info).is_err());
+    }
+
+    #[test]
     fn test_normalize_p256_coordinate_left_pads_short_values() {
         let normalized = normalize_p256_coordinate(&[0x12, 0x34]).unwrap();
 
