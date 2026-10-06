@@ -149,11 +149,16 @@ impl ReceiverGattServer {
                                 let advertisement = advertisement.clone();
                                 Box::pin(async move {
                                     let offset = usize::from(request.offset);
-                                    if offset >= advertisement.len() {
-                                        Ok(Vec::new())
+                                    let response = if offset >= advertisement.len() {
+                                        Vec::new()
                                     } else {
-                                        Ok(advertisement[offset..].to_vec())
-                                    }
+                                        advertisement[offset..].to_vec()
+                                    };
+                                    trace!(
+                                        "{INNER_NAME}: slot0 read offset={offset}, returned={} bytes",
+                                        response.len()
+                                    );
+                                    Ok(response)
                                 })
                             }),
                             ..Default::default()
@@ -193,6 +198,7 @@ impl ReceiverGattServer {
                                 let channel_sender = channel_sender.clone();
                                 let bwu_router = bwu_router.clone();
                                 Box::pin(async move {
+                                    debug!("{INNER_NAME}: weave notify subscription started");
                                     if let Err(error) = weave_session(
                                         notifier,
                                         packet_receiver,
@@ -258,6 +264,9 @@ async fn weave_session(
         }
     };
 
+    info!(
+        "{INNER_NAME}: negotiated BLE Weave packet size {selected_packet_size}"
+    );
     notifier
         .notify(connection_confirm(selected_packet_size).to_vec())
         .await?;
