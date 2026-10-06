@@ -158,7 +158,7 @@ import { EndpointInfo } from '@martichou/core_lib/bindings/EndpointInfo';
 import { OutboundPayload } from '@martichou/core_lib/bindings/OutboundPayload';
 import { Visibility } from '@martichou/core_lib/bindings/Visibility';
 
-import { ToastNotification, ToDelete, stateToDisplay, formatTransferState, autostartKey, DisplayedItem, useToastStore, opt, ToastType, utils } from '../vue_lib';
+import { ToastNotification, ToDelete, stateToDisplay, formatTransferState, autostartKey, DisplayedItem, useToastStore, opt, ToastType, utils, writeClipboardWithFallback } from '../vue_lib';
 
 import SettingsModal from '../composables/SettingsModal.vue';
 import Heading from '../composables/Heading.vue';
@@ -356,13 +356,18 @@ export default {
 
 	methods: {
 		writeToClipboard: async function(text: string) {
-			try {
-				await writeText(text);
+			const browserWriter = typeof navigator !== 'undefined' && navigator.clipboard?.writeText
+				? (value: string) => navigator.clipboard.writeText(value)
+				: undefined;
+			const method = await writeClipboardWithFallback(text, writeText, browserWriter);
+
+			if (method !== null) {
 				this.toastStore.addToast("Copied to clipboard", ToastType.Success);
-			} catch (e) {
-				this.toastStore.addToast("Unknown error while copying text", ToastType.Error);
-				console.error("Error copying text", e);
+				return;
 			}
+
+			this.toastStore.addToast("Unable to copy text", ToastType.Error);
+			console.error("Clipboard copy failed through both Tauri and browser APIs");
 		},
 		openUrl: async function(url: string) {
 			try {
