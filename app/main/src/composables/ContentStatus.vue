@@ -19,32 +19,41 @@ async function ensureDiscovery() {
 	emits('discoveryRunning');
 }
 
+function normalizePickerResult(el: unknown): string[] {
+	if (el === null || el === undefined) return [];
+
+	const values = el instanceof Array ? el : [el];
+	return values.map((value) => {
+		if (typeof value === 'string') return value;
+		if (typeof value === 'object' && value !== null && Object.hasOwn(value, 'path')) {
+			return (value as { path: string }).path;
+		}
+		return String(value);
+	});
+}
+
+async function emitPickedPaths(el: unknown) {
+	const paths = normalizePickerResult(el);
+	if (paths.length === 0) return;
+
+	emits('outboundPayload', { Files: paths } as OutboundPayload);
+	await ensureDiscovery();
+}
+
 function openFilePicker() {
 	props.vm.dialogOpen({
-		title: "Select a file to send",
+		title: "Select files to send",
 		directory: false,
 		multiple: true,
-	}).then(async (el) => {
-		let elem;
-		if (el === null) {
-			return;
-		}
+	}).then(emitPickedPaths);
+}
 
-		if (el instanceof Array) {
-			if (el.length > 0 && Object.hasOwn(el[0], 'path')) {
-				elem = el.map((e) => e.path);
-			} else {
-				elem = el;
-			}
-		} else {
-			elem = [el];
-		}
-
-		emits('outboundPayload', {
-			Files: elem
-		} as OutboundPayload);
-		await ensureDiscovery();
-	})
+function openFolderPicker() {
+	props.vm.dialogOpen({
+		title: "Select folders to send",
+		directory: true,
+		multiple: true,
+	}).then(emitPickedPaths);
 }
 
 async function shareClipboard() {
@@ -107,7 +116,7 @@ async function shareClipboard() {
 			Drop files here
 		</h3>
 		<p class="text-sm text-muted mt-1 mb-4">
-			or choose files from disk
+			or choose files or folders from disk
 		</p>
 		<div class="flex flex-wrap justify-center gap-2">
 			<button type="button" class="btn btn-primary" @click="openFilePicker()">
@@ -115,6 +124,12 @@ async function shareClipboard() {
 					<path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z" />
 				</svg>
 				<span>Select files</span>
+			</button>
+			<button type="button" class="btn btn-secondary" @click="openFolderPicker()">
+				<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20">
+					<path d="M160-200v-560h280l80 80h280v480H160Zm80-80h480v-320H487l-80-80H240v400Zm0 0v-400 400Z" />
+				</svg>
+				<span>Select folders</span>
 			</button>
 			<button type="button" class="btn btn-secondary" @click="shareClipboard()">
 				<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20">

@@ -59,6 +59,52 @@ describe('ContentStatus', () => {
 		expect(wrapper.emitted('discoveryRunning')).toHaveLength(1);
 	});
 
+	test('selecting folders emits folder paths through the same files payload', async () => {
+		const dialogOpen = vi.fn().mockResolvedValue(['/tmp/Trip', '/tmp/Work']);
+		const invoke = vi.fn().mockResolvedValue(undefined);
+		const wrapper = mount(ContentStatus, {
+			props: {
+				vm: vm({ dialogOpen, invoke }),
+			},
+		});
+
+		const folderButton = wrapper.findAll('button').find((button) =>
+			button.text().includes('Select folders'),
+		)!;
+		await folderButton.trigger('click');
+		await flushPromises();
+
+		expect(dialogOpen).toHaveBeenCalledWith({
+			title: 'Select folders to send',
+			directory: true,
+			multiple: true,
+		});
+		expect(wrapper.emitted('outboundPayload')).toEqual([
+			[{ Files: ['/tmp/Trip', '/tmp/Work'] }],
+		]);
+		expect(invoke).toHaveBeenCalledWith('start_discovery');
+		expect(wrapper.emitted('discoveryRunning')).toHaveLength(1);
+	});
+
+	test('cancelled folder picker does not start discovery or emit a payload', async () => {
+		const dialogOpen = vi.fn().mockResolvedValue(null);
+		const invoke = vi.fn().mockResolvedValue(undefined);
+		const wrapper = mount(ContentStatus, {
+			props: {
+				vm: vm({ dialogOpen, invoke }),
+			},
+		});
+
+		const folderButton = wrapper.findAll('button').find((button) =>
+			button.text().includes('Select folders'),
+		)!;
+		await folderButton.trigger('click');
+		await flushPromises();
+
+		expect(wrapper.emitted('outboundPayload')).toBeUndefined();
+		expect(invoke).not.toHaveBeenCalledWith('start_discovery');
+	});
+
 	test('shares clipboard text and starts discovery', async () => {
 		readTextMock.mockResolvedValueOnce('https://example.com');
 		const invoke = vi.fn().mockResolvedValue(undefined);
