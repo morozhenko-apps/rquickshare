@@ -290,8 +290,7 @@ fn collect_directory_files(
         ));
     }
 
-    let mut entries = std::fs::read_dir(current)?
-        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    let mut entries = std::fs::read_dir(current)?.collect::<Result<Vec<_>, std::io::Error>>()?;
     entries.sort_by_key(|entry| entry.file_name());
 
     for entry in entries {
@@ -299,7 +298,10 @@ fn collect_directory_files(
         let file_type = entry.file_type()?;
 
         if file_type.is_symlink() {
-            warn!("Skipping symbolic link in outbound folder: {}", path.display());
+            warn!(
+                "Skipping symbolic link in outbound folder: {}",
+                path.display()
+            );
             continue;
         }
 
@@ -392,7 +394,9 @@ fn collect_outbound_file_candidates(
 fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, anyhow::Error> {
     let candidates = collect_outbound_file_candidates(files)?;
     if candidates.is_empty() {
-        return Err(anyhow!("Outbound selection contains no shareable regular files"));
+        return Err(anyhow!(
+            "Outbound selection contains no shareable regular files"
+        ));
     }
 
     let mut file_metadata = Vec::with_capacity(candidates.len());
@@ -1923,8 +1927,7 @@ mod security_tests {
         std::fs::write(root.join("readme.txt"), [1_u8]).unwrap();
         std::fs::write(nested.join("sunset.jpg"), [2_u8, 3]).unwrap();
 
-        let prepared =
-            prepare_outbound_files(&[root.to_string_lossy().into_owned()]).unwrap();
+        let prepared = prepare_outbound_files(&[root.to_string_lossy().into_owned()]).unwrap();
         assert_eq!(prepared.metadata.len(), 2);
         assert_eq!(prepared.total_bytes, 3);
 
@@ -1939,7 +1942,9 @@ mod security_tests {
 
         for metadata in &prepared.metadata {
             assert_eq!(
-                prepared.files[&metadata.payload_id()].parent_folder.as_deref(),
+                prepared.files[&metadata.payload_id()]
+                    .parent_folder
+                    .as_deref(),
                 metadata.parent_folder.as_deref()
             );
         }
