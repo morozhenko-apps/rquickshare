@@ -32,7 +32,10 @@ mod tests {
             i64::from(SANE_FRAME_LENGTH) - 1,
             i64::from(SANE_FRAME_LENGTH),
         ] {
-            assert_eq!(checked_payload_buffer_size(accepted).unwrap(), accepted as usize);
+            assert_eq!(
+                checked_payload_buffer_size(accepted).unwrap(),
+                accepted as usize
+            );
         }
 
         for rejected in [-1_i64, i64::from(SANE_FRAME_LENGTH) + 1] {
