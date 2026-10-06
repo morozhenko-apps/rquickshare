@@ -6,16 +6,17 @@ This document is the working log for the `morozhenko-apps/rquickshare` maintenan
 
 ## Current CI policy
 
-- `dev`: fast preflight only — Rust formatting, Rust tests, Clippy, frontend lint/typecheck/unit tests.
-- Internal `dev -> master` PR: duplicate heavy jobs are skipped; the push to `dev` is the authoritative preflight.
-- Package/build smoke: manual only. No Tauri packaging on every development commit.
-- Release artifact build: manual only.
-- Mode B final gate: the complete Rust and frontend automated suite runs 10 consecutive times. This supersedes the earlier stable-1x/selected-stability-10x policy for this maintenance pass.
-- `master`: updated only after the audit is complete and the final gates are green.
+- The repository has exactly two long-lived branches: `dev` and `master`.
+- `dev` is the only active development branch. Normal work lands directly on `dev` with fast preflight: Rust formatting, Rust tests, Clippy, frontend lint/typecheck/unit tests.
+- Long-lived feature branches and internal pull requests are not part of this fork's workflow.
+- Package/build smoke is manual only. No Tauri packaging runs on every development commit.
+- Release preparation is manual and must not create release branches.
+- Mode B final gate runs the complete Rust and frontend automated suite 10 consecutive times.
+- `master` is release-only and is updated by fast-forward from validated `dev` after the final gates and hardware smoke are green.
 
 ## Current gate status
 
-Draft PR #2 (`feat/pixel-ble-receiver -> dev`) remains isolated until the real Pixel smoke test, but all pre-smoke automated gates are now green.
+The Pixel/BLE foundation and the current Full Quick Share work are consolidated on `dev`. PR #2 and PR #3 were merged into `dev` during the two-branch cleanup; the old `dev -> master` PR #1 was closed without changing `master`. Hardware smoke and the final Mode B gate still block promotion to `master`.
 
 - Current feature preflight is green after the mutation-driven BWU test hardening and CI cleanup.
 - Linux debug `.deb` package smoke is green on application code head `a1b96b7` (run `37474172562`); all later changes before this documentation update are tests/CI only, so the packaged application code is unchanged.
@@ -23,7 +24,7 @@ Draft PR #2 (`feat/pixel-ble-receiver -> dev`) remains isolated until the real P
 - Targeted mutation audit now reports 22 caught, 18 unviable, 1 missed and 0 timeouts across 41 mutants. The only survivor is the `MigratableStream::poll_flush -> Ok(())` mutation, which is equivalent/unobservable for the current concrete `DuplexStream` and `TcpStream` transports; the real delegation remains in production code.
 - Residual `unwrap`/`expect`/panic review of the 11 changed Rust modules found no such calls in production regions; remaining occurrences are under `#[cfg(test)]`.
 
-The internal `dev -> master` PR validation remains intentionally skipped to avoid duplicating the authoritative `push dev` preflight.
+There is no standing `dev -> master` PR. Promotion to `master` is a deliberate fast-forward after the documented release gates pass.
 
 ## Completed work
 
@@ -119,7 +120,7 @@ Reviewed or identified as relevant:
 Upstream backlog classification for this maintenance pass:
 
 - **Covered by equivalent fixes in this fork:** PRs #439/#433, #430, #418, #408, #404, #380, #334 and #333; issues #431, #429/#369, #423/#195, #421/#407, #268 and #440.
-- **Covered by the isolated Pixel receiver work in PR #2:** issue #425 and the modern BLE/GATT receiver bootstrap path; older discovery reports #358/#311/#270 are smoke-test targets because they overlap with the same mDNS/BLE/TCP chain but do not provide enough evidence for separate code changes.
+- **Covered by the Pixel receiver work integrated in `dev`:** issue #425 and the modern BLE/GATT receiver bootstrap path; older discovery reports #358/#311/#270 are smoke-test targets because they overlap with the same mDNS/BLE/TCP chain but do not provide enough evidence for separate code changes.
 - **Linux packaged-smoke targets rather than speculative code fixes:** #422 (Wayland close/hide behavior), #357/#390/#328 (blank/partial WebKit rendering across mixed GPU/font/EGL causes), #307 (window reopen/GTK lifecycle), #426/#365 (package dependency variance), #325/#394 (generic transfer failures without a single reproducible root cause).
 - **Feature requests, not Mode B blockers:** #435/#436 folder hierarchy, #432 multi-file UX, #434 AirDrop interoperability, #428/#363/#246 outbound clipboard/text, #388/#347/#310 custom device name, #387/#384/#224 trusted devices, #386/#383 sorting, #385/#382 tray indicators, #356/#395 localization, #370 visibility tray menu, #411 decorations, #405 update-check toggle, #375 sender image, #368 QR, #366 silent flag, #364 double-click tray, #354/#374 icon variants, #329 Flatpak, #326 Homebrew, #295/#412/#413/#414/#415/#416 Windows work, #264 dock behavior, #245/#182 notification actions.
 - **Dependency/packaging PRs superseded or handled independently:** #424, #419, #417, #410, #402, #400, #399, #391, #371, #342, #276 and #241.
@@ -131,7 +132,7 @@ No remaining upstream item is treated as an automatic blocker solely because it 
 
 Upstream issue #425 contains current 2026 evidence that modern Pixel Quick Share can leave Wi-Fi during receiver discovery. In that state, mDNS-only Linux receivers may never appear or may fail before opening the TCP connection.
 
-The implementation is now isolated in draft PR #2 (`feat/pixel-ble-receiver -> dev`) and ports the proven architecture from `martinalderson/rquickshare:feat/ble-receiver-connect-back` without overwriting the fork's hardened inbound code:
+The implementation is integrated in `dev` and ports the proven architecture from `martinalderson/rquickshare:feat/ble-receiver-connect-back` without overwriting the fork's hardened inbound code:
 
 - receiver advertisement on service UUID `0xFEF3` using the same endpoint id and hostname as mDNS;
 - visibility-aware connectable advertising with retry on transient BlueZ failures;
@@ -146,7 +147,7 @@ The implementation is now isolated in draft PR #2 (`feat/pixel-ble-receiver -> d
 - Wi-Fi-LAN transport swap for the actual payload;
 - regression coverage for advertisement layout, weave handshake, framed lengths, LAN-interface filtering and BWU client-introduction validation.
 
-The stable `dev` branch remains green while this larger interoperability change is validated separately. PR #2 must pass its own preflight and a real Pixel -> Linux smoke test before it is merged into `dev`.
+The implementation now lives on `dev`. It must pass the final complete Mode B gate and real Pixel -> Linux smoke before `dev` may be fast-forwarded to `master`.
 
 
 ## Coverage audit
@@ -181,7 +182,7 @@ No arbitrary repository-wide percentage gate is being introduced in this pass. T
 
 - Validate the new CSP/freezePrototype behavior in the packaged Linux UI smoke test.
 - Keep the regression coverage map aligned with fixes; current coverage includes mDNS compact records, P-256 normalization, inbound path/size guards, Wi-Fi credential parsing, clipboard fallback, log caps, BLE receiver advertisement, weave framing/handshake, BWU routing/introduction validation and LAN-interface filtering.
-- Complete PR #2 real-device validation: Pixel -> Linux BLE/GATT -> Wi-Fi-LAN receive, repeat receive without restarting the app, Linux -> Android send, and explicit FE2C/FEF3 BlueZ coexistence check.
+- Complete `dev` real-device validation: Pixel -> Linux BLE/GATT -> Wi-Fi-LAN receive, repeat receive without restarting the app, Linux -> Android send, and explicit FE2C/FEF3 BlueZ coexistence check.
 - Perform packaged install/start/window/tray/send/receive smoke checks on the target Ubuntu/KDE/Wayland machine.
 - Run the final Mode B gate after the hardware smoke. The pre-smoke Mode B run is already green and is not a substitute for this final post-smoke gate.
 - Fast-forward `dev` to `master` only after the above is complete.
