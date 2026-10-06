@@ -481,3 +481,22 @@ A later Pixel -> Linux text attempt reached the receiver successfully and expose
 
 The same run also proved the Wi-Fi BWU reachability failure is host-firewall related on the smoke machine: UFW is active with default incoming deny, while rQuickShare is listening on a random high TCP port (40119 in the retest; 42971 in the earlier run). No rQuickShare rule is present. For the current smoke, use the existing fixed-port setting plus an explicit UFW rule; do not change the user's firewall automatically from the application.
 
+### Successful post-fix Pixel smoke
+
+A later hardware run with the fixed port reachable through UFW confirms the transport and text-state fixes:
+
+- Cold BLE receiver path: Android reads FEF3 slot 0, opens the Weave notify session, completes UKEY2, accepts the advertised Wi-Fi LAN upgrade, connects to the fixed TCP port, completes LAST_WRITE / SAFE_TO_CLOSE, then the inbound session migrates from BLE to Wi-Fi LAN.
+- Once the TCP socket reaches rQuickShare, introduction parsing and consent presentation are fast (roughly 0–1 second on direct TCP sessions).
+- The remaining perceived pre-consent delay is before or during Android discovery/transport selection. On the observed cold path, slot-0 read -> GATT notify subscription took about 9 seconds and Wi-Fi upgrade negotiation took about another 8 seconds before consent. Treat this as a separate discovery/transport-latency optimization task; do not weaken the now-working protocol sequence without a measured experiment.
+- Warm/direct TCP inbound file transfer completed about 1.5 MB in roughly one second after acceptance, confirming that the previous 509-byte BLE crawl was caused by the blocked BWU port rather than file-transfer chunking.
+- Inbound text now completes successfully after acceptance, with the full text payload reaching `Finished`.
+- The repaired local `Open` action successfully opens the configured download directory.
+
+Notification UX follow-up:
+
+- Consent notifications currently contain only the sender name even though the channel metadata already includes text description, file names and total bytes.
+- Consent notifications should show a bounded preview/type summary so the user can decide without opening the main window.
+- Successful inbound text should raise a completion notification with a bounded preview and a `Copy` action that copies the full received text.
+- Successful inbound files should raise a completion notification with file/count summary and an `Open folder` action.
+- Notification previews must be bounded to avoid oversized desktop notifications; the underlying payload must not be truncated for actions such as Copy.
+
