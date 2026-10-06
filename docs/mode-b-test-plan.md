@@ -6,13 +6,15 @@ _Last updated: 2026-10-06_
 
 **Mode B is not complete.**
 
+Branch consolidation note: PR #2 and PR #3 are now integrated into `dev`. Stages 3-8 were completed for the Pixel/BLE maintenance scope, but the newly integrated Full Quick Share artifacts expand the active `dev` scope and require an inventory/matrix refresh before final execution.
+
 The repository has measured line/function/branch coverage, regression tests, a targeted mutation audit, and a pre-smoke stability run. Those artifacts are useful evidence, but they do not yet satisfy the full Mode B SSOT because the mandatory test inventory, branch map, Positive/N1-N12 matrix, interaction matrix, per-production-file coverage map, and literal completion gate are not fully recorded.
 
 No new tests may be added until Stages 3-8 below are complete.
 
 ## Scope
 
-Primary scope is draft PR #2 (`feat/pixel-ble-receiver -> dev`) plus the maintenance-pass regressions that protect behavior changed by the PR.
+Primary scope is the current `dev` branch. The original inventory covers the Pixel/BLE receiver and maintenance-pass regressions; after branch consolidation, the Full Quick Share protocol/text/clipboard changes integrated into `dev` must also be included before the final Mode B completion gate.
 
 The scope includes all changed production artifacts in:
 
