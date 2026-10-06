@@ -95,10 +95,14 @@ pub fn gen_mdns_endpoint_info(device_type: u8, device_name: &str) -> String {
     let unknown_bytes = rand::rng().random::<[u8; 16]>();
     record.extend_from_slice(&unknown_bytes);
 
-    let device_name = device_name.as_bytes();
-    let length = device_name.len() as u8;
-    record.push(length);
-    record.extend_from_slice(device_name);
+    let device_name_bytes = device_name.as_bytes();
+    let mut name_len = device_name_bytes.len().min(u8::MAX as usize);
+    while !device_name.is_char_boundary(name_len) {
+        name_len -= 1;
+    }
+
+    record.push(name_len as u8);
+    record.extend_from_slice(&device_name_bytes[..name_len]);
 
     URL_SAFE_NO_PAD.encode(&record)
 }
@@ -337,6 +341,16 @@ mod tests {
 
         assert_eq!(parse_info.1, device_name);
         assert_eq!(parse_info.0, device_type);
+    }
+
+    #[test]
+    fn test_gen_mdns_info_truncates_multibyte_name_on_utf8_boundary() {
+        let info = gen_mdns_endpoint_info(DeviceType::Laptop as u8, &"é".repeat(200));
+        let (device_type, device_name) = parse_mdns_endpoint_info(&info).unwrap();
+
+        assert_eq!(device_type, DeviceType::Laptop);
+        assert_eq!(device_name.as_bytes().len(), 254);
+        assert_eq!(device_name, "é".repeat(127));
     }
 
     #[test]
