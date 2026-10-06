@@ -82,9 +82,16 @@
 
 							<div class="flex flex-row justify-end gap-2 mt-3">
 								<button
-									v-if="item.destination || (item.text_type === 'Url' && item.text_payload)"
+									v-if="item.destination"
 									type="button"
-									@click.stop="openUrl(item.destination ?? item.text_payload!)"
+									@click.stop="openDownloadDestination()"
+									class="btn btn-secondary">
+									Open
+								</button>
+								<button
+									v-else-if="item.text_type === 'Url' && item.text_payload"
+									type="button"
+									@click.stop="openUrl(item.text_payload)"
 									class="btn btn-secondary">
 									Open
 								</button>
@@ -368,6 +375,14 @@ export default {
 
 			this.toastStore.addToast("Unable to copy text", ToastType.Error);
 			console.error("Clipboard copy failed through both Tauri and browser APIs");
+		},
+		openDownloadDestination: async function() {
+			try {
+				await invoke('open_download_destination');
+			} catch (e) {
+				this.toastStore.addToast("Unable to open the download folder", ToastType.Error);
+				console.error("Error opening download destination", e);
+			}
 		},
 		openUrl: async function(url: string) {
 			try {

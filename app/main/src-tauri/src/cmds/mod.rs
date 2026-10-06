@@ -8,6 +8,8 @@ mod discovery;
 pub use discovery::*;
 mod get_hostname;
 pub use get_hostname::*;
+mod open_download_destination;
+pub use open_download_destination::*;
 mod send_payload;
 pub use send_payload::*;
 mod send_to_rs;

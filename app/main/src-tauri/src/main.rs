@@ -73,6 +73,7 @@ async fn main() -> Result<(), anyhow::Error> {
             cmds::start_discovery,
             cmds::stop_discovery,
             cmds::get_hostname,
+            cmds::open_download_destination,
             cmds::send_payload,
             cmds::send_to_rs,
         ])

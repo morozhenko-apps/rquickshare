@@ -18,6 +18,7 @@ humantime = "2.1"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 log = "0.4"
 notify-rust = "4.10"
+open = "5"
 rqs_lib = { path = "../../../core_lib", features = ["experimental"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
