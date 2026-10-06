@@ -340,14 +340,14 @@ fn rs2js_channelmessage(message: ChannelMessage, manager: &AppHandle) {
         return;
     }
 
-    info!("rs2js_channelmessage: {:?}", &message);
+    info!("rs2js_channelmessage: {:?}", message);
     if let Err(error) = manager.emit("rs2js_channelmessage", &message) {
         warn!("Failed to emit channel message to UI: {error}");
     }
 }
 
 fn rs2js_endpointinfo(message: EndpointInfo, manager: &AppHandle) {
-    info!("rs2js_endpointinfo: {:?}", &message);
+    info!("rs2js_endpointinfo: {:?}", message);
     if let Err(error) = manager.emit("rs2js_endpointinfo", &message) {
         warn!("Failed to emit endpoint info to UI: {error}");
     }
