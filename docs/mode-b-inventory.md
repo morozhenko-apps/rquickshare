@@ -1,6 +1,6 @@
 # Mode B inventory, branch map, and test matrix
 
-_Last updated: 2026-10-06_
+_Last updated: 2026-10-07_
 
 This document is subordinate to `docs/mode-b-test-plan.md` and records Stages 3-8 for the current maintenance/Pixel receiver scope.
 
@@ -30,7 +30,7 @@ Legend:
 | `ReceiverGattServer::{new,run}` | P0 | Integration/Smoke | BlueZ-bound | Smoke GATT registration, slot-0 offset reads, queue overflow behavior |
 | `weave_session` | P0 | Integration | Main branch logic not directly unit-testable through `CharacteristicNotifier` | Record testability defect; cover pure framing/reassembly seams before broad refactor |
 | `validate_received_file_name` | P0 | Unit | Safe, traversal/absolute/control/oversize covered | Add exact 255-byte boundary and multibyte byte-length boundary |
-| `prepare_inbound_files` | P0 | Unit/FS integration | Duplicate names, duplicate IDs, negative size, transactional failure covered | Add pre-existing destination collision chain and total-size boundary where practical |
+| `prepare_inbound_files` / folder materialization | P0 | Unit/FS integration | Duplicate names/IDs, negative size, transactional failure, nested hierarchy, root collision remap, slash/backslash normalization, Windows absolute/traversal rejection, symlink-parent rejection and consent-time directory creation covered | Hardware-smoke real Pixel folder metadata and occupied-root behavior |
 | `parse_wifi_password_payload` | P1 | Unit | Valid 16-byte and malformed variants covered | Confirm invalid UTF-8, exact/truncated trailer variants |
 | `read_plain_frame_from` / `send_plain_frame_on` | P0 | Unit/Integration | Round-trip and zero-length read covered | Add max/max+1, truncated stream, zero-length send |
 | `validate_client_introduction` / `peek_client_introduction` | P0 | Unit | Valid intro, incomplete prefix and invalid event/payload variants covered | Add explicit wrong endpoint semantics at BWU handoff layer |
@@ -39,7 +39,7 @@ Legend:
 | `InboundRequest::do_bandwidth_upgrade` | P0 | Integration/Smoke | Indirect BWU routing evidence, no complete deterministic handoff test | Add pure frame/order assertions where possible; real migration remains hardware smoke |
 | `MigratableStream::{poll_read,poll_write,poll_flush,poll_shutdown}` | P0 | Integration | BLE read/write/flush/shutdown covered | Add TCP variant round-trip/shutdown; flush survivor remains equivalent for concrete transports |
 | `is_cancel_request` | P1 | Unit | Direction/id/action covered | None |
-| `prepare_outbound_files` | P0 | Unit/FS integration | image/apk/unknown, missing, empty, unique IDs covered | Add audio/video, non-UTF8 filename, unreadable/open failure when deterministic |
+| `prepare_outbound_files` | P0 | Unit/FS integration | image/video/audio/apk/unknown classification, missing input, zero-file rejection, recursive folders, selected-root preservation, duplicate root disambiguation, symlink skipping and unique payload IDs covered | Hardware-smoke Linux folder -> Pixel; add unreadable/non-UTF8 cases only where deterministic |
 | Outbound secure-session/state-machine methods | P0 | Integration | Consent accept/reject/malformed plus previous hardening regressions | Fill only deterministic branch gaps discovered below |
 | `route_bandwidth_upgrade_if_pending` | P0 | Integration | Successful route without consuming bytes covered | Add no-pending, malformed/ordinary frame with pending route, unknown endpoint |
 | `error_for_ui` | P2 | Unit | No dedicated test | Add 512-character boundary/truncation |
@@ -52,7 +52,7 @@ Legend:
 | `local_lan_ipv4` | P0 | Unit/Integration | Environment-dependent only | Extract pure selector seam; cover private/public/fallback/IPv6/loopback/tunnel interactions |
 | `is_not_self_ip` | P2 | Integration | Environment-dependent | Leave integration-only unless selector seam makes it cheap |
 | `RQS::{new,run,discovery,stop_discovery,change_visibility,set_foreground,stop,set_download_path}` | P1 | Integration/Smoke | Orchestration not unit-covered | Treat BlueZ/mDNS/task lifecycle as integration/smoke; pure state setters may be unit-tested if isolated |
-| Frontend `ContentStatus.vue` | P2 | Component | Ready/drop, file select, discovery idempotence | No pre-smoke gap identified |
+| Frontend `ContentStatus.vue` | P2 | Component | Ready/drop, file select, folder select/cancel, clipboard text/image and discovery idempotence covered | Hardware-smoke native directory picker and directory drag/drop |
 | Frontend `Heading.vue` | P2 | Component | Host/version/settings/update link | No pre-smoke gap identified |
 | Frontend `SettingsModal.vue` | P2 | Component | load/save/clear port, invalid port, startup toggles, download folder | Extend only if `parseListeningPort` contract changes |
 | Frontend `SideMenu.vue` | P2 | Component | visibility states and cancel event | No pre-smoke gap identified |
@@ -129,19 +129,22 @@ Legend:
 23. FIRST/LAST bits set correctly across fragments.
 24. Send counter wraps without corrupting payload.
 
-### Inbound filename/file preparation
-1. Empty name -> reject.
-2. Byte length > 255 -> reject.
-3. slash/backslash/NUL/control -> reject.
-4. Exactly one normal path component -> accept.
-5. Any other component form -> reject.
-6. Negative file size -> reject.
-7. Duplicate payload ID against existing/current batch -> reject.
-8. Destination free -> use original name.
-9. Destination exists/reserved -> increment numeric prefix until unique.
-10. Destination suffix overflow -> reject.
-11. Total transfer size overflow -> reject.
-12. Full batch succeeds -> return complete prepared set; failure must not partially mutate request state.
+### Inbound filename/file/folder preparation
+1. Empty/oversized/unsafe leaf name -> reject.
+2. Parent folder empty -> top-level file.
+3. Forward- or backslash-separated relative parent -> normalize to safe components.
+4. Absolute Unix/Windows path, empty component, `.`, `..`, NUL/control, oversized component or excessive depth -> reject.
+5. Negative file size -> reject.
+6. Duplicate payload ID against existing/current batch -> reject.
+7. Top-level file destination occupied/reserved -> increment numeric prefix until unique.
+8. Folder root free -> preserve announced root.
+9. Folder root occupied/reserved -> choose one numeric-prefixed root alias and reuse it for every descendant.
+10. Introduction preparation must not create directories or files.
+11. Consent-time materialization creates missing parents one component at a time.
+12. Existing symlink/non-directory parent or canonical escape from download root -> reject before file creation.
+13. Duplicate selected filenames in one destination -> reserve independent unique leaf destinations.
+14. Total transfer size/suffix arithmetic overflow -> reject.
+15. Full batch succeeds -> return complete prepared set; any failure leaves request state and filesystem unmodified.
 
 ### Wi-Fi password parser
 1. Payload < 4 -> reject.
@@ -174,10 +177,17 @@ Legend:
 2. TCP variant delegates read/write/flush/shutdown.
 3. Transport swap happens by replacing enum variant while request-owned crypto state remains untouched.
 
-### Outbound file preparation
-1. Non-file path -> skip.
-2. Open failure -> skip.
-3. Metadata failure -> skip.
+### Outbound file/folder preparation
+1. Missing input -> skip; selected symlink/non-regular input -> skip.
+2. Regular file -> top-level attachment with empty `parent_folder`.
+3. Directory -> deterministic recursive walk without following symlinks.
+4. Direct child of selected directory -> `parent_folder = selected_root`.
+5. Nested child -> forward-slash parent such as `selected_root/photos`.
+6. Two selected directories with the same root name -> disambiguate the later root once and keep its descendants together.
+7. Empty directory / selection with zero regular files -> reject before protocol setup.
+8. Folder depth or unsafe/non-UTF8 parent component beyond contract -> reject.
+9. File metadata and every FILE payload header carry the same parent-folder value.
+10. Total byte-size/payload-id invariants remain identical to ordinary multi-file transfer.
 4. image/video/audio/apk/other -> correct attachment type.
 5. Missing filename -> error.
 6. Non-UTF8 filename -> error.
@@ -497,7 +507,7 @@ Notification UX follow-up:
 - Consent notifications currently contain only the sender name even though the channel metadata already includes text description, file names and total bytes.
 - Consent notifications should show a bounded preview/type summary so the user can decide without opening the main window.
 - Successful inbound text should raise a completion notification with a bounded preview and a `Copy` action that copies the full received text.
-- Successful inbound files should raise a completion notification with file/count summary and an `Open folder` action.
+- Successful inbound files should raise a completion notification with file/count summary and a `Show file` action.
 - Notification previews must be bounded to avoid oversized desktop notifications; the underlying payload must not be truncated for actions such as Copy.
 
 ### Reveal received item UX
@@ -506,7 +516,7 @@ Post-smoke UX follow-up for completed inbound files:
 
 - The completed-file action should reveal the received item itself in the desktop file manager instead of opening the download directory at its initial scroll position.
 - On Linux, use the standard `org.freedesktop.FileManager1.ShowItems` D-Bus interface so Dolphin/Nautilus can open the parent folder and select the file.
-- The frontend must not regain arbitrary filesystem-open authority. It may pass only the received basename from trusted transfer metadata; the backend resolves the configured download directory, rejects non-basename/path-traversal input, verifies the candidate exists under that directory, and constructs the file URI.
+- The frontend must not regain arbitrary filesystem-open authority. It may pass only the normalized relative received path from trusted transfer metadata; the backend resolves the configured download directory, validates every relative component, canonicalizes the existing candidate under that directory, and constructs the file URI.
 - If the file-manager D-Bus interface is unavailable or the named file cannot be resolved, fall back to opening the configured download directory.
 - For multi-file completion, revealing the first received item is sufficient for the current UI; multi-selection can be added later.
 

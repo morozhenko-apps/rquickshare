@@ -1,6 +1,6 @@
 # Full Quick Share roadmap
 
-_Last updated: 2026-10-06_
+_Last updated: 2026-10-07_
 
 The maintained fork is no longer scoped to "make upstream rQuickShare work again". The product goal is a first-class Linux Quick Share client that implements the useful protocol surface available to Android/Windows peers, while clearly separating open/local protocol work from Google-account or Apple-specific interoperability that requires additional reverse engineering.
 
@@ -53,7 +53,7 @@ The maintained fork is no longer scoped to "make upstream rQuickShare work again
    - Correct outbound Finished state and UX.
    - Tests for metadata classification, framing, payload bytes and cancellation.
 
-3. **Folders**
+3. **Folders** — implemented on `dev`, hardware smoke pending
    - Select files or folders; drag-and-drop directories use the same expansion path.
    - Recursively enumerate folders without following symbolic links. Empty folders are not representable by the Quick Share wire format and are skipped.
    - Preserve the selected directory name as the first `FileMetadata.parent_folder` segment. Example: selecting `Trip/` sends `Trip/photo.jpg` as `name = "photo.jpg"`, `parent_folder = "Trip"`; nested files use forward-slash relative parents such as `Trip/photos`.
