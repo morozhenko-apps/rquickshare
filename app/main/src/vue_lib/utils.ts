@@ -117,7 +117,18 @@ async function invertVisibility(vm: TauriVM) {
 	return await vm.setVisibility(vm, 'Visible');
 }
 
-async function clearSending(vm: TauriVM, ) {
+async function clearSending(vm: TauriVM) {
+	const payload = vm.outboundPayload;
+	if (payload && 'EphemeralFiles' in payload) {
+		for (const path of payload.EphemeralFiles) {
+			try {
+				await vm.invoke('remove_ephemeral_file', { path });
+			} catch (error) {
+				console.warn('Could not remove ephemeral clipboard file', error);
+			}
+		}
+	}
+
 	await vm.invoke('stop_discovery');
 	vm.outboundPayload = undefined;
 	vm.discoveryRunning = false;
