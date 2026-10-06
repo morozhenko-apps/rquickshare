@@ -2236,7 +2236,6 @@ mod security_tests {
         assert_eq!(request.state.state, State::WaitingForUserConsent);
     }
 
-
     #[tokio::test]
     async fn introduction_preserves_sae_wifi_security_type() {
         let mut request = test_request();
