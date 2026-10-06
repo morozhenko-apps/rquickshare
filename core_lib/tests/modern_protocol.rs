@@ -40,7 +40,10 @@ fn modern_introduction_fields_round_trip() {
     let file = &decoded.file_metadata[0];
     assert_eq!(file.parent_folder.as_deref(), Some("Trip/Day 1"));
     assert_eq!(file.attachment_hash, Some(0x11223344));
-    assert_eq!(decoded.use_case(), introduction_frame::SharingUseCase::RemoteCopy);
+    assert_eq!(
+        decoded.use_case(),
+        introduction_frame::SharingUseCase::RemoteCopy
+    );
     assert_eq!(decoded.preview_payload_ids, vec![3001, 3002]);
     assert_eq!(decoded.transfer_id.as_deref(), Some("transfer-123"));
     assert!(decoded.start_transfer());
@@ -89,9 +92,7 @@ fn resume_attachment_details_round_trip() {
     );
 
     let frame = ConnectionResponseFrame {
-        status: Some(
-            rqs_lib::sharing_nearby::connection_response_frame::Status::Accept.into(),
-        ),
+        status: Some(rqs_lib::sharing_nearby::connection_response_frame::Status::Accept.into()),
         attachment_details: details,
         stream_metadata: vec![],
     };
