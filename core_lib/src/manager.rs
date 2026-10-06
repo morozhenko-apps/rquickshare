@@ -286,7 +286,6 @@ impl TcpServer {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use prost::Message;
@@ -337,12 +336,10 @@ mod tests {
         client.write_all(&framed).await.unwrap();
         client.flush().await.unwrap();
 
-        assert!(
-            route_bandwidth_upgrade_if_pending(server, &router)
-                .await
-                .unwrap()
-                .is_none()
-        );
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_none());
 
         let mut routed = receiver.await.unwrap();
         let mut received = vec![0_u8; framed.len()];
