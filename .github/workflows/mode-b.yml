@@ -55,3 +55,51 @@ jobs:
               pnpm exec vitest run
             )
           done
+
+  coverage:
+    name: Final coverage measurement
+    needs: full_suite
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libdbus-1-dev
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@9.7.0
+
+      - name: Install frontend dependencies
+        working-directory: ./app/main
+        run: pnpm install --frozen-lockfile
+
+      - name: Measure Rust core coverage
+        working-directory: ./core_lib
+        run: |
+          cargo llvm-cov \
+            --all-features \
+            --summary-only \
+            --ignore-filename-regex 'target/|bindings/'
+
+      - name: Measure frontend coverage
+        working-directory: ./app/main
+        run: |
+          pnpm exec vitest run \
+            --coverage \
+            --coverage.provider=v8 \
+            --coverage.reporter=text \
+            --coverage.include='src/**/*.{ts,vue}' \
+            --coverage.exclude='src/auto-imports.d.ts'
