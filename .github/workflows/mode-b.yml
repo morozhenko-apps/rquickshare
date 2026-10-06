@@ -2,6 +2,10 @@ name: Mode B validation
 
 on:
   push:
+    branches:
+      - "feat/pixel-ble-receiver"
+    paths:
+      - ".github/workflows/mode-b.yml"
     tags:
       - "mode-b-*"
   workflow_dispatch:
