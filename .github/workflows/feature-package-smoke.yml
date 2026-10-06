@@ -1,6 +1,6 @@
 name: Feature Linux package smoke
 
-# Validation trigger: final primary-port BWU receiver package.
+# Validation trigger: revalidate the current audited Pixel receiver head.
 
 on:
   push:
