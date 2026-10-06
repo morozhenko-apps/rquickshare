@@ -26,12 +26,17 @@ mod tests {
 
     #[test]
     fn payload_buffer_size_accepts_only_sane_non_negative_values() {
-        assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
-        assert_eq!(
-            checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH)).unwrap(),
-            SANE_FRAME_LENGTH as usize
-        );
-        assert!(checked_payload_buffer_size(-1).is_err());
-        assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
+        for accepted in [
+            0_i64,
+            1_i64,
+            i64::from(SANE_FRAME_LENGTH) - 1,
+            i64::from(SANE_FRAME_LENGTH),
+        ] {
+            assert_eq!(checked_payload_buffer_size(accepted).unwrap(), accepted as usize);
+        }
+
+        for rejected in [-1_i64, i64::from(SANE_FRAME_LENGTH) + 1] {
+            assert!(checked_payload_buffer_size(rejected).is_err());
+        }
     }
 }
