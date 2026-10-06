@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use anyhow::anyhow;
 use channel::ChannelMessage;
 #[cfg(all(feature = "experimental", target_os = "linux"))]
-use hdl::BleAdvertiser;
+use hdl::{receiver_service_data, BleAdvertiser, ReceiverAdvertiser, ReceiverGattServer};
 use hdl::MDnsDiscovery;
 use once_cell::sync::Lazy;
 use rand::distr::Alphanumeric;
@@ -161,6 +161,11 @@ impl RQS {
 
         #[cfg(all(feature = "experimental", target_os = "linux"))]
         {
+            let endpoint_id: [u8; 4] = endpoint_id[..4].try_into()?;
+            let hostname = sys_metrics::host::get_hostname()?;
+            let receiver_advertisement =
+                receiver_service_data(endpoint_id, crate::utils::DeviceType::Laptop as u8, &hostname);
+
             let visibility_rx = self.visibility_receiver.clone();
             let ctk = ctoken.clone();
             tracker.spawn(async move {
@@ -174,6 +179,40 @@ impl RQS {
 
                 if let Err(error) = blea.run(ctk).await {
                     error!("BleAdvertiser stopped with error: {error}");
+                }
+            });
+
+            let visibility_rx = self.visibility_receiver.clone();
+            let receiver_ctk = ctoken.clone();
+            let receiver_name = hostname.clone();
+            tracker.spawn(async move {
+                match ReceiverAdvertiser::new(
+                    endpoint_id,
+                    crate::utils::DeviceType::Laptop as u8,
+                    &receiver_name,
+                    visibility_rx,
+                )
+                .await
+                {
+                    Ok(advertiser) => {
+                        if let Err(error) = advertiser.run(receiver_ctk).await {
+                            error!("ReceiverAdvertiser stopped with error: {error}");
+                        }
+                    }
+                    Err(error) => error!("Couldn't init ReceiverAdvertiser: {error}"),
+                }
+            });
+
+            let gatt_ctk = ctoken.clone();
+            let gatt_sender = self.message_sender.clone();
+            tracker.spawn(async move {
+                match ReceiverGattServer::new(receiver_advertisement, gatt_sender).await {
+                    Ok(server) => {
+                        if let Err(error) = server.run(gatt_ctk).await {
+                            error!("ReceiverGattServer stopped with error: {error}");
+                        }
+                    }
+                    Err(error) => error!("Couldn't init ReceiverGattServer: {error}"),
                 }
             });
         }
