@@ -1051,7 +1051,10 @@ impl InboundRequest {
             .await;
         } else if introduction.text_metadata.len() == 1 {
             trace!("process_introduction: handling text_metadata");
-            let meta = introduction\n                .text_metadata\n                .first()\n                .ok_or_else(|| anyhow!("Missing text metadata"))?;
+            let meta = introduction
+                .text_metadata
+                .first()
+                .ok_or_else(|| anyhow!("Missing text metadata"))?;
 
             match meta.r#type() {
                 text_metadata::Type::Url => {
@@ -1108,7 +1111,10 @@ impl InboundRequest {
             }
         } else if introduction.wifi_credentials_metadata.len() == 1 {
             trace!("process_introduction: handling wifi_credentials_metadata");
-            let meta = introduction\n                .wifi_credentials_metadata\n                .first()\n                .ok_or_else(|| anyhow!("Missing Wi-Fi credential metadata"))?;
+            let meta = introduction
+                .wifi_credentials_metadata
+                .first()
+                .ok_or_else(|| anyhow!("Missing Wi-Fi credential metadata"))?;
 
             let metadata = TransferMetadata {
                 id: self.state.id.clone(),
