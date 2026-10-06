@@ -1,18 +1,15 @@
-name: Feature Linux package smoke
+name: Linux package smoke
 
-# Validation trigger: revalidate the current audited Pixel receiver head.
+# Manual package gate. Normal dev commits must not build Tauri packages.
 
 on:
-  push:
-    branches: [ "feat/pixel-ble-receiver" ]
-    paths:
-      - ".github/workflows/feature-package-smoke.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: feature-package-smoke-pixel-receiver
+  group: linux-package-smoke
   cancel-in-progress: true
 
 jobs:
@@ -35,7 +32,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: "app/main/src-tauri -> target"
-          shared-key: pixel-ble-linux
+          shared-key: linux-package-smoke
 
       - name: Install Linux build dependencies
         run: |
@@ -73,6 +70,6 @@ jobs:
       - name: Upload Debian package
         uses: actions/upload-artifact@v6
         with:
-          name: rquickshare-pixel-ble-linux-debug
+          name: rquickshare-linux-debug
           path: app/main/src-tauri/target/debug/bundle/**/*.deb
           if-no-files-found: error
