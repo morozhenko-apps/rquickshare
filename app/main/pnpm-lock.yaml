@@ -2827,7 +2827,7 @@ snapshots:
       vue: 3.5.42(typescript@5.9.3)
       vue-component-type-helpers: 3.3.12
     optionalDependencies:
-      '@vue/server-renderer': 3.5.42(vue@3.5.42(typescript@5.9.3))
+      '@vue/server-renderer': 3.5.42
 
   abbrev@5.0.0: {}
 
