@@ -301,11 +301,10 @@ where
 
 pub fn local_lan_ipv4() -> Option<[u8; 4]> {
     let interfaces = get_if_addrs().ok()?;
-    select_lan_ipv4(
-        interfaces
-            .into_iter()
-            .map(|interface| (interface.name, interface.ip())),
-    )
+    select_lan_ipv4(interfaces.into_iter().map(|interface| {
+        let address = interface.ip();
+        (interface.name, address)
+    }))
 }
 
 pub fn is_not_self_ip(ip_address: &Ipv4Addr) -> bool {
