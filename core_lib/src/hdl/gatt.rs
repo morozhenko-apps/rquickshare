@@ -246,10 +246,19 @@ async fn weave_session(
             "ble-weave".to_owned(),
             inbound_sender,
         );
+        request.enable_bandwidth_upgrade();
 
         loop {
             match request.handle().await {
-                Ok(()) => {}
+                Ok(()) => {
+                    if request.take_bwu_pending() {
+                        if let Err(error) = request.do_bandwidth_upgrade().await {
+                            warn!(
+                                "{INNER_NAME}: Wi-Fi bandwidth upgrade failed; continuing on BLE: {error}"
+                            );
+                        }
+                    }
+                }
                 Err(error) => {
                     if !matches!(error.downcast_ref(), Some(AppError::NotAnError)) {
                         debug!("{INNER_NAME}: BLE inbound ended: {error}");
