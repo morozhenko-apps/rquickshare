@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { TauriVM } from '../vue_lib/helper/ParamsHelper';
-import { PropType } from 'vue';
+import { computed, PropType } from 'vue';
 
 const props = defineProps({
 	vm: {
@@ -12,6 +12,19 @@ const props = defineProps({
 const emits = defineEmits(['invertVisibility', 'clearSending']);
 
 const pluralize = (n: number, s: string) => n === 1 ? s : `${s}s`;
+
+const outboundFiles = computed(() => {
+	const payload = props.vm.outboundPayload;
+	if (!payload) return undefined;
+	if ('Files' in payload) return payload.Files;
+	if ('EphemeralFiles' in payload) return payload.EphemeralFiles;
+	return undefined;
+});
+
+const outboundText = computed(() => {
+	const payload = props.vm.outboundPayload;
+	return payload && 'Text' in payload ? payload.Text : undefined;
+});
 </script>
 
 <template>
@@ -51,9 +64,16 @@ const pluralize = (n: number, s: string) => n === 1 ? s : `${s}s`;
 			<p class="text-xs font-semibold uppercase tracking-[0.12em] text-muted mb-3">
 				Sending
 			</p>
-			<p class="font-semibold">
-				{{ props.vm.outboundPayload.Files.length }} {{ pluralize(props.vm.outboundPayload.Files.length, "file") }}
-			</p>
+			<template v-if="outboundFiles">
+				<p class="font-semibold">
+					{{ outboundFiles.length }} {{ pluralize(outboundFiles.length, "file") }}
+				</p>
+			</template>
+			<template v-else>
+				<p class="font-semibold">
+					Sharing text
+				</p>
+			</template>
 
 			<div class="icon-surface w-24 h-24 rounded-2xl my-4 flex justify-center items-center">
 				<svg
@@ -65,11 +85,18 @@ const pluralize = (n: number, s: string) => n === 1 ? s : `${s}s`;
 				</svg>
 			</div>
 
+			<template v-if="outboundFiles">
+				<p
+					v-for="f in outboundFiles"
+					:key="f"
+					class="overflow-hidden whitespace-nowrap text-ellipsis text-sm">
+					{{ f.split('/').pop() }}
+				</p>
+			</template>
 			<p
-				v-for="f in props.vm.outboundPayload.Files"
-				:key="f"
-				class="overflow-hidden whitespace-nowrap text-ellipsis text-sm">
-				{{ f.split('/').pop() }}
+				v-else-if="outboundText"
+				class="text-sm text-muted whitespace-pre-wrap break-words line-clamp-6">
+				{{ outboundText }}
 			</p>
 
 			<p class="text-xs text-muted leading-5 mt-4">

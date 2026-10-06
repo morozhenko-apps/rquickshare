@@ -3,6 +3,14 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, test, vi } from 'vitest';
 
+const { readTextMock } = vi.hoisted(() => ({
+	readTextMock: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
+	readText: readTextMock,
+}));
+
 import ContentStatus from '../../src/composables/ContentStatus.vue';
 import type { TauriVM } from '../../src/vue_lib/helper/ParamsHelper';
 
@@ -49,6 +57,66 @@ describe('ContentStatus', () => {
 			[{ Files: ['/tmp/photo.jpg', '/tmp/notes.txt'] }],
 		]);
 		expect(wrapper.emitted('discoveryRunning')).toHaveLength(1);
+	});
+
+	test('shares clipboard text and starts discovery', async () => {
+		readTextMock.mockResolvedValueOnce('https://example.com');
+		const invoke = vi.fn().mockResolvedValue(undefined);
+		const wrapper = mount(ContentStatus, {
+			props: {
+				vm: vm({ invoke }),
+			},
+		});
+
+		const clipboardButton = wrapper.findAll('button').find((button) =>
+			button.text().includes('Paste clipboard'),
+		)!;
+		await clipboardButton.trigger('click');
+		await flushPromises();
+
+		expect(wrapper.emitted('outboundPayload')).toEqual([
+			[{ Text: 'https://example.com' }],
+		]);
+		expect(invoke).toHaveBeenCalledWith('start_discovery');
+		expect(wrapper.emitted('discoveryRunning')).toHaveLength(1);
+	});
+
+	test('falls back to a clipboard image when text is unavailable', async () => {
+		readTextMock.mockRejectedValueOnce(new Error('not text'));
+		const invoke = vi.fn(async (command: string) => {
+			if (command === 'save_clipboard_image') return '/tmp/rquickshare-clipboard-test.png';
+			return undefined;
+		});
+		const wrapper = mount(ContentStatus, { props: { vm: vm({ invoke }) } });
+
+		const clipboardButton = wrapper.findAll('button').find((button) =>
+			button.text().includes('Paste clipboard'),
+		)!;
+		await clipboardButton.trigger('click');
+		await flushPromises();
+
+		expect(wrapper.emitted('outboundPayload')).toEqual([
+			[{ EphemeralFiles: ['/tmp/rquickshare-clipboard-test.png'] }],
+		]);
+		expect(invoke).toHaveBeenCalledWith('start_discovery');
+	});
+
+	test('shows an inline error when clipboard has no shareable content', async () => {
+		readTextMock.mockResolvedValueOnce('   ');
+		const invoke = vi.fn(async (command: string) => {
+			if (command === 'save_clipboard_image') throw new Error('not image');
+			return undefined;
+		});
+		const wrapper = mount(ContentStatus, { props: { vm: vm({ invoke }) } });
+
+		const clipboardButton = wrapper.findAll('button').find((button) =>
+			button.text().includes('Paste clipboard'),
+		)!;
+		await clipboardButton.trigger('click');
+		await flushPromises();
+
+		expect(wrapper.text()).toContain('Clipboard does not contain shareable text or an image.');
+		expect(wrapper.emitted('outboundPayload')).toBeUndefined();
 	});
 
 	test('does not restart discovery when it is already running', async () => {

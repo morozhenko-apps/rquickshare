@@ -108,7 +108,7 @@ pub enum TextPayloadInfo {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub enum TextPayloadType {
     Url,
     Text,

@@ -22,7 +22,7 @@ use tokio::sync::broadcast::{Receiver, Sender};
 use ts_rs::TS;
 
 use super::info::{InternalFileInfo, TransferMetadata};
-use super::{InnerState, State};
+use super::{InnerState, State, TextPayloadType};
 use crate::channel::{ChannelAction, ChannelDirection, ChannelMessage};
 use crate::location_nearby_connections::bandwidth_upgrade_negotiation_frame::upgrade_path_info::Medium;
 use crate::location_nearby_connections::connection_response_frame::ResponseStatus;
@@ -42,7 +42,8 @@ use crate::securemessage::{
     SecureMessage, SigScheme,
 };
 use crate::sharing_nearby::{
-    file_metadata, paired_key_result_frame, FileMetadata, IntroductionFrame,
+    file_metadata, paired_key_result_frame, text_metadata, FileMetadata, IntroductionFrame,
+    TextMetadata,
 };
 use crate::utils::{
     encode_point, gen_ecdsa_keypair, gen_random, hkdf_extract_expand, normalize_p256_coordinate,
@@ -62,6 +63,137 @@ struct PreparedOutboundFiles {
     metadata: Vec<FileMetadata>,
     files: HashMap<i64, InternalFileInfo>,
     total_bytes: u64,
+}
+
+#[derive(Debug)]
+struct PreparedOutboundText {
+    metadata: TextMetadata,
+    payload_id: i64,
+    bytes: Vec<u8>,
+    payload_type: TextPayloadType,
+}
+
+fn classify_outbound_text(text: &str) -> text_metadata::Type {
+    let trimmed = text.trim();
+    let lower = trimmed.to_ascii_lowercase();
+
+    if lower.starts_with("https://") || lower.starts_with("http://") {
+        return text_metadata::Type::Url;
+    }
+
+    let phone_chars = trimmed
+        .chars()
+        .filter(|character| !character.is_whitespace() && !matches!(character, '-' | '(' | ')'))
+        .collect::<String>();
+    let phone_digits = phone_chars
+        .chars()
+        .filter(|character| character.is_ascii_digit())
+        .count();
+    if phone_digits >= 7
+        && phone_chars
+            .chars()
+            .all(|character| character.is_ascii_digit() || character == '+')
+    {
+        return text_metadata::Type::PhoneNumber;
+    }
+
+    text_metadata::Type::Text
+}
+
+fn prepare_outbound_text(text: &str) -> Result<PreparedOutboundText, anyhow::Error> {
+    if text.is_empty() {
+        return Err(anyhow!("Cannot share empty text"));
+    }
+
+    let bytes = text.as_bytes().to_vec();
+    let size = checked_payload_buffer_size(
+        i64::try_from(bytes.len()).map_err(|_| anyhow!("Text payload is too large"))?,
+    )?;
+    let payload_id = rand::rng().random::<i64>();
+    let metadata_type = classify_outbound_text(text);
+    let payload_type = if metadata_type == text_metadata::Type::Url {
+        TextPayloadType::Url
+    } else {
+        TextPayloadType::Text
+    };
+    let title = text.chars().take(64).collect::<String>();
+
+    Ok(PreparedOutboundText {
+        metadata: TextMetadata {
+            text_title: Some(title),
+            r#type: Some(metadata_type.into()),
+            payload_id: Some(payload_id),
+            size: Some(size as i64),
+            id: Some(rand::rng().random::<i64>()),
+            ..Default::default()
+        },
+        payload_id,
+        bytes,
+        payload_type,
+    })
+}
+
+fn byte_payload_frames(payload_id: i64, body: &[u8]) -> Result<Vec<OfflineFrame>, anyhow::Error> {
+    const CHUNK_SIZE: usize = 256 * 1024;
+
+    let total_size = i64::try_from(body.len()).map_err(|_| anyhow!("Byte payload is too large"))?;
+    checked_payload_buffer_size(total_size)?;
+
+    let header = PayloadHeader {
+        id: Some(payload_id),
+        r#type: Some(payload_header::PayloadType::Bytes.into()),
+        total_size: Some(total_size),
+        is_sensitive: Some(false),
+        ..Default::default()
+    };
+
+    let mut frames = Vec::with_capacity(body.len().div_ceil(CHUNK_SIZE) + 1);
+    for (index, chunk) in body.chunks(CHUNK_SIZE).enumerate() {
+        let offset = index
+            .checked_mul(CHUNK_SIZE)
+            .and_then(|value| i64::try_from(value).ok())
+            .ok_or_else(|| anyhow!("Byte payload offset overflow"))?;
+
+        frames.push(OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(
+                    location_nearby_connections::v1_frame::FrameType::PayloadTransfer.into(),
+                ),
+                payload_transfer: Some(PayloadTransferFrame {
+                    packet_type: Some(PacketType::Data.into()),
+                    payload_header: Some(header.clone()),
+                    payload_chunk: Some(PayloadChunk {
+                        offset: Some(offset),
+                        flags: Some(0),
+                        body: Some(chunk.to_vec()),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        });
+    }
+
+    frames.push(OfflineFrame {
+        version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+        v1: Some(location_nearby_connections::V1Frame {
+            r#type: Some(location_nearby_connections::v1_frame::FrameType::PayloadTransfer.into()),
+            payload_transfer: Some(PayloadTransferFrame {
+                packet_type: Some(PacketType::Data.into()),
+                payload_header: Some(header),
+                payload_chunk: Some(PayloadChunk {
+                    offset: Some(total_size),
+                    flags: Some(1),
+                    body: Some(Vec::new()),
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    });
+
+    Ok(frames)
 }
 
 fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, anyhow::Error> {
@@ -156,10 +288,12 @@ fn prepare_outbound_files(files: &[String]) -> Result<PreparedOutboundFiles, any
     })
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub enum OutboundPayload {
     Files(Vec<String>),
+    EphemeralFiles(Vec<String>),
+    Text(String),
 }
 
 #[derive(Debug)]
@@ -170,6 +304,23 @@ pub struct OutboundRequest {
     sender: Sender<ChannelMessage>,
     receiver: Receiver<ChannelMessage>,
     payload: OutboundPayload,
+    text_payload_id: Option<i64>,
+    cleanup_paths: Vec<std::path::PathBuf>,
+}
+
+impl Drop for OutboundRequest {
+    fn drop(&mut self) {
+        for path in self.cleanup_paths.drain(..) {
+            match std::fs::remove_file(&path) {
+                Ok(()) => debug!("Removed ephemeral outbound file: {}", path.display()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => warn!(
+                    "Could not remove ephemeral outbound file {}: {error}",
+                    path.display()
+                ),
+            }
+        }
+    }
 }
 
 impl OutboundRequest {
@@ -182,7 +333,15 @@ impl OutboundRequest {
         rdi: RemoteDeviceInfo,
     ) -> Self {
         let receiver = sender.subscribe();
-        let OutboundPayload::Files(files) = &payload;
+        let (files, text_payload, cleanup_paths) = match &payload {
+            OutboundPayload::Files(files) => (Some(files.clone()), None, Vec::new()),
+            OutboundPayload::EphemeralFiles(files) => (
+                Some(files.clone()),
+                None,
+                files.iter().map(std::path::PathBuf::from).collect(),
+            ),
+            OutboundPayload::Text(text) => (None, Some(text.clone()), Vec::new()),
+        };
 
         Self {
             endpoint_id,
@@ -196,7 +355,8 @@ impl OutboundRequest {
                 transfer_metadata: Some(TransferMetadata {
                     id: String::from(""),
                     source: Some(rdi),
-                    files: Some(files.to_owned()),
+                    files,
+                    text_payload,
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -204,6 +364,8 @@ impl OutboundRequest {
             sender,
             receiver,
             payload,
+            text_payload_id: None,
+            cleanup_paths,
         }
     }
 
@@ -788,39 +950,70 @@ impl OutboundRequest {
             return Err(anyhow!("Missing required fields"));
         }
 
-        // TODO - Handle sending Text
-        let PreparedOutboundFiles {
-            metadata: file_metadata,
-            files: transferred_files,
-            total_bytes: total_to_send,
-        } = match &self.payload {
-            OutboundPayload::Files(files) => prepare_outbound_files(files)?,
+        let introduction = match &self.payload {
+            OutboundPayload::Files(files) | OutboundPayload::EphemeralFiles(files) => {
+                let PreparedOutboundFiles {
+                    metadata: file_metadata,
+                    files: transferred_files,
+                    total_bytes: total_to_send,
+                } = prepare_outbound_files(files)?;
+
+                self.update_state(
+                    |state| {
+                        if let Some(metadata) = state.transfer_metadata.as_mut() {
+                            metadata.total_bytes = total_to_send;
+                        }
+                        state.transferred_files = transferred_files;
+                    },
+                    false,
+                )
+                .await;
+
+                IntroductionFrame {
+                    file_metadata,
+                    use_case: Some(
+                        sharing_nearby::introduction_frame::SharingUseCase::NearbyShare.into(),
+                    ),
+                    ..Default::default()
+                }
+            }
+            OutboundPayload::Text(text) => {
+                let prepared = prepare_outbound_text(text)?;
+                self.text_payload_id = Some(prepared.payload_id);
+                let payload_type = prepared.payload_type.clone();
+                let total_bytes = prepared.bytes.len() as u64;
+                self.update_state(
+                    |state| {
+                        if let Some(metadata) = state.transfer_metadata.as_mut() {
+                            metadata.total_bytes = total_bytes;
+                            metadata.text_type = Some(payload_type);
+                            metadata.text_description = prepared.metadata.text_title.clone();
+                        }
+                    },
+                    false,
+                )
+                .await;
+
+                IntroductionFrame {
+                    text_metadata: vec![prepared.metadata],
+                    use_case: Some(
+                        sharing_nearby::introduction_frame::SharingUseCase::RemoteCopy.into(),
+                    ),
+                    ..Default::default()
+                }
+            }
         };
 
-        self.update_state(
-            |e| {
-                if let Some(tmd) = e.transfer_metadata.as_mut() {
-                    tmd.total_bytes = total_to_send;
-                }
-                e.transferred_files = transferred_files;
-            },
-            false,
-        )
-        .await;
-
-        let introduction = sharing_nearby::Frame {
+        let frame = sharing_nearby::Frame {
             version: Some(sharing_nearby::frame::Version::V1.into()),
             v1: Some(sharing_nearby::V1Frame {
                 r#type: Some(sharing_nearby::v1_frame::FrameType::Introduction.into()),
-                introduction: Some(IntroductionFrame {
-                    file_metadata,
-                    ..Default::default()
-                }),
+                introduction: Some(introduction),
                 ..Default::default()
             }),
         };
 
-        self.send_encrypted_frame(&introduction).await?;
+        self.send_encrypted_frame(&frame).await?;
 
         Ok(())
     }
@@ -850,7 +1043,37 @@ impl OutboundRequest {
                 )
                 .await;
 
-                // TODO - Handle sending Text
+                if let OutboundPayload::Text(text) = self.payload.clone() {
+                    if self.take_pending_cancel_request()? {
+                        self.update_state(|state| state.state = State::Cancelled, true)
+                            .await;
+                        self.disconnection().await?;
+                        return Err(anyhow!(crate::errors::AppError::NotAnError));
+                    }
+
+                    let payload_id = self
+                        .text_payload_id
+                        .ok_or_else(|| anyhow!("Missing outbound text payload id"))?;
+                    let frames = byte_payload_frames(payload_id, text.as_bytes())?;
+                    for frame in frames {
+                        self.encrypt_and_send(&frame).await?;
+                    }
+
+                    let total_bytes = text.len() as u64;
+                    self.update_state(
+                        |state| {
+                            if let Some(metadata) = state.transfer_metadata.as_mut() {
+                                metadata.ack_bytes = total_bytes;
+                            }
+                            state.state = State::Finished;
+                        },
+                        true,
+                    )
+                    .await;
+                    self.disconnection().await?;
+                    return Ok(());
+                }
+
                 let ids: Vec<i64> = self.state.transferred_files.keys().cloned().collect();
                 info!("We are sending: {:?}", ids);
                 let mut ids_iter = ids.into_iter();
@@ -1495,6 +1718,114 @@ mod security_tests {
         assert_eq!(prepared.total_bytes, 0);
     }
 
+    #[test]
+    fn outbound_text_classification_covers_common_quick_share_types() {
+        assert_eq!(
+            classify_outbound_text("https://example.com/path"),
+            text_metadata::Type::Url
+        );
+        assert_eq!(
+            classify_outbound_text("+351 912 345 678"),
+            text_metadata::Type::PhoneNumber
+        );
+        assert_eq!(
+            classify_outbound_text("hello from Linux"),
+            text_metadata::Type::Text
+        );
+    }
+
+    #[test]
+    fn outbound_text_preparation_rejects_empty_and_preserves_utf8_size() {
+        assert!(prepare_outbound_text("").is_err());
+
+        let prepared = prepare_outbound_text("olá 🌍").unwrap();
+        assert_eq!(prepared.metadata.size(), "olá 🌍".len() as i64);
+        assert_eq!(prepared.metadata.payload_id(), prepared.payload_id);
+        assert_eq!(prepared.bytes, "olá 🌍".as_bytes());
+        assert_eq!(prepared.payload_type, TextPayloadType::Text);
+    }
+
+    #[test]
+    fn byte_payload_frames_are_chunked_and_terminated() {
+        let body = vec![7_u8; 600 * 1024];
+        let frames = byte_payload_frames(77, &body).unwrap();
+
+        assert_eq!(frames.len(), 4);
+
+        let mut offsets = Vec::new();
+        let mut reconstructed = Vec::new();
+        for frame in &frames[..frames.len() - 1] {
+            let transfer = frame
+                .v1
+                .as_ref()
+                .unwrap()
+                .payload_transfer
+                .as_ref()
+                .unwrap();
+            let header = transfer.payload_header.as_ref().unwrap();
+            let chunk = transfer.payload_chunk.as_ref().unwrap();
+
+            assert_eq!(header.id(), 77);
+            assert_eq!(header.r#type(), payload_header::PayloadType::Bytes);
+            assert_eq!(header.total_size(), body.len() as i64);
+            assert_eq!(chunk.flags(), 0);
+            offsets.push(chunk.offset());
+            reconstructed.extend_from_slice(chunk.body());
+        }
+
+        assert_eq!(offsets, vec![0, 256 * 1024, 512 * 1024]);
+        assert_eq!(reconstructed, body);
+
+        let final_transfer = frames
+            .last()
+            .unwrap()
+            .v1
+            .as_ref()
+            .unwrap()
+            .payload_transfer
+            .as_ref()
+            .unwrap();
+        let final_chunk = final_transfer.payload_chunk.as_ref().unwrap();
+        assert_eq!(final_chunk.offset(), body.len() as i64);
+        assert_eq!(final_chunk.flags(), 1);
+        assert!(final_chunk.body().is_empty());
+    }
+
+    #[tokio::test]
+    async fn ephemeral_files_are_removed_when_request_is_dropped() {
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-ephemeral-test-{}",
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let image = root.join("clipboard.png");
+        std::fs::write(&image, [1_u8, 2, 3, 4]).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _peer = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
+        let (sender, _receiver) = tokio::sync::broadcast::channel(16);
+
+        let request = OutboundRequest::new(
+            [1, 2, 3, 4],
+            socket,
+            "ephemeral-transfer".to_owned(),
+            sender,
+            OutboundPayload::EphemeralFiles(vec![image.to_string_lossy().into_owned()]),
+            RemoteDeviceInfo {
+                name: "Test phone".to_owned(),
+                device_type: DeviceType::Phone,
+            },
+        );
+
+        assert!(image.exists());
+        drop(request);
+        assert!(!image.exists());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     async fn test_request(files: Vec<String>) -> (OutboundRequest, tokio::net::TcpStream) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -1524,6 +1855,7 @@ mod security_tests {
             r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
             connection_response: Some(sharing_nearby::ConnectionResponseFrame {
                 status: Some(status.into()),
+                ..Default::default()
             }),
             ..Default::default()
         }

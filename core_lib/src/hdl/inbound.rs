@@ -1004,7 +1004,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                     } => {
                                         let password = match security_type {
                                             SecurityType::Open => String::new(),
-                                            SecurityType::WpaPsk | SecurityType::Wep => {
+                                            SecurityType::WpaPsk
+                                            | SecurityType::Wep
+                                            | SecurityType::Sae => {
                                                 parse_wifi_password_payload(buffer)?
                                             }
                                             SecurityType::UnknownSecurityType => {
@@ -1458,6 +1460,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
                 connection_response: Some(sharing_nearby::ConnectionResponseFrame {
                     status: Some(sharing_nearby::connection_response_frame::Status::Accept.into()),
+                    ..Default::default()
                 }),
                 ..Default::default()
             }),
@@ -1492,6 +1495,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
                 connection_response: Some(sharing_nearby::ConnectionResponseFrame {
                     status: Some(sreason.into()),
+                    ..Default::default()
                 }),
                 ..Default::default()
             }),

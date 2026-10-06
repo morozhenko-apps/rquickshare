@@ -1,3 +1,5 @@
+mod clipboard_image;
+pub use clipboard_image::*;
 mod change_download_path;
 pub use change_download_path::*;
 mod change_visibility;

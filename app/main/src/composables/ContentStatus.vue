@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { OutboundPayload } from '@martichou/core_lib/bindings/OutboundPayload';
 import { TauriVM } from '../vue_lib/helper/ParamsHelper';
-import { PropType } from 'vue';
+import { PropType, ref } from 'vue';
 
 const props = defineProps({
 	vm: {
@@ -11,6 +12,12 @@ const props = defineProps({
 });
 
 const emits = defineEmits(['outboundPayload', 'discoveryRunning']);
+const clipboardError = ref<string>();
+
+async function ensureDiscovery() {
+	if (!props.vm.discoveryRunning) await props.vm.invoke('start_discovery');
+	emits('discoveryRunning');
+}
 
 function openFilePicker() {
 	props.vm.dialogOpen({
@@ -36,9 +43,31 @@ function openFilePicker() {
 		emits('outboundPayload', {
 			Files: elem
 		} as OutboundPayload);
-		if (!props.vm.discoveryRunning) await props.vm.invoke('start_discovery');
-		emits('discoveryRunning');
+		await ensureDiscovery();
 	})
+}
+
+async function shareClipboard() {
+	clipboardError.value = undefined;
+
+	try {
+		const text = await readText();
+		if (text.trim().length > 0) {
+			emits('outboundPayload', { Text: text } as OutboundPayload);
+			await ensureDiscovery();
+			return;
+		}
+	} catch {
+		// Some clipboard backends report an error when the current payload is an image.
+	}
+
+	try {
+		const path = await props.vm.invoke('save_clipboard_image') as string;
+		emits('outboundPayload', { EphemeralFiles: [path] } as OutboundPayload);
+		await ensureDiscovery();
+	} catch {
+		clipboardError.value = 'Clipboard does not contain shareable text or an image.';
+	}
 }
 </script>
 
@@ -80,11 +109,22 @@ function openFilePicker() {
 		<p class="text-sm text-muted mt-1 mb-4">
 			or choose files from disk
 		</p>
-		<button type="button" class="btn btn-primary" @click="openFilePicker()">
-			<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20">
-				<path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z" />
-			</svg>
-			<span>Select files</span>
-		</button>
+		<div class="flex flex-wrap justify-center gap-2">
+			<button type="button" class="btn btn-primary" @click="openFilePicker()">
+				<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20">
+					<path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z" />
+				</svg>
+				<span>Select files</span>
+			</button>
+			<button type="button" class="btn btn-secondary" @click="shareClipboard()">
+				<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20">
+					<path d="M320-120q-33 0-56.5-23.5T240-200v-560q0-33 23.5-56.5T320-840h80q8-35 37-57.5t67-22.5q38 0 67 22.5t37 57.5h80q33 0 56.5 23.5T768-760v560q0 33-23.5 56.5T688-120H320Zm0-80h368v-560h-72v120H392v-120h-72v560Zm184-520q17 0 28.5-11.5T544-760q0-17-11.5-28.5T504-800q-17 0-28.5 11.5T464-760q0 17 11.5 28.5T504-720Z" />
+				</svg>
+				<span>Paste clipboard</span>
+			</button>
+		</div>
+		<p v-if="clipboardError" class="text-xs text-error mt-3">
+			{{ clipboardError }}
+		</p>
 	</div>
 </template>
