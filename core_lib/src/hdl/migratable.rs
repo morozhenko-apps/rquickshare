@@ -56,11 +56,11 @@ impl AsyncWrite for MigratableStream {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::*;
 
     #[tokio::test]
     async fn ble_transport_round_trip() {
