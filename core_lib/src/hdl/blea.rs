@@ -154,6 +154,22 @@ mod tests {
         assert_eq!(usize::from(endpoint_info[17]), 237);
         assert_eq!(&endpoint_info[18..], vec![b'x'; 237]);
     }
+
+    #[test]
+    fn receiver_advertisement_truncates_multibyte_names_on_utf8_boundary() {
+        let data = receiver_service_data([1, 2, 3, 4], 3, &"é".repeat(200));
+
+        let connection_len = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        let connection = &data[8..8 + connection_len];
+        let info_len = usize::from(connection[8]);
+        let endpoint_info = &connection[9..9 + info_len];
+        let name_len = usize::from(endpoint_info[17]);
+        let name = std::str::from_utf8(&endpoint_info[18..18 + name_len]).unwrap();
+
+        assert_eq!(info_len, 254);
+        assert_eq!(name_len, 236);
+        assert_eq!(name, "é".repeat(118));
+    }
 }
 
 // Quick Share receiver discovery over BLE (service UUID 0xFEF3).
@@ -175,7 +191,10 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
     const MAX_RECEIVER_NAME_BYTES: usize = MAX_ENDPOINT_INFO_BYTES - ENDPOINT_INFO_FIXED_BYTES;
 
     let name = device_name.as_bytes();
-    let name_len = name.len().min(MAX_RECEIVER_NAME_BYTES);
+    let mut name_len = name.len().min(MAX_RECEIVER_NAME_BYTES);
+    while !device_name.is_char_boundary(name_len) {
+        name_len -= 1;
+    }
     endpoint_info.push(name_len as u8);
     endpoint_info.extend_from_slice(&name[..name_len]);
 
