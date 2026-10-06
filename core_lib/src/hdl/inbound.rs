@@ -1272,8 +1272,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 total_bytes,
             } = prepare_inbound_files(&introduction.file_metadata, &existing_payload_ids)?;
 
-            for ((payload_id, info), file_name) in
-                prepared_files.into_iter().zip(files_name.iter())
+            for ((payload_id, info), file_name) in prepared_files.into_iter().zip(files_name.iter())
             {
                 info!("Prepared inbound file {file_name} -> {:?}", info.file_url);
                 self.state.transferred_files.insert(payload_id, info);
@@ -2104,18 +2103,21 @@ mod security_tests {
             vec![],
         );
 
-        assert!(duplicate.process_introduction(&duplicate_frame).await.is_err());
+        assert!(duplicate
+            .process_introduction(&duplicate_frame)
+            .await
+            .is_err());
         assert!(duplicate.state.transferred_files.is_empty());
         assert!(duplicate.state.transfer_metadata.is_none());
 
         let mut negative = test_request();
-        let negative_frame = introduction_frame(
-            vec![file_metadata("negative.bin", 202, -1)],
-            vec![],
-            vec![],
-        );
+        let negative_frame =
+            introduction_frame(vec![file_metadata("negative.bin", 202, -1)], vec![], vec![]);
 
-        assert!(negative.process_introduction(&negative_frame).await.is_err());
+        assert!(negative
+            .process_introduction(&negative_frame)
+            .await
+            .is_err());
         assert!(negative.state.transferred_files.is_empty());
         assert!(negative.state.transfer_metadata.is_none());
     }
