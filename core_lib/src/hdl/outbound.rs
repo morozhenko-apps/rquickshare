@@ -136,8 +136,7 @@ fn prepare_outbound_text(text: &str) -> Result<PreparedOutboundText, anyhow::Err
 fn byte_payload_frames(payload_id: i64, body: &[u8]) -> Result<Vec<OfflineFrame>, anyhow::Error> {
     const CHUNK_SIZE: usize = 256 * 1024;
 
-    let total_size =
-        i64::try_from(body.len()).map_err(|_| anyhow!("Byte payload is too large"))?;
+    let total_size = i64::try_from(body.len()).map_err(|_| anyhow!("Byte payload is too large"))?;
     checked_payload_buffer_size(total_size)?;
 
     let header = PayloadHeader {
@@ -179,9 +178,7 @@ fn byte_payload_frames(payload_id: i64, body: &[u8]) -> Result<Vec<OfflineFrame>
     frames.push(OfflineFrame {
         version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
         v1: Some(location_nearby_connections::V1Frame {
-            r#type: Some(
-                location_nearby_connections::v1_frame::FrameType::PayloadTransfer.into(),
-            ),
+            r#type: Some(location_nearby_connections::v1_frame::FrameType::PayloadTransfer.into()),
             payload_transfer: Some(PayloadTransferFrame {
                 packet_type: Some(PacketType::Data.into()),
                 payload_header: Some(header),
@@ -1025,11 +1022,8 @@ impl OutboundRequest {
 
                 if let OutboundPayload::Text(text) = self.payload.clone() {
                     if self.take_pending_cancel_request()? {
-                        self.update_state(
-                            |state| state.state = State::Cancelled,
-                            true,
-                        )
-                        .await;
+                        self.update_state(|state| state.state = State::Cancelled, true)
+                            .await;
                         self.disconnection().await?;
                         return Err(anyhow!(crate::errors::AppError::NotAnError));
                     }
@@ -1706,7 +1700,13 @@ mod security_tests {
         let mut offsets = Vec::new();
         let mut reconstructed = Vec::new();
         for frame in &frames[..frames.len() - 1] {
-            let transfer = frame.v1.as_ref().unwrap().payload_transfer.as_ref().unwrap();
+            let transfer = frame
+                .v1
+                .as_ref()
+                .unwrap()
+                .payload_transfer
+                .as_ref()
+                .unwrap();
             let header = transfer.payload_header.as_ref().unwrap();
             let chunk = transfer.payload_chunk.as_ref().unwrap();
 
