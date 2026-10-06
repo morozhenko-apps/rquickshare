@@ -1023,7 +1023,7 @@ impl OutboundRequest {
                 )
                 .await;
 
-                if let OutboundPayload::Text(text) = &self.payload {
+                if let OutboundPayload::Text(text) = self.payload.clone() {
                     if self.take_pending_cancel_request()? {
                         self.update_state(
                             |state| state.state = State::Cancelled,
@@ -1765,6 +1765,7 @@ mod security_tests {
             r#type: Some(sharing_nearby::v1_frame::FrameType::Response.into()),
             connection_response: Some(sharing_nearby::ConnectionResponseFrame {
                 status: Some(status.into()),
+                ..Default::default()
             }),
             ..Default::default()
         }
