@@ -1,6 +1,6 @@
 name: Feature Linux package smoke
 
-# Validation trigger: hardened legacy FEF3 receiver + bounded GATT queue.
+# Validation trigger: final primary-port BWU receiver package.
 
 on:
   push:
@@ -32,6 +32,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: Swatinem/rust-cache@v2.9.0
+        with:
+          workspaces: "app/main/src-tauri -> target"
+          shared-key: pixel-ble-linux
+
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -49,9 +54,9 @@ jobs:
         working-directory: ./app/main
         run: pnpm install --frozen-lockfile
 
-      - name: Build debug Linux bundles
+      - name: Build debug Debian package
         working-directory: ./app/main
-        run: pnpm build:debug
+        run: pnpm exec tauri build --debug --bundles deb
 
       - name: Validate Debian package
         shell: bash
@@ -65,12 +70,9 @@ jobs:
             dpkg-deb --contents "$deb" | head -n 80
           done
 
-      - name: Upload Linux bundles
+      - name: Upload Debian package
         uses: actions/upload-artifact@v6
         with:
           name: rquickshare-pixel-ble-linux-debug
-          path: |
-            app/main/src-tauri/target/debug/bundle/**/*.deb
-            app/main/src-tauri/target/debug/bundle/**/*.AppImage
-            app/main/src-tauri/target/debug/bundle/**/*.rpm
+          path: app/main/src-tauri/target/debug/bundle/**/*.deb
           if-no-files-found: error
