@@ -118,17 +118,22 @@ Upstream backlog is not considered closed yet. Remaining open PRs/issues must be
 
 Upstream issue #425 contains current 2026 evidence that modern Pixel Quick Share can leave Wi-Fi during receiver discovery. In that state, mDNS-only Linux receivers may never appear or may fail before opening the TCP connection.
 
-A working Linux prototype exists at `martinalderson/rquickshare:feat/ble-receiver-connect-back`. Compared with that fork's master it is six commits and roughly 1.1k changed lines. Its essential architecture is:
+The implementation is now isolated in draft PR #2 (`feat/pixel-ble-receiver -> dev`) and ports the proven architecture from `martinalderson/rquickshare:feat/ble-receiver-connect-back` without overwriting the fork's hardened inbound code:
 
-- advertise receiver service UUID `0xFEF3`;
-- expose the Nearby GATT slot and weave characteristics;
-- accept the Nearby socket introduction over BLE;
-- reuse the existing UKEY2 / Sharing receive state machine over a generic stream;
-- migrate the established encrypted session to Wi-Fi LAN for actual payload transfer.
+- receiver advertisement on service UUID `0xFEF3` using the same endpoint id and hostname as mDNS;
+- visibility-aware connectable advertising with retry on transient BlueZ failures;
+- Nearby GATT slot plus weave write/notify characteristics;
+- bounded weave framing/reassembly and handshake validation;
+- the existing hardened UKEY2 / Sharing receive state machine generalized over `AsyncRead + AsyncWrite`;
+- a migratable BLE/TCP transport that preserves crypto keys and sequence counters;
+- encrypted `UPGRADE_PATH_AVAILABLE` negotiation after UKEY2 establishment;
+- validated plaintext `CLIENT_INTRODUCTION` / ACK on the new TCP socket;
+- LAST_WRITE / SAFE_TO_CLOSE prior-channel handoff;
+- LAN address selection that ignores Docker/VPN/tunnel interfaces;
+- Wi-Fi-LAN transport swap for the actual payload;
+- regression coverage for advertisement layout, weave handshake, framed lengths, LAN-interface filtering and BWU client-introduction validation.
 
-The prototype reports successful Pixel -> Linux transfers and is directly relevant to the original symptom that motivated this fork. Our existing BLE duty-cycle and visibility fixes do **not** implement this full receiver-side bootstrap.
-
-This is a required interoperability gate before declaring the maintained fork complete. It will be ported as a separate, reviewable change set so the existing security hardening in `inbound.rs` is not overwritten.
+The stable `dev` branch remains green while this larger interoperability change is validated separately. PR #2 must pass its own preflight and a real Pixel -> Linux smoke test before it is merged into `dev`.
 
 ## Remaining audit work
 
@@ -138,6 +143,7 @@ This is a required interoperability gate before declaring the maintained fork co
 - Expand regression coverage around every bug fixed during this pass.
 - Identify only genuinely flaky/stability-sensitive tests for 10x Mode B repetition.
 - Run one manual Linux package build.
+- Complete PR #2 validation and real Pixel -> Linux BLE/GATT -> Wi-Fi-LAN smoke.
 - Perform install/start/send/receive smoke checks on Linux/Android.
 - Run the final Mode B gate.
 - Fast-forward `dev` to `master` only after the above is complete.
