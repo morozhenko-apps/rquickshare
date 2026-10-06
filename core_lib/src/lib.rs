@@ -187,15 +187,8 @@ impl RQS {
 
             let visibility_rx = self.visibility_receiver.clone();
             let receiver_ctk = ctoken.clone();
-            let receiver_name = hostname.clone();
             tracker.spawn(async move {
-                match ReceiverAdvertiser::new(
-                    endpoint_id,
-                    crate::utils::DeviceType::Laptop as u8,
-                    &receiver_name,
-                    visibility_rx,
-                )
-                .await
+                match ReceiverAdvertiser::new(visibility_rx).await
                 {
                     Ok(advertiser) => {
                         if let Err(error) = advertiser.run(receiver_ctk).await {
