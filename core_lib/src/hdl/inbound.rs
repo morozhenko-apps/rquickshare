@@ -2067,6 +2067,21 @@ mod security_tests {
         InboundRequest::new(socket, "test-transfer".to_owned(), sender)
     }
 
+    #[test]
+    fn bandwidth_upgrade_flags_are_explicit_and_one_shot() {
+        let mut request = test_request();
+
+        assert!(!request.bandwidth_upgrade_enabled);
+        assert!(!request.take_bwu_pending());
+
+        request.enable_bandwidth_upgrade();
+        request.bwu_pending = true;
+
+        assert!(request.bandwidth_upgrade_enabled);
+        assert!(request.take_bwu_pending());
+        assert!(!request.take_bwu_pending());
+    }
+
     fn introduction_frame(
         files: Vec<sharing_nearby::FileMetadata>,
         text: Vec<sharing_nearby::TextMetadata>,
