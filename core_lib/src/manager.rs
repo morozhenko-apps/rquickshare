@@ -16,6 +16,60 @@ use crate::utils::RemoteDeviceInfo;
 
 const INNER_NAME: &str = "TcpServer";
 const MAX_UI_ERROR_CHARS: usize = 512;
+const BWU_PEEK_LIMIT: usize = 8 * 1024;
+
+async fn route_bandwidth_upgrade_if_pending(
+    socket: TcpStream,
+    router: &BwuRouter,
+) -> Result<Option<TcpStream>, anyhow::Error> {
+    if !router.has_pending().await {
+        return Ok(Some(socket));
+    }
+
+    let mut buffer = vec![0_u8; BWU_PEEK_LIMIT];
+    let endpoint_id = match tokio::time::timeout(Duration::from_millis(750), async {
+        loop {
+            let count = socket.peek(&mut buffer).await?;
+            if count == 0 {
+                return Ok::<Option<String>, anyhow::Error>(None);
+            }
+
+            if count >= 4 {
+                let frame_len =
+                    u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+                if frame_len == 0 || frame_len > BWU_PEEK_LIMIT.saturating_sub(4) {
+                    return Ok(None);
+                }
+
+                let total = 4 + frame_len;
+                if count >= total {
+                    return peek_client_introduction(&buffer[..total]);
+                }
+            }
+
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result?,
+        Err(_) => None,
+    };
+
+    let Some(endpoint_id) = endpoint_id else {
+        return Ok(Some(socket));
+    };
+
+    match router.route(&endpoint_id, socket).await {
+        Ok(()) => Ok(None),
+        Err(_socket) => {
+            warn!(
+                "{INNER_NAME}: received BWU CLIENT_INTRODUCTION for unregistered endpoint {endpoint_id}"
+            );
+            Ok(None)
+        }
+    }
+}
 
 fn error_for_ui(error: &anyhow::Error) -> String {
     error.to_string().chars().take(MAX_UI_ERROR_CHARS).collect()
