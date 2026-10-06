@@ -26,6 +26,7 @@ use crate::location_nearby_connections::payload_transfer_frame::{
     payload_header, PacketType, PayloadChunk, PayloadHeader,
 };
 use crate::location_nearby_connections::{KeepAliveFrame, OfflineFrame, PayloadTransferFrame};
+use crate::protocol::{checked_payload_buffer_size, SANE_FRAME_LENGTH, SANITY_DURATION};
 use crate::securegcm::ukey2_alert::AlertType;
 use crate::securegcm::{
     ukey2_message, DeviceToDeviceMessage, GcmMetadata, Type, Ukey2Alert, Ukey2ClientFinished,
@@ -38,7 +39,6 @@ use crate::securemessage::{
 use crate::sharing_nearby::{
     paired_key_result_frame, text_metadata, wifi_credentials_metadata::SecurityType,
 };
-use crate::protocol::{checked_payload_buffer_size, SANE_FRAME_LENGTH, SANITY_DURATION};
 use crate::utils::{
     encode_point, gen_ecdsa_keypair, gen_random, get_download_dir, hkdf_extract_expand,
     normalize_p256_coordinate, stream_read_exact, to_four_digit_string, DeviceType,
