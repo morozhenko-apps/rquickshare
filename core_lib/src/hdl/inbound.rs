@@ -14,7 +14,7 @@ use p256::{EncodedPoint, PublicKey};
 use prost::Message;
 use rand::Rng;
 use sha2::{Digest, Sha256, Sha512};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast::{Receiver, Sender};
 
@@ -131,15 +131,15 @@ fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
 }
 
 #[derive(Debug)]
-pub struct InboundRequest {
-    socket: TcpStream,
+pub struct InboundRequest<S = TcpStream> {
+    socket: S,
     pub state: InnerState,
     sender: Sender<ChannelMessage>,
     receiver: Receiver<ChannelMessage>,
 }
 
-impl InboundRequest {
-    pub fn new(socket: TcpStream, id: String, sender: Sender<ChannelMessage>) -> Self {
+impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
+    pub fn new(socket: S, id: String, sender: Sender<ChannelMessage>) -> Self {
         let receiver = sender.subscribe();
 
         Self {
