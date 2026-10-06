@@ -90,9 +90,7 @@ fn get_log_file_path(
             let to = dir.as_ref().join(format!(
                 "{}_{}.log",
                 file_name,
-                OffsetDateTime::now_utc().format(&time::format_description::parse(
-                    "[year]-[month]-[day]_[hour]-[minute]-[second]",
-                )?)?,
+                OffsetDateTime::now_utc().unix_timestamp(),
             ));
 
             if to.is_file() {
