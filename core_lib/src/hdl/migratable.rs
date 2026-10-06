@@ -141,5 +141,4 @@ mod tests {
         let read = peer.read(&mut byte).await.unwrap();
         assert_eq!(read, 0);
     }
-
 }
