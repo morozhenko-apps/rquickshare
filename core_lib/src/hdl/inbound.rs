@@ -38,6 +38,7 @@ use crate::securemessage::{
 use crate::sharing_nearby::{
     paired_key_result_frame, text_metadata, wifi_credentials_metadata::SecurityType,
 };
+use crate::protocol::{checked_payload_buffer_size, SANE_FRAME_LENGTH, SANITY_DURATION};
 use crate::utils::{
     encode_point, gen_ecdsa_keypair, gen_random, get_download_dir, hkdf_extract_expand,
     normalize_p256_coordinate, stream_read_exact, to_four_digit_string, DeviceType,
@@ -47,9 +48,7 @@ use crate::{location_nearby_connections, sharing_nearby};
 
 type HmacSha256 = Hmac<Sha256>;
 
-const SANE_FRAME_LENGTH: i32 = 5 * 1024 * 1024;
 const MAX_RECEIVED_FILENAME_BYTES: usize = 255;
-const SANITY_DURATION: Duration = Duration::from_micros(10);
 
 fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
     if name.is_empty() {
@@ -77,16 +76,6 @@ fn validate_received_file_name(name: &str) -> Result<(), anyhow::Error> {
             "Received file name is not a single safe path component"
         )),
     }
-}
-
-fn checked_payload_buffer_size(total_size: i64) -> Result<usize, anyhow::Error> {
-    if total_size < 0 || total_size > i64::from(SANE_FRAME_LENGTH) {
-        return Err(anyhow!(
-            "Invalid byte payload size: {total_size}; expected 0..={SANE_FRAME_LENGTH}"
-        ));
-    }
-
-    usize::try_from(total_size).map_err(|_| anyhow!("Payload size cannot fit in memory index"))
 }
 
 fn parse_wifi_password_payload(buffer: &[u8]) -> Result<String, anyhow::Error> {
@@ -1956,17 +1945,6 @@ mod security_tests {
     fn received_file_name_rejects_control_chars_and_oversize_components() {
         assert!(validate_received_file_name("evil\nname.txt").is_err());
         assert!(validate_received_file_name(&"a".repeat(MAX_RECEIVED_FILENAME_BYTES + 1)).is_err());
-    }
-
-    #[test]
-    fn payload_buffer_size_accepts_only_sane_non_negative_values() {
-        assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
-        assert_eq!(
-            checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH)).unwrap(),
-            SANE_FRAME_LENGTH as usize
-        );
-        assert!(checked_payload_buffer_size(-1).is_err());
-        assert!(checked_payload_buffer_size(i64::from(SANE_FRAME_LENGTH) + 1).is_err());
     }
 
     #[test]
