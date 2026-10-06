@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 anyhow = "1.0"
 fern = { version = "0.7", features = ["colored"] }
 humantime = "2.1"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 log = "0.4"
 notify-rust = "4.10"
 rqs_lib = { path = "../../../core_lib", features = ["experimental"] }
