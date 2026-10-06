@@ -113,4 +113,148 @@ mod tests {
         assert!(BleAdvertiser::should_advertise(Visibility::Temporarily));
         assert!(!BleAdvertiser::should_advertise(Visibility::Invisible));
     }
+
+    #[test]
+    fn receiver_advertisement_embeds_endpoint_and_name() {
+        let endpoint = [0x11, 0x22, 0x33, 0x44];
+        let data = receiver_service_data(endpoint, 3, "Alcotester");
+
+        assert_eq!(data[0], 0x48);
+        assert_eq!(&data[1..4], &QS_SVC_HASH);
+        assert!(data.windows(endpoint.len()).any(|window| window == endpoint));
+        assert!(data
+            .windows("Alcotester".len())
+            .any(|window| window == b"Alcotester"));
+    }
+
+    #[test]
+    fn receiver_advertisement_truncates_long_names() {
+        let data = receiver_service_data([1, 2, 3, 4], 3, &"x".repeat(300));
+
+        // The endpoint info name-length byte must remain representable as u8.
+        assert!(data.windows(255).any(|window| window == vec![b'x'; 255]));
+        assert!(!data.windows(256).any(|window| window == vec![b'x'; 256]));
+    }
+}
+
+
+// Quick Share receiver discovery over BLE (service UUID 0xFEF3).
+const RX_INNER_NAME: &str = "ReceiverAdvertiser";
+const QS_SERVICE_UUID: u16 = 0xFEF3;
+const QS_SVC_HASH: [u8; 3] = [0xfc, 0x9f, 0x5e];
+const QS_EINFO_IDENTITY: [u8; 16] = [
+    0x4a, 0x22, 0x71, 0x16, 0x9c, 0x15, 0x99, 0xa2, 0x44, 0xaf, 0x44, 0xb0, 0x17, 0x9c, 0x0f, 0x23,
+];
+const QS_CONN_MAC_EXTRA: [u8; 8] = [0xfc, 0x41, 0x16, 0xb6, 0x17, 0x20, 0x00, 0x00];
+const QS_MEDIUMS_TRAILING: [u8; 69] = [
+    0x62, 0xf1, 0x03, 0x00, 0x82, 0x3f, 0xa0, 0x17, 0xfd, 0xf1, 0x70, 0x59, 0x6e, 0x1e, 0xd3, 0x4d,
+    0xe0, 0x92, 0x56, 0x4d, 0x66, 0xd4, 0x29, 0x0f, 0x0f, 0x8f, 0x15, 0x05, 0x34, 0x7b, 0x13, 0x23,
+    0x01, 0xea, 0x7f, 0x92, 0xa8, 0xd8, 0xd4, 0x61, 0x84, 0x15, 0x05, 0x3f, 0x00, 0x00, 0x84, 0x15,
+    0x06, 0x2d, 0x00, 0x00, 0x84, 0x15, 0x04, 0x7f, 0x1f, 0x00, 0x84, 0x15, 0x07, 0x2d, 0x1f, 0x00,
+    0x83, 0x15, 0x01, 0x15, 0x7c,
+];
+
+/// Build the Nearby Connections receiver advertisement carried as 0xFEF3
+/// service data. The endpoint id must match the id used by mDNS.
+pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name: &str) -> Vec<u8> {
+    let mut endpoint_info = Vec::new();
+    endpoint_info.push((1 << 5) | ((device_type & 0x7) << 1));
+    endpoint_info.extend_from_slice(&QS_EINFO_IDENTITY);
+
+    let mut name = device_name.as_bytes().to_vec();
+    name.truncate(255);
+    endpoint_info.push(name.len() as u8);
+    endpoint_info.extend_from_slice(&name);
+
+    let mut connection_advertisement = Vec::new();
+    connection_advertisement.push(0x23);
+    connection_advertisement.extend_from_slice(&QS_SVC_HASH);
+    connection_advertisement.extend_from_slice(&endpoint_id);
+    connection_advertisement.push(endpoint_info.len() as u8);
+    connection_advertisement.extend_from_slice(&endpoint_info);
+    connection_advertisement.extend_from_slice(&QS_CONN_MAC_EXTRA);
+
+    let mut service_data = Vec::new();
+    service_data.push(0x48);
+    service_data.extend_from_slice(&QS_SVC_HASH);
+    service_data.extend_from_slice(&(connection_advertisement.len() as u32).to_be_bytes());
+    service_data.extend_from_slice(&connection_advertisement);
+    service_data.extend_from_slice(&QS_MEDIUMS_TRAILING);
+    service_data
+}
+
+#[derive(Debug, Clone)]
+pub struct ReceiverAdvertiser {
+    adapter: Arc<bluer::Adapter>,
+    service_data: Vec<u8>,
+    visibility_receiver: watch::Receiver<Visibility>,
+}
+
+impl ReceiverAdvertiser {
+    pub async fn new(
+        endpoint_id: [u8; 4],
+        device_type: u8,
+        device_name: &str,
+        visibility_receiver: watch::Receiver<Visibility>,
+    ) -> Result<Self, anyhow::Error> {
+        let session = bluer::Session::new().await?;
+        let adapter = session.default_adapter().await?;
+        adapter.set_powered(true).await?;
+
+        Ok(Self {
+            adapter: Arc::new(adapter),
+            service_data: receiver_service_data(endpoint_id, device_type, device_name),
+            visibility_receiver,
+        })
+    }
+
+    pub async fn run(mut self, ctk: CancellationToken) -> Result<(), anyhow::Error> {
+        let service_uuid = Uuid::from_u16(QS_SERVICE_UUID);
+        let mut handle: Option<AdvertisementHandle> = None;
+
+        info!(
+            "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({})",
+            self.adapter.name(),
+            self.adapter.address().await?
+        );
+
+        loop {
+            let visibility = *self.visibility_receiver.borrow_and_update();
+            if BleAdvertiser::should_advertise(visibility) && handle.is_none() {
+                let advertisement = Advertisement {
+                    advertisement_type: bluer::adv::Type::Peripheral,
+                    service_data: [(service_uuid, self.service_data.clone())].into(),
+                    discoverable: Some(true),
+                    min_interval: Some(std::time::Duration::from_millis(100)),
+                    max_interval: Some(std::time::Duration::from_millis(150)),
+                    ..Default::default()
+                };
+                handle = Some(self.adapter.advertise(advertisement).await?);
+                info!("{RX_INNER_NAME}: started advertising");
+            } else if !BleAdvertiser::should_advertise(visibility) && handle.take().is_some() {
+                info!("{RX_INNER_NAME}: stopped advertising");
+            }
+
+            tokio::select! {
+                _ = ctk.cancelled() => {
+                    info!("{RX_INNER_NAME}: tracker cancelled, returning");
+                    break;
+                }
+                changed = self.visibility_receiver.changed() => {
+                    if changed.is_err() {
+                        debug!("{RX_INNER_NAME}: visibility channel closed, stopping advertiser");
+                        break;
+                    }
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(30)), if handle.is_some() => {
+                    // BlueZ consumes connectable advertising sets on some adapters.
+                    // Re-register periodically so repeated transfers stay discoverable.
+                    handle.take();
+                }
+            }
+        }
+
+        drop(handle);
+        Ok(())
+    }
 }
