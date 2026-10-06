@@ -230,9 +230,10 @@ fn prepare_inbound_files_at(
 
             let parent_dir = remapped_parent
                 .iter()
-                .fold(download_dir.to_path_buf(), |path, segment| path.join(segment));
-            let destination =
-                unique_child_path(&parent_dir, file_name, &reserved_destinations)?;
+                .fold(download_dir.to_path_buf(), |path, segment| {
+                    path.join(segment)
+                });
+            let destination = unique_child_path(&parent_dir, file_name, &reserved_destinations)?;
 
             (destination, Some(remapped_parent.join("/")))
         };
@@ -2390,10 +2391,7 @@ mod security_tests {
                 "Trip/photos/sunset.jpg".to_owned()
             ]
         );
-        assert_eq!(
-            prepared.files[0].1.parent_folder.as_deref(),
-            Some("Trip")
-        );
+        assert_eq!(prepared.files[0].1.parent_folder.as_deref(), Some("Trip"));
         assert_eq!(
             prepared.files[1].1.parent_folder.as_deref(),
             Some("Trip/photos")
