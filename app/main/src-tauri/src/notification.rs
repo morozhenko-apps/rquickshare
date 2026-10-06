@@ -189,8 +189,11 @@ pub fn send_finished_notification(message: &ChannelMessage, app_handle: &AppHand
                     notification.wait_for_action(|action| match action {
                         "copy" => {
                             if let Some(text) = text_payload.as_ref() {
-                                if let Err(error) = capp_handle.clipboard().write_text(text.clone()) {
-                                    error!("Couldn't copy received text from notification: {error}");
+                                if let Err(error) = capp_handle.clipboard().write_text(text.clone())
+                                {
+                                    error!(
+                                        "Couldn't copy received text from notification: {error}"
+                                    );
                                 }
                             }
                         }
