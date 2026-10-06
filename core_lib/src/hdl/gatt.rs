@@ -493,8 +493,14 @@ mod tests {
         let min = [0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x14];
         let max = [0x80, 0x00, 0x01, 0x00, 0x01, 0x01, 0xfd];
 
-        assert_eq!(parse_connection_request(&min).unwrap(), MIN_WEAVE_PACKET_SIZE);
-        assert_eq!(parse_connection_request(&max).unwrap(), MAX_WEAVE_PACKET_SIZE);
+        assert_eq!(
+            parse_connection_request(&min).unwrap(),
+            MIN_WEAVE_PACKET_SIZE
+        );
+        assert_eq!(
+            parse_connection_request(&max).unwrap(),
+            MAX_WEAVE_PACKET_SIZE
+        );
     }
 
     #[test]
@@ -510,7 +516,13 @@ mod tests {
     fn connection_confirm_encodes_version_and_packet_size() {
         assert_eq!(
             connection_confirm(0x01fd),
-            [WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM, 0x00, 0x01, 0x01, 0xfd]
+            [
+                WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM,
+                0x00,
+                0x01,
+                0x01,
+                0xfd
+            ]
         );
     }
 
@@ -526,7 +538,9 @@ mod tests {
         assert_eq!(complete_framed_message_len(&incomplete).unwrap(), None);
 
         let with_trailing = [0_u8, 0, 0, 1, 0xaa, 0xbb, 0xcc];
-        assert_eq!(complete_framed_message_len(&with_trailing).unwrap(), Some(5));
+        assert_eq!(
+            complete_framed_message_len(&with_trailing).unwrap(),
+            Some(5)
+        );
     }
-
 }
