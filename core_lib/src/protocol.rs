@@ -20,6 +20,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sane_frame_length_is_exactly_five_mib() {
+        assert_eq!(SANE_FRAME_LENGTH, 5_242_880);
+    }
+
+    #[test]
     fn payload_buffer_size_accepts_only_sane_non_negative_values() {
         assert_eq!(checked_payload_buffer_size(0).unwrap(), 0);
         assert_eq!(
