@@ -141,6 +141,18 @@ The maintained fork is no longer scoped to "make upstream rQuickShare work again
 - Autostart/background mode, update channel, diagnostics export.
 - Accessibility, keyboard navigation and polished responsive UI.
 
+## Clipboard ephemeral-file security boundary
+
+Architecture decision (2026-10-06):
+
+- `OutboundPayload::EphemeralFiles` remains a transport DTO for Tauri/TypeScript compatibility, but its strings are never deletion-capable by themselves.
+- Core owns a dedicated `ManagedEphemeralFile` capability type. It can only be constructed after validating that the path is a direct child of the system temporary directory and matches the application-owned `rquickshare-clipboard-*.png` naming contract.
+- `OutboundRequest::new` is fallible. Ephemeral payload paths are converted to `ManagedEphemeralFile` before a request exists; any invalid path rejects the request.
+- Cleanup is performed only through validated `ManagedEphemeralFile` instances. Normal file payloads never participate in cleanup.
+- The Tauri cleanup command uses the same core capability type/validation rather than maintaining a second path-security rule.
+- Security invariant: no arbitrary user-selected or attacker-supplied path may acquire deletion capability merely by appearing in an outbound payload.
+- Rollback is isolated to the managed-file type, constructor validation, and clipboard cleanup command; the serialized outbound payload shape remains compatible.
+
 ## Test policy
 
 - Every fixed protocol bug gets a regression test.
