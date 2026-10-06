@@ -1346,6 +1346,7 @@ impl OutboundRequest {
                                 InternalFileInfo {
                                     payload_id: curr_state.payload_id,
                                     file_url: curr_state.file_url.clone(),
+                                    parent_folder: curr_state.parent_folder.clone(),
                                     bytes_transferred: curr_state.bytes_transferred,
                                     total_size: curr_state.total_size,
                                     file: None,
