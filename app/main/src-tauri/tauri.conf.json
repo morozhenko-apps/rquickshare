@@ -52,7 +52,28 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self' customprotocol: asset:",
+        "connect-src": "ipc: http://ipc.localhost https://api.github.com",
+        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "frame-ancestors": "'none'"
+      },
+      "devCsp": {
+        "default-src": "'self' http://localhost:1420",
+        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420 https://api.github.com",
+        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "script-src": "'self' 'unsafe-eval' http://localhost:1420",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "frame-ancestors": "'none'"
+      },
+      "freezePrototype": true
     }
   }
 }
