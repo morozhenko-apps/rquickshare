@@ -10,7 +10,7 @@ This document is the working log for the `morozhenko-apps/rquickshare` maintenan
 - Internal `dev -> master` PR: duplicate heavy jobs are skipped; the push to `dev` is the authoritative preflight.
 - Package/build smoke: manual only. No Tauri packaging on every development commit.
 - Release artifact build: manual only.
-- Mode B: stable tests run once; only explicitly flaky/stability-sensitive tests are repeated 10 times.
+- Mode B final gate: the complete Rust and frontend automated suite runs 10 consecutive times. This supersedes the earlier stable-1x/selected-stability-10x policy for this maintenance pass.
 - `master`: updated only after the audit is complete and the final gates are green.
 
 ## Current gate status
@@ -19,7 +19,7 @@ Draft PR #2 (`feat/pixel-ble-receiver -> dev`) remains isolated until the real P
 
 - Current feature preflight is green after the mutation-driven BWU test hardening and CI cleanup.
 - Linux debug `.deb` package smoke is green on application code head `a1b96b7` (run `37474172562`); all later changes before this documentation update are tests/CI only, so the packaged application code is unchanged.
-- Pre-smoke Mode B is green after the BWU test hardening: stable suite 1x plus the selected async transport/BWU tests 10x (run `37475497104`).
+- Historical pre-smoke Mode B is green after the BWU test hardening: stable suite 1x plus selected async transport/BWU tests 10x (run `37475497104`). The current SSOT is stricter, so a complete-suite 10x run is still required before completion.
 - Targeted mutation audit now reports 22 caught, 18 unviable, 1 missed and 0 timeouts across 41 mutants. The only survivor is the `MigratableStream::poll_flush -> Ok(())` mutation, which is equivalent/unobservable for the current concrete `DuplexStream` and `TcpStream` transports; the real delegation remains in production code.
 - Residual `unwrap`/`expect`/panic review of the 11 changed Rust modules found no such calls in production regions; remaining occurrences are under `#[cfg(test)]`.
 
@@ -151,7 +151,7 @@ The stable `dev` branch remains green while this larger interoperability change 
 
 ## Coverage audit
 
-Coverage is measured explicitly instead of inferring quality from test count.
+Coverage is measured explicitly instead of inferring quality from test count. The detailed Mode B scope, inventory, branch map, Positive/N1-N12 matrix, interaction matrix and coverage map are maintained in `docs/mode-b-test-plan.md` and `docs/mode-b-inventory.md`.
 
 Current automated suite on the Pixel receiver branch:
 
@@ -192,8 +192,8 @@ The maintenance pass is complete only when all of the following are true:
 
 1. Normal `dev` preflight is green.
 2. New regression tests for fixed defects are green.
-3. Stable tests pass once.
-4. Designated flaky/stability-sensitive tests pass 10 consecutive runs.
+3. The complete automated Rust and frontend suite passes 10 consecutive runs.
+4. The run is recorded against the final post-smoke head so no later production or test changes invalidate the evidence.
 5. Manual package build succeeds.
 6. Linux application smoke test succeeds.
 7. Android -> Linux receive path succeeds.
