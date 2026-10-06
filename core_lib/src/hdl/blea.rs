@@ -115,18 +115,31 @@ mod tests {
     }
 
     #[test]
-    fn receiver_advertisement_embeds_endpoint_and_name() {
+    fn receiver_advertisement_has_valid_full_layout() {
         let endpoint = [0x11, 0x22, 0x33, 0x44];
         let data = receiver_service_data(endpoint, 3, "Alcotester");
 
         assert_eq!(data[0], 0x48);
         assert_eq!(&data[1..4], &QS_SVC_HASH);
-        assert!(data
-            .windows(endpoint.len())
-            .any(|window| window == endpoint));
-        assert!(data
-            .windows("Alcotester".len())
-            .any(|window| window == b"Alcotester"));
+
+        let connection_len =
+            u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        let connection_end = 8 + connection_len;
+        assert_eq!(data.len(), connection_end + 2);
+
+        let connection = &data[8..connection_end];
+        assert_eq!(connection[0], 0x23);
+        assert_eq!(&connection[1..4], &QS_SVC_HASH);
+        assert_eq!(&connection[4..8], &endpoint);
+
+        let info_len = usize::from(connection[8]);
+        let info_end = 9 + info_len;
+        let endpoint_info = &connection[9..info_end];
+
+        assert_eq!(endpoint_info[0], (1 << 5) | (3 << 1));
+        let name_len = usize::from(endpoint_info[17]);
+        assert_eq!(&endpoint_info[18..18 + name_len], b"Alcotester");
+        assert_eq!(&connection[info_end..info_end + 8], &[0_u8; 8]);
     }
 
     #[test]
@@ -143,29 +156,20 @@ mod tests {
 const RX_INNER_NAME: &str = "ReceiverAdvertiser";
 const QS_SERVICE_UUID: u16 = 0xFEF3;
 const QS_SVC_HASH: [u8; 3] = [0xfc, 0x9f, 0x5e];
-const QS_EINFO_IDENTITY: [u8; 16] = [
-    0x4a, 0x22, 0x71, 0x16, 0x9c, 0x15, 0x99, 0xa2, 0x44, 0xaf, 0x44, 0xb0, 0x17, 0x9c, 0x0f, 0x23,
-];
-const QS_CONN_MAC_EXTRA: [u8; 8] = [0xfc, 0x41, 0x16, 0xb6, 0x17, 0x20, 0x00, 0x00];
-const QS_MEDIUMS_TRAILING: [u8; 69] = [
-    0x62, 0xf1, 0x03, 0x00, 0x82, 0x3f, 0xa0, 0x17, 0xfd, 0xf1, 0x70, 0x59, 0x6e, 0x1e, 0xd3, 0x4d,
-    0xe0, 0x92, 0x56, 0x4d, 0x66, 0xd4, 0x29, 0x0f, 0x0f, 0x8f, 0x15, 0x05, 0x34, 0x7b, 0x13, 0x23,
-    0x01, 0xea, 0x7f, 0x92, 0xa8, 0xd8, 0xd4, 0x61, 0x84, 0x15, 0x05, 0x3f, 0x00, 0x00, 0x84, 0x15,
-    0x06, 0x2d, 0x00, 0x00, 0x84, 0x15, 0x04, 0x7f, 0x1f, 0x00, 0x84, 0x15, 0x07, 0x2d, 0x1f, 0x00,
-    0x83, 0x15, 0x01, 0x15, 0x7c,
-];
 
 /// Build the Nearby Connections receiver advertisement carried as 0xFEF3
 /// service data. The endpoint id must match the id used by mDNS.
 pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name: &str) -> Vec<u8> {
     let mut endpoint_info = Vec::new();
     endpoint_info.push((1 << 5) | ((device_type & 0x7) << 1));
-    endpoint_info.extend_from_slice(&QS_EINFO_IDENTITY);
 
-    let mut name = device_name.as_bytes().to_vec();
-    name.truncate(255);
-    endpoint_info.push(name.len() as u8);
-    endpoint_info.extend_from_slice(&name);
+    let identity: [u8; 16] = rand::random();
+    endpoint_info.extend_from_slice(&identity);
+
+    let name = device_name.as_bytes();
+    let name_len = name.len().min(255);
+    endpoint_info.push(name_len as u8);
+    endpoint_info.extend_from_slice(&name[..name_len]);
 
     let mut connection_advertisement = Vec::new();
     connection_advertisement.push(0x23);
@@ -173,14 +177,18 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
     connection_advertisement.extend_from_slice(&endpoint_id);
     connection_advertisement.push(endpoint_info.len() as u8);
     connection_advertisement.extend_from_slice(&endpoint_info);
-    connection_advertisement.extend_from_slice(&QS_CONN_MAC_EXTRA);
+
+    // Reserved Bluetooth MAC, UWB-address length and extra-field byte.
+    connection_advertisement.extend_from_slice(&[0_u8; 8]);
 
     let mut service_data = Vec::new();
     service_data.push(0x48);
     service_data.extend_from_slice(&QS_SVC_HASH);
     service_data.extend_from_slice(&(connection_advertisement.len() as u32).to_be_bytes());
     service_data.extend_from_slice(&connection_advertisement);
-    service_data.extend_from_slice(&QS_MEDIUMS_TRAILING);
+
+    let device_token: [u8; 2] = rand::random();
+    service_data.extend_from_slice(&device_token);
     service_data
 }
 
