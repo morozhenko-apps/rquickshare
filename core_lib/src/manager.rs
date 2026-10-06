@@ -231,7 +231,7 @@ impl TcpServer {
                 device_type: crate::DeviceType::Unknown,
                 name: si.name,
             },
-        );
+        )?;
 
         // Send connection request
         or.send_connection_request().await?;

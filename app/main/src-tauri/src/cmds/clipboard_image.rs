@@ -1,20 +1,11 @@
 use std::fs::OpenOptions;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
+use rqs_lib::{ManagedEphemeralFile, MANAGED_EPHEMERAL_FILE_PREFIX};
 use tauri_plugin_clipboard_manager::ClipboardExt;
-
-const CLIPBOARD_FILE_PREFIX: &str = "rquickshare-clipboard-";
 const MAX_CLIPBOARD_PIXELS: u64 = 64_000_000;
-
-fn managed_temp_path(path: &Path) -> bool {
-    path.parent() == Some(std::env::temp_dir().as_path())
-        && path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with(CLIPBOARD_FILE_PREFIX) && name.ends_with(".png"))
-}
 
 fn next_temp_file() -> Result<(PathBuf, std::fs::File), String> {
     let timestamp = SystemTime::now()
@@ -24,7 +15,7 @@ fn next_temp_file() -> Result<(PathBuf, std::fs::File), String> {
 
     for attempt in 0_u8..32 {
         let path = std::env::temp_dir().join(format!(
-            "{CLIPBOARD_FILE_PREFIX}{}-{timestamp}-{attempt}.png",
+            "{MANAGED_EPHEMERAL_FILE_PREFIX}{}-{timestamp}-{attempt}.png",
             std::process::id()
         ));
 
@@ -87,30 +78,37 @@ pub async fn save_clipboard_image(app: tauri::AppHandle) -> Result<String, Strin
 
 #[tauri::command]
 pub async fn remove_ephemeral_file(path: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
-    if !managed_temp_path(&path) {
-        return Err("Refusing to remove a path outside managed clipboard temp files".to_owned());
-    }
-
-    match std::fs::remove_file(&path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("Could not remove clipboard image: {error}")),
-    }
+    let managed = ManagedEphemeralFile::try_from_path(path).map_err(|error| error.to_string())?;
+    managed.remove().map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn managed_temp_path_accepts_only_our_png_prefix() {
-        let good = std::env::temp_dir().join("rquickshare-clipboard-1-2-0.png");
-        assert!(managed_temp_path(&good));
+    #[tokio::test]
+    async fn remove_ephemeral_file_uses_core_managed_path_guard() {
+        let (path, file) = next_temp_file().unwrap();
+        drop(file);
 
-        assert!(!managed_temp_path(
-            &std::env::temp_dir().join("other-app.png")
-        ));
-        assert!(!managed_temp_path(Path::new("/etc/passwd")));
+        remove_ephemeral_file(path.to_string_lossy().into_owned())
+            .await
+            .unwrap();
+        assert!(!path.exists());
+
+        remove_ephemeral_file(path.to_string_lossy().into_owned())
+            .await
+            .unwrap();
+        assert!(remove_ephemeral_file("/etc/passwd".to_owned()).await.is_err());
+        assert!(
+            remove_ephemeral_file(
+                std::env::temp_dir()
+                    .join("other-app.png")
+                    .to_string_lossy()
+                    .into_owned()
+            )
+            .await
+            .is_err()
+        );
     }
 }

@@ -29,7 +29,10 @@ mod manager;
 mod protocol;
 mod utils;
 
-pub use hdl::{EndpointInfo, OutboundPayload, State, Visibility};
+pub use hdl::{
+    EndpointInfo, ManagedEphemeralFile, OutboundPayload, State, Visibility,
+    MANAGED_EPHEMERAL_FILE_PREFIX,
+};
 pub use manager::SendInfo;
 pub use utils::DeviceType;
 

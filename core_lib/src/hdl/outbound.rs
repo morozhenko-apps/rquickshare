@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -52,6 +52,63 @@ use crate::utils::{
 use crate::{location_nearby_connections, sharing_nearby};
 
 type HmacSha256 = Hmac<Sha256>;
+
+pub const MANAGED_EPHEMERAL_FILE_PREFIX: &str = "rquickshare-clipboard-";
+
+#[derive(Debug)]
+pub struct ManagedEphemeralFile {
+    path: PathBuf,
+}
+
+impl ManagedEphemeralFile {
+    pub fn try_from_path(path: impl Into<PathBuf>) -> Result<Self, anyhow::Error> {
+        let path = path.into();
+        let temp_dir = std::env::temp_dir();
+        if path.parent() != Some(temp_dir.as_path()) {
+            return Err(anyhow!(
+                "Managed ephemeral file must be a direct child of the system temp directory"
+            ));
+        }
+
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| anyhow!("Managed ephemeral file name is not valid UTF-8"))?;
+        let token = name
+            .strip_prefix(MANAGED_EPHEMERAL_FILE_PREFIX)
+            .and_then(|name| name.strip_suffix(".png"))
+            .ok_or_else(|| anyhow!("Path is not an rQuickShare managed clipboard image"))?;
+
+        let mut parts = token.split('-');
+        let valid_token = (0..3).all(|_| {
+            parts
+                .next()
+                .is_some_and(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        }) && parts.next().is_none();
+
+        if !valid_token {
+            return Err(anyhow!("Managed clipboard image name has an invalid token"));
+        }
+
+        Ok(Self { path })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn remove(&self) -> Result<(), anyhow::Error> {
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(anyhow!(
+                "Could not remove managed ephemeral file {}: {error}",
+                self.path.display()
+            )),
+        }
+    }
+}
+
 
 fn is_cancel_request(message: &ChannelMessage, transfer_id: &str) -> bool {
     message.direction == ChannelDirection::FrontToLib
@@ -305,19 +362,15 @@ pub struct OutboundRequest {
     receiver: Receiver<ChannelMessage>,
     payload: OutboundPayload,
     text_payload_id: Option<i64>,
-    cleanup_paths: Vec<std::path::PathBuf>,
+    cleanup_files: Vec<ManagedEphemeralFile>,
 }
 
 impl Drop for OutboundRequest {
     fn drop(&mut self) {
-        for path in self.cleanup_paths.drain(..) {
-            match std::fs::remove_file(&path) {
-                Ok(()) => debug!("Removed ephemeral outbound file: {}", path.display()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => warn!(
-                    "Could not remove ephemeral outbound file {}: {error}",
-                    path.display()
-                ),
+        for file in self.cleanup_files.drain(..) {
+            match file.remove() {
+                Ok(()) => debug!("Removed managed ephemeral outbound file: {}", file.path().display()),
+                Err(error) => warn!("{error}"),
             }
         }
     }
@@ -331,19 +384,22 @@ impl OutboundRequest {
         sender: Sender<ChannelMessage>,
         payload: OutboundPayload,
         rdi: RemoteDeviceInfo,
-    ) -> Self {
+    ) -> Result<Self, anyhow::Error> {
         let receiver = sender.subscribe();
-        let (files, text_payload, cleanup_paths) = match &payload {
+        let (files, text_payload, cleanup_files) = match &payload {
             OutboundPayload::Files(files) => (Some(files.clone()), None, Vec::new()),
-            OutboundPayload::EphemeralFiles(files) => (
-                Some(files.clone()),
-                None,
-                files.iter().map(std::path::PathBuf::from).collect(),
-            ),
+            OutboundPayload::EphemeralFiles(files) => {
+                let cleanup_files = files
+                    .iter()
+                    .cloned()
+                    .map(ManagedEphemeralFile::try_from_path)
+                    .collect::<Result<Vec<_>, _>>()?;
+                (Some(files.clone()), None, cleanup_files)
+            }
             OutboundPayload::Text(text) => (None, Some(text.clone()), Vec::new()),
         };
 
-        Self {
+        Ok(Self {
             endpoint_id,
             socket,
             state: InnerState {
@@ -365,8 +421,8 @@ impl OutboundRequest {
             receiver,
             payload,
             text_payload_id: None,
-            cleanup_paths,
-        }
+            cleanup_files,
+        })
     }
 
     fn take_pending_cancel_request(&mut self) -> Result<bool, anyhow::Error> {
