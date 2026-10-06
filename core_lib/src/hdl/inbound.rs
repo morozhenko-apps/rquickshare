@@ -793,10 +793,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         self.process_offline_frame(offline).await
     }
 
-    async fn process_offline_frame(
-        &mut self,
-        offline: OfflineFrame,
-    ) -> Result<(), anyhow::Error> {
+    async fn process_offline_frame(&mut self, offline: OfflineFrame) -> Result<(), anyhow::Error> {
         let v1_frame = offline
             .v1
             .as_ref()
@@ -1761,7 +1758,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         tokio::time::sleep(SANITY_DURATION).await;
     }
 }
-
 
 #[cfg(all(feature = "experimental", target_os = "linux"))]
 impl InboundRequest<crate::hdl::MigratableStream> {
