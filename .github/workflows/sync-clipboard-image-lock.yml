@@ -1,0 +1,36 @@
+name: Sync clipboard image Cargo lock
+
+on:
+  push:
+    branches: [ "feat/full-quickshare" ]
+    paths:
+      - "app/main/src-tauri/Cargo.toml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/full-quickshare
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Refresh Cargo lock metadata
+        run: cargo metadata --manifest-path app/main/src-tauri/Cargo.toml --format-version 1 > /dev/null
+
+      - name: Commit lockfile if changed
+        run: |
+          if git diff --quiet -- app/main/src-tauri/Cargo.lock; then
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/main/src-tauri/Cargo.lock
+          git commit -m "chore(deps): sync clipboard image Cargo lock"
+          git push origin HEAD:feat/full-quickshare
