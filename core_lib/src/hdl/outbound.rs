@@ -1431,15 +1431,9 @@ mod security_tests {
             .map(|item| (item.name().to_owned(), item))
             .collect::<HashMap<_, _>>();
 
-        assert_eq!(
-            by_name["photo.png"].r#type(),
-            file_metadata::Type::Image
-        );
+        assert_eq!(by_name["photo.png"].r#type(), file_metadata::Type::Image);
         assert_eq!(by_name["client.apk"].r#type(), file_metadata::Type::App);
-        assert_eq!(
-            by_name["notes.txt"].r#type(),
-            file_metadata::Type::Unknown
-        );
+        assert_eq!(by_name["notes.txt"].r#type(), file_metadata::Type::Unknown);
 
         let payload_ids = metadata
             .iter()
@@ -1469,12 +1463,8 @@ mod security_tests {
         assert_eq!(prepared.total_bytes, 0);
     }
 
-    async fn test_request(
-        files: Vec<String>,
-    ) -> (OutboundRequest, tokio::net::TcpStream) {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+    async fn test_request(files: Vec<String>) -> (OutboundRequest, tokio::net::TcpStream) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let peer = tokio::net::TcpStream::connect(address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
