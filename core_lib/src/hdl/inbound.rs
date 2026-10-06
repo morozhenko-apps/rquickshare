@@ -1762,6 +1762,121 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
     }
 }
 
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+impl InboundRequest<crate::hdl::MigratableStream> {
+    /// Upgrade an established encrypted BLE session to Wi-Fi LAN.
+    ///
+    /// Failure before the transport swap leaves the existing BLE stream intact,
+    /// so callers can continue the session on BLE when an upgrade is unavailable.
+    pub async fn do_bandwidth_upgrade(&mut self) -> Result<(), anyhow::Error> {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
+        use location_nearby_connections::v1_frame::FrameType;
+
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await?;
+        let port = listener.local_addr()?.port();
+        self.send_upgrade_path_available(port).await?;
+
+        let mut tcp = match tokio::time::timeout(Duration::from_secs(15), listener.accept()).await {
+            Ok(Ok((socket, peer))) => {
+                info!("BWU: peer connected over TCP from {peer}");
+                socket
+            }
+            Ok(Err(error)) => {
+                return Err(anyhow!("BWU TCP accept failed: {error}"));
+            }
+            Err(_) => {
+                warn!("BWU: no TCP connection within timeout; continuing on BLE");
+                return Ok(());
+            }
+        };
+
+        let introduction = read_plain_frame_from(&mut tcp).await?;
+        let endpoint_id = validate_client_introduction(&introduction)?;
+        debug!("BWU: validated CLIENT_INTRODUCTION for endpoint {endpoint_id}");
+
+        let ack = Self::client_introduction_ack_frame().encode_to_vec();
+        send_plain_frame_on(&mut tcp, &ack).await?;
+
+        self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
+            EventType::LastWriteToPriorChannel,
+            None,
+        ))
+        .await?;
+
+        for _ in 0..16 {
+            let offline = match tokio::time::timeout(
+                Duration::from_secs(5),
+                self.read_encrypted_offline_frame(),
+            )
+            .await
+            {
+                Ok(Ok(frame)) => frame,
+                Ok(Err(error)) => return Err(error),
+                Err(_) => {
+                    warn!("BWU: timed out while draining prior BLE channel");
+                    break;
+                }
+            };
+
+            let Some(v1) = offline.v1.as_ref() else {
+                return Err(anyhow!("BWU drain frame has no v1 payload"));
+            };
+
+            if v1.r#type() != FrameType::BandwidthUpgradeNegotiation {
+                self.process_offline_frame(offline).await?;
+                continue;
+            }
+
+            let event = v1
+                .bandwidth_upgrade_negotiation
+                .as_ref()
+                .map(|frame| frame.event_type());
+
+            match event {
+                Some(EventType::LastWriteToPriorChannel) => {
+                    debug!("BWU: peer sent LAST_WRITE; replying SAFE_TO_CLOSE");
+                    self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
+                        EventType::SafeToClosePriorChannel,
+                        None,
+                    ))
+                    .await?;
+                }
+                Some(EventType::SafeToClosePriorChannel) => {
+                    debug!("BWU: peer marked prior channel safe to close");
+                    break;
+                }
+                Some(other) => {
+                    debug!("BWU: ignoring drain event {other:?}");
+                }
+                None => {
+                    return Err(anyhow!("BWU negotiation frame has no event type"));
+                }
+            }
+        }
+
+        let disconnection = OfflineFrame {
+            version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(FrameType::Disconnection.into()),
+                disconnection: Some(location_nearby_connections::DisconnectionFrame {
+                    request_safe_to_disconnect: Some(false),
+                    ack_safe_to_disconnect: Some(false),
+                }),
+                ..Default::default()
+            }),
+        };
+
+        // This final prior-channel DISCONNECTION is plaintext by protocol design.
+        self.send_frame(disconnection.encode_to_vec()).await?;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        self.socket = crate::hdl::MigratableStream::Tcp(tcp);
+        info!("BWU: migrated inbound session from BLE to Wi-Fi LAN");
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod security_tests {
     use super::*;
