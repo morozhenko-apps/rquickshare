@@ -341,7 +341,6 @@ mod tests {
             .unwrap()
             .is_none());
 
-        eprintln!("BWU manager route completed; awaiting routed socket");
         let mut routed = tokio::time::timeout(std::time::Duration::from_millis(250), receiver)
             .await
             .expect("BWU manager route did not deliver the socket")
