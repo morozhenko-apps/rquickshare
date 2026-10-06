@@ -69,7 +69,6 @@ mod tests {
 
         router.route("peer-route", server).await.unwrap();
         let pending_after_route = router.has_pending().await;
-        eprintln!("BWU route completed; pending_after_route={pending_after_route}");
         assert!(
             !pending_after_route,
             "successful BWU routing must consume the pending endpoint"
