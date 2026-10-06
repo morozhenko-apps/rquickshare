@@ -34,8 +34,7 @@ impl<W: Write> Write for SizeLimitedWriter<W> {
             return Ok(buf.len());
         }
 
-        let allowed = usize::try_from(self.remaining.min(buf.len() as u64))
-            .unwrap_or(buf.len());
+        let allowed = usize::try_from(self.remaining.min(buf.len() as u64)).unwrap_or(buf.len());
         let written = self.inner.write(&buf[..allowed])?;
         self.remaining = self.remaining.saturating_sub(written as u64);
 
@@ -114,10 +113,7 @@ pub fn set_up_logging(app_handle: &AppHandle) -> Result<(), anyhow::Error> {
             .append(true)
             .open(&log_path)?;
         let existing_size = file.metadata()?.len();
-        let writer = SizeLimitedWriter::new(
-            file,
-            MAX_LOG_FILE_SIZE.saturating_sub(existing_size),
-        );
+        let writer = SizeLimitedWriter::new(file, MAX_LOG_FILE_SIZE.saturating_sub(existing_size));
 
         dispatch
             .chain(Box::new(writer) as Box<dyn Write + Send>)
@@ -162,7 +158,6 @@ fn get_log_file_path(
 
     Ok(path)
 }
-
 
 #[cfg(test)]
 mod tests {
