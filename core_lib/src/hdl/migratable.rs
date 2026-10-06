@@ -95,13 +95,11 @@ mod tests {
         stream.shutdown().await.unwrap();
 
         let mut byte = [0_u8; 1];
-        let read = tokio::time::timeout(
-            std::time::Duration::from_millis(250),
-            peer.read(&mut byte),
-        )
-        .await
-        .expect("shutdown was not forwarded to the underlying BLE stream")
-        .unwrap();
+        let read =
+            tokio::time::timeout(std::time::Duration::from_millis(250), peer.read(&mut byte))
+                .await
+                .expect("shutdown was not forwarded to the underlying BLE stream")
+                .unwrap();
 
         assert_eq!(read, 0);
     }
