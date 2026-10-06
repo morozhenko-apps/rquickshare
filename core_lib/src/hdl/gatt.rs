@@ -443,7 +443,11 @@ async fn weave_session(
         }
     };
 
-    inbound_task.abort();
+    // Dropping a Tokio JoinHandle detaches the task; it does not cancel it.
+    // Before BWU, closing the duplex bridge makes the inbound task exit on EOF.
+    // After a successful BLE -> TCP migration, the same task must stay alive
+    // and finish the transfer on its new TCP transport.
+    drop(inbound_task);
     info!("{INNER_NAME}: weave session closed");
     result
 }
