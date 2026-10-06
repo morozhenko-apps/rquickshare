@@ -1669,6 +1669,73 @@ mod security_tests {
         assert_eq!(prepared.total_bytes, 0);
     }
 
+    #[test]
+    fn outbound_text_classification_covers_common_quick_share_types() {
+        assert_eq!(
+            classify_outbound_text("https://example.com/path"),
+            text_metadata::Type::Url
+        );
+        assert_eq!(
+            classify_outbound_text("+351 912 345 678"),
+            text_metadata::Type::PhoneNumber
+        );
+        assert_eq!(
+            classify_outbound_text("hello from Linux"),
+            text_metadata::Type::Text
+        );
+    }
+
+    #[test]
+    fn outbound_text_preparation_rejects_empty_and_preserves_utf8_size() {
+        assert!(prepare_outbound_text("").is_err());
+
+        let prepared = prepare_outbound_text("olá 🌍").unwrap();
+        assert_eq!(prepared.metadata.size(), "olá 🌍".len() as i64);
+        assert_eq!(prepared.metadata.payload_id(), prepared.payload_id);
+        assert_eq!(prepared.bytes, "olá 🌍".as_bytes());
+        assert_eq!(prepared.payload_type, TextPayloadType::Text);
+    }
+
+    #[test]
+    fn byte_payload_frames_are_chunked_and_terminated() {
+        let body = vec![7_u8; 600 * 1024];
+        let frames = byte_payload_frames(77, &body).unwrap();
+
+        assert_eq!(frames.len(), 4);
+
+        let mut offsets = Vec::new();
+        let mut reconstructed = Vec::new();
+        for frame in &frames[..frames.len() - 1] {
+            let transfer = frame.v1.as_ref().unwrap().payload_transfer.as_ref().unwrap();
+            let header = transfer.payload_header.as_ref().unwrap();
+            let chunk = transfer.payload_chunk.as_ref().unwrap();
+
+            assert_eq!(header.id(), 77);
+            assert_eq!(header.r#type(), payload_header::PayloadType::Bytes);
+            assert_eq!(header.total_size(), body.len() as i64);
+            assert_eq!(chunk.flags(), 0);
+            offsets.push(chunk.offset());
+            reconstructed.extend_from_slice(chunk.body());
+        }
+
+        assert_eq!(offsets, vec![0, 256 * 1024, 512 * 1024]);
+        assert_eq!(reconstructed, body);
+
+        let final_transfer = frames
+            .last()
+            .unwrap()
+            .v1
+            .as_ref()
+            .unwrap()
+            .payload_transfer
+            .as_ref()
+            .unwrap();
+        let final_chunk = final_transfer.payload_chunk.as_ref().unwrap();
+        assert_eq!(final_chunk.offset(), body.len() as i64);
+        assert_eq!(final_chunk.flags(), 1);
+        assert!(final_chunk.body().is_empty());
+    }
+
     async fn test_request(files: Vec<String>) -> (OutboundRequest, tokio::net::TcpStream) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
