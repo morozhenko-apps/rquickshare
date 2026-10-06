@@ -422,5 +422,4 @@ mod tests {
         assert_eq!(rendered.chars().count(), MAX_UI_ERROR_CHARS);
         assert_eq!(rendered, "é".repeat(MAX_UI_ERROR_CHARS));
     }
-
 }
