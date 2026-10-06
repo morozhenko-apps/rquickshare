@@ -4,12 +4,12 @@ use anyhow::anyhow;
 use bluer::gatt::local::{
     Application, Characteristic, CharacteristicNotifier, CharacteristicNotify,
     CharacteristicNotifyMethod, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod,
-    Service,
+    ReqError, Service,
 };
 use bluer::{Adapter, Uuid, UuidExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast::Sender;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
+use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
@@ -122,8 +122,9 @@ impl ReceiverGattServer {
         let weave_notify: Uuid = QS_WEAVE_FROM_PERIPHERAL.parse()?;
         let advertisement = self.advertisement.clone();
 
-        let (packet_sender, packet_receiver) = unbounded_channel::<Vec<u8>>();
-        let packet_receiver: Arc<Mutex<Option<UnboundedReceiver<Vec<u8>>>>> =
+        const MAX_PENDING_GATT_WRITES: usize = 64;
+        let (packet_sender, packet_receiver) = channel::<Vec<u8>>(MAX_PENDING_GATT_WRITES);
+        let packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>> =
             Arc::new(Mutex::new(Some(packet_receiver)));
         let channel_sender = self.sender.clone();
 
@@ -136,9 +137,16 @@ impl ReceiverGattServer {
                         uuid: slot0,
                         read: Some(CharacteristicRead {
                             read: true,
-                            fun: Box::new(move |_request| {
+                            fun: Box::new(move |request| {
                                 let advertisement = advertisement.clone();
-                                Box::pin(async move { Ok(advertisement) })
+                                Box::pin(async move {
+                                    let offset = usize::from(request.offset);
+                                    if offset >= advertisement.len() {
+                                        Ok(Vec::new())
+                                    } else {
+                                        Ok(advertisement[offset..].to_vec())
+                                    }
+                                })
                             }),
                             ..Default::default()
                         }),
@@ -153,9 +161,12 @@ impl ReceiverGattServer {
                                 move |value, _request| {
                                     let packet_sender = packet_sender.clone();
                                     Box::pin(async move {
-                                        packet_sender
-                                            .send(value)
-                                            .map_err(|_| bluer::gatt::local::ReqError::Failed)?;
+                                        packet_sender.try_send(value).map_err(|error| {
+                                            warn!(
+                                                "{INNER_NAME}: rejecting GATT write because the weave queue is full or closed: {error}"
+                                            );
+                                            ReqError::Failed
+                                        })?;
                                         Ok(())
                                     })
                                 },
@@ -207,7 +218,7 @@ impl ReceiverGattServer {
 
 async fn weave_session(
     mut notifier: CharacteristicNotifier,
-    packet_receiver: Arc<Mutex<Option<UnboundedReceiver<Vec<u8>>>>>,
+    packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>>,
     sender: Sender<ChannelMessage>,
 ) -> Result<(), anyhow::Error> {
     let mut receiver_guard = packet_receiver.lock().await;
