@@ -2236,6 +2236,42 @@ mod security_tests {
         assert_eq!(request.state.state, State::WaitingForUserConsent);
     }
 
+
+    #[tokio::test]
+    async fn introduction_preserves_sae_wifi_security_type() {
+        let mut request = test_request();
+        let frame = introduction_frame(
+            vec![],
+            vec![],
+            vec![sharing_nearby::WifiCredentialsMetadata {
+                ssid: Some("ModeB-SAE".to_owned()),
+                security_type: Some(
+                    sharing_nearby::wifi_credentials_metadata::SecurityType::Sae.into(),
+                ),
+                payload_id: Some(402),
+                ..Default::default()
+            }],
+        );
+
+        request.process_introduction(&frame).await.unwrap();
+
+        match request.state.text_payload.as_ref().unwrap() {
+            TextPayloadInfo::Wifi {
+                payload_id,
+                ssid,
+                security_type,
+            } => {
+                assert_eq!(*payload_id, 402);
+                assert_eq!(ssid, "ModeB-SAE");
+                assert_eq!(
+                    *security_type,
+                    sharing_nearby::wifi_credentials_metadata::SecurityType::Sae
+                );
+            }
+            other => panic!("unexpected payload info: {other:?}"),
+        }
+    }
+
     #[cfg(all(feature = "experimental", target_os = "linux"))]
     #[test]
     fn client_introduction_validation_accepts_only_bwu_intro() {

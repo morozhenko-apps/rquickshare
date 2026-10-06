@@ -108,3 +108,38 @@ fn resume_attachment_details_round_trip() {
         Some(4096)
     );
 }
+
+#[test]
+fn legacy_introduction_defaults_remain_compatible() {
+    let legacy = IntroductionFrame {
+        file_metadata: vec![FileMetadata {
+            name: Some("legacy.txt".to_owned()),
+            r#type: Some(file_metadata::Type::Document.into()),
+            payload_id: Some(7),
+            size: Some(12),
+            mime_type: Some("text/plain".to_owned()),
+            id: Some(9),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let encoded = legacy.encode_to_vec();
+    let decoded = IntroductionFrame::decode(encoded.as_slice()).unwrap();
+
+    assert_eq!(decoded.file_metadata.len(), 1);
+    let file = &decoded.file_metadata[0];
+    assert_eq!(file.name(), "legacy.txt");
+    assert_eq!(file.parent_folder, None);
+    assert_eq!(file.attachment_hash, None);
+    assert_eq!(file.is_sensitive_content, None);
+    assert!(decoded.app_metadata.is_empty());
+    assert!(decoded.stream_metadata.is_empty());
+    assert!(decoded.preview_payload_ids.is_empty());
+    assert_eq!(decoded.transfer_id, None);
+    assert_eq!(
+        decoded.use_case(),
+        introduction_frame::SharingUseCase::Unknown
+    );
+}
+

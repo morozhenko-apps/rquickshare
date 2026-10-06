@@ -1790,6 +1790,73 @@ mod security_tests {
         );
     }
 
+
+    #[test]
+    fn outbound_text_classification_handles_boundary_shapes() {
+        for (value, expected) in [
+            ("  HTTPS://example.com/path  ", text_metadata::Type::Url),
+            ("http://example.com", text_metadata::Type::Url),
+            ("+351 (912) 345-678", text_metadata::Type::PhoneNumber),
+            ("123456", text_metadata::Type::Text),
+            ("Rua do Souto 10, Braga", text_metadata::Type::Text),
+        ] {
+            assert_eq!(classify_outbound_text(value), expected, "{value}");
+        }
+    }
+
+    #[test]
+    fn outbound_text_preparation_enforces_title_and_payload_boundaries() {
+        let utf8 = "é".repeat(65);
+        let prepared = prepare_outbound_text(&utf8).unwrap();
+        assert_eq!(
+            prepared.metadata.text_title().chars().count(),
+            64,
+            "title must be truncated by Unicode scalar value rather than byte"
+        );
+        assert_eq!(prepared.metadata.size(), utf8.len() as i64);
+
+        let max = "a".repeat(SANE_FRAME_LENGTH as usize);
+        assert!(prepare_outbound_text(&max).is_ok());
+
+        let too_large = "a".repeat(SANE_FRAME_LENGTH as usize + 1);
+        assert!(prepare_outbound_text(&too_large).is_err());
+    }
+
+    #[test]
+    fn byte_payload_frames_cover_empty_and_chunk_boundaries() {
+        const CHUNK_SIZE: usize = 256 * 1024;
+
+        for (length, expected_frames) in [
+            (0_usize, 1_usize),
+            (1, 2),
+            (CHUNK_SIZE, 2),
+            (CHUNK_SIZE + 1, 3),
+        ] {
+            let body = vec![0x5a; length];
+            let frames = byte_payload_frames(91, &body).unwrap();
+            assert_eq!(frames.len(), expected_frames, "length={length}");
+
+            let terminal = frames
+                .last()
+                .unwrap()
+                .v1
+                .as_ref()
+                .unwrap()
+                .payload_transfer
+                .as_ref()
+                .unwrap()
+                .payload_chunk
+                .as_ref()
+                .unwrap();
+            assert_eq!(terminal.offset(), length as i64);
+            assert_eq!(terminal.flags(), 1);
+            assert!(terminal.body().is_empty());
+        }
+
+        let oversized = vec![0_u8; SANE_FRAME_LENGTH as usize + 1];
+        assert!(byte_payload_frames(91, &oversized).is_err());
+    }
+
     #[test]
     fn outbound_text_preparation_rejects_empty_and_preserves_utf8_size() {
         assert!(prepare_outbound_text("").is_err());
