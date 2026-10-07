@@ -36,14 +36,6 @@ impl BwuRouter {
         Ok(receiver)
     }
 
-    pub async fn route(&self, endpoint_id: &str, socket: TcpStream) -> Result<(), TcpStream> {
-        let sender = self.pending.lock().await.remove(endpoint_id);
-        match sender {
-            Some(sender) => sender.send(socket),
-            None => Err(socket),
-        }
-    }
-
     /// Route a modern BWU connection by its current endpoint id, or by the
     /// previous endpoint id explicitly carried by CLIENT_INTRODUCTION during a
     /// dynamic role switch. Exact current-id ownership always takes precedence.
@@ -95,7 +87,11 @@ mod tests {
         let client = tokio::net::TcpStream::connect(address).await.unwrap();
         let (server, _) = listener.accept().await.unwrap();
 
-        router.route("peer-route", server).await.unwrap();
+        let routed_as = router
+            .route_with_alias("peer-route", None, server)
+            .await
+            .unwrap();
+        assert_eq!(routed_as, "peer-route");
         let pending_after_route = router.has_pending().await;
         assert!(
             !pending_after_route,
@@ -140,7 +136,10 @@ mod tests {
         let _client = tokio::net::TcpStream::connect(address).await.unwrap();
         let (server, _) = listener.accept().await.unwrap();
 
-        assert!(router.route("missing-peer", server).await.is_err());
+        assert!(router
+            .route_with_alias("missing-peer", None, server)
+            .await
+            .is_err());
         assert!(!router.has_pending().await);
     }
 
@@ -155,7 +154,10 @@ mod tests {
         let _client = tokio::net::TcpStream::connect(address).await.unwrap();
         let (server, _) = listener.accept().await.unwrap();
 
-        assert!(router.route("peer-dropped", server).await.is_err());
+        assert!(router
+            .route_with_alias("peer-dropped", None, server)
+            .await
+            .is_err());
         assert!(!router.has_pending().await);
     }
 
