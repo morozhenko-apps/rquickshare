@@ -120,10 +120,7 @@ impl BleListener {
             .ok_or_else(|| anyhow!("no bluetooth adapter"))
     }
 
-    async fn start_scan(
-        adapter: &Adapter,
-        scanning: &mut bool,
-    ) -> Result<(), anyhow::Error> {
+    async fn start_scan(adapter: &Adapter, scanning: &mut bool) -> Result<(), anyhow::Error> {
         if !*scanning {
             adapter
                 .start_scan(ScanFilter {
@@ -137,10 +134,7 @@ impl BleListener {
         Ok(())
     }
 
-    async fn stop_scan(
-        adapter: &Adapter,
-        scanning: &mut bool,
-    ) -> Result<(), anyhow::Error> {
+    async fn stop_scan(adapter: &Adapter, scanning: &mut bool) -> Result<(), anyhow::Error> {
         if *scanning {
             adapter.stop_scan().await?;
             *scanning = false;
