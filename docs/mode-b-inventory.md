@@ -520,3 +520,19 @@ Post-smoke UX follow-up for completed inbound files:
 - If the file-manager D-Bus interface is unavailable or the named file cannot be resolved, fall back to opening the configured download directory.
 - For multi-file completion, revealing the first received item is sufficient for the current UI; multi-selection can be added later.
 
+### Terminal transfer history vs. outbound composer
+
+Hardware smoke on 2026-10-07 exposed a deterministic frontend-state defect:
+
+- A completed inbound transfer remains in `displayedItems` with state `Finished`.
+- `HomePage.displayedIsEmpty` previously used `displayedItems.length === 0`, so terminal history incorrectly hid the outbound composer (`Select files`, `Select folders`, clipboard).
+- If a newly discovered endpoint reused the same endpoint id as the completed transfer, `_displayedItems` replaced the live endpoint with the terminal transfer card, making the visible peer non-clickable for a new send.
+
+Required invariants:
+
+1. Terminal history states (`Finished`, `Cancelled`, `Rejected`, `Disconnected`) must not by themselves suppress the outbound composer.
+2. An explicit outbound payload or a live endpoint/active transfer must switch the UI into nearby-device/transfer mode.
+3. While an outbound payload is pending, a live endpoint must take precedence over stale terminal history with the same id.
+4. Active transfer states must still take precedence over the endpoint so progress/consent UI remains visible.
+5. Regression tests must cover terminal-history-only, active transfer, live endpoint, outbound-payload, and same-id endpoint/history collisions.
+
