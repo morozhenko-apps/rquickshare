@@ -15,7 +15,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::channel::{ChannelDirection, ChannelMessage, TransferType};
 use crate::errors::AppError;
-use crate::hdl::{BwuRouter, InboundRequest, MigratableStream, State};
+use crate::hdl::{
+    BwuRouter, InboundRequest, MigratableStream, ReceiverAdvertisingRefresh, State,
+};
 
 const INNER_NAME: &str = "ReceiverGattServer";
 
@@ -110,7 +112,9 @@ pub struct ReceiverGattServer {
     sender: Sender<ChannelMessage>,
     tcp_port: u16,
     bwu_router: BwuRouter,
-    receiver_advertiser_refresh: tokio::sync::broadcast::Sender<()>,
+    receiver_advertiser_refresh:
+        tokio::sync::broadcast::Sender<ReceiverAdvertisingRefresh>,
+    mdns_refresh_sender: tokio::sync::broadcast::Sender<()>,
 }
 
 impl ReceiverGattServer {
@@ -119,7 +123,9 @@ impl ReceiverGattServer {
         sender: Sender<ChannelMessage>,
         tcp_port: u16,
         bwu_router: BwuRouter,
-        receiver_advertiser_refresh: tokio::sync::broadcast::Sender<()>,
+        receiver_advertiser_refresh:
+            tokio::sync::broadcast::Sender<ReceiverAdvertisingRefresh>,
+        mdns_refresh_sender: tokio::sync::broadcast::Sender<()>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
         let adapter = session.default_adapter().await?;
@@ -132,6 +138,7 @@ impl ReceiverGattServer {
             tcp_port,
             bwu_router,
             receiver_advertiser_refresh,
+            mdns_refresh_sender,
         })
     }
 
@@ -149,7 +156,8 @@ impl ReceiverGattServer {
         let channel_sender = self.sender.clone();
         let tcp_port = self.tcp_port;
         let bwu_router = self.bwu_router.clone();
-        let slot_refresh_sender = self.receiver_advertiser_refresh.clone();
+        let slot_advertiser_refresh_sender = self.receiver_advertiser_refresh.clone();
+        let slot_mdns_refresh_sender = self.mdns_refresh_sender.clone();
         let session_refresh_sender = self.receiver_advertiser_refresh.clone();
 
         let app = Application {
@@ -163,7 +171,9 @@ impl ReceiverGattServer {
                             read: true,
                             fun: Box::new(move |request| {
                                 let advertisement = advertisement.clone();
-                                let refresh_sender = slot_refresh_sender.clone();
+                                let advertiser_refresh_sender =
+                                    slot_advertiser_refresh_sender.clone();
+                                let mdns_refresh_sender = slot_mdns_refresh_sender.clone();
                                 Box::pin(async move {
                                     let offset = usize::from(request.offset);
                                     let response = if offset >= advertisement.len() {
@@ -176,7 +186,12 @@ impl ReceiverGattServer {
                                         response.len()
                                     );
                                     if offset == 0 {
-                                        let _ = refresh_sender.send(());
+                                        let _ = mdns_refresh_sender.send(());
+                                        let _ = advertiser_refresh_sender
+                                            .send(ReceiverAdvertisingRefresh::Deferred);
+                                        debug!(
+                                            "{INNER_NAME}: slot0 requested mDNS resend and deferred advertising recovery"
+                                        );
                                     }
                                     Ok(response)
                                 })
@@ -233,7 +248,8 @@ impl ReceiverGattServer {
                                             "{INNER_NAME}: weave session ended with error: {error}"
                                         );
                                     }
-                                    let _ = refresh_sender.send(());
+                                    let _ = refresh_sender
+                                        .send(ReceiverAdvertisingRefresh::Immediate);
                                 })
                             })),
                             ..Default::default()
