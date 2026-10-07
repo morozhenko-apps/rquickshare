@@ -73,8 +73,7 @@ async fn route_bandwidth_upgrade_if_pending(
             if routed_as != identity.endpoint_id {
                 info!(
                     "{INNER_NAME}: routed dynamic BWU endpoint current={} last={:?} as {routed_as}",
-                    identity.endpoint_id,
-                    identity.last_endpoint_id
+                    identity.endpoint_id, identity.last_endpoint_id
                 );
             }
             Ok(None)
