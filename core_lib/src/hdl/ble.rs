@@ -146,7 +146,7 @@ impl BleListener {
                         continue;
                     }
 
-                    if let CentralEvent::ServiceDataAdvertisement { id, service_data } = event {
+                    if let CentralEvent::ServiceDataAdvertisement { service_data, .. } = event {
                         if !service_data.contains_key(&SERVICE_UUID_SHARING) {
                             continue;
                         }
@@ -156,9 +156,7 @@ impl BleListener {
                             continue;
                         }
 
-                        debug!(
-                            "{INNER_NAME}: active fallback found sharing device ({id}) ({service_data:?})"
-                        );
+                        debug!("{INNER_NAME}: active fallback matched Quick Share FE2C advertisement");
                         let _ = self.sender.send(());
                         last_alert = Some(now);
                     }

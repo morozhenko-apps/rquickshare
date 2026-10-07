@@ -69,8 +69,8 @@ impl PassiveBleMonitor {
                 }
                 event = monitor_handle.next() => {
                     match event {
-                        Some(MonitorEvent::DeviceFound(device)) => {
-                            debug!("{INNER_NAME}: matched Quick Share device {device:?}");
+                        Some(MonitorEvent::DeviceFound(_)) => {
+                            debug!("{INNER_NAME}: matched Quick Share FE2C advertisement");
                             let _ = self.sender.send(());
                         }
                         Some(_) => {}
