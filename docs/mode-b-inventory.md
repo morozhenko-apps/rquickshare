@@ -536,3 +536,22 @@ Required invariants:
 4. Active transfer states must still take precedence over the endpoint so progress/consent UI remains visible.
 5. Regression tests must cover terminal-history-only, active transfer, live endpoint, outbound-payload, and same-id endpoint/history collisions.
 
+### Receiver advertising recovery after GATT activity
+
+Hardware smoke on 2026-10-07 localized the remaining Pixel -> Linux startup delay before the transfer protocol/BWU path:
+
+- Successful BWU itself is fast: TCP route and CLIENT_INTRODUCTION complete in about 200 ms and BLE -> Wi-Fi migration in about 500 ms total.
+- Repeated inbound attempts show GATT slot-0 reads and receiver advertising re-registration separated by long gaps, while Linux -> Pixel outbound TCP is immediate.
+- BlueZ can consume a connectable advertising set when a peer connects. The current ReceiverAdvertiser retains an AdvertisementHandle that still looks live and only forces a re-register every 30 seconds.
+- The receiver advertisement must therefore be refreshed by real GATT activity, not only by the 30-second safety timer.
+
+Required invariants:
+
+1. A slot-0 read at offset 0 requests an immediate receiver-advertisement refresh.
+2. Completion/termination of a Weave notify session requests another refresh so the next inbound transfer is discoverable immediately.
+3. Refresh is ignored while visibility is Invisible.
+4. Refresh drops only the advertising handle; it must not stop the GATT application, active inbound task, TCP listener, or ordinary FE2C advertiser.
+5. The existing 30-second re-register remains as a fallback for adapters/events that do not produce a refresh signal.
+6. Bursty/duplicate refresh requests are harmless and bounded; no unbounded queue is allowed.
+7. Add unit coverage for refresh policy/state transitions where hardware-independent, and retain hardware smoke for repeated Pixel -> Linux transfers.
+
