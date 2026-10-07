@@ -156,6 +156,14 @@ mod tests {
     }
 
     #[test]
+    fn receiver_refresh_modes_remain_distinct() {
+        assert_ne!(
+            ReceiverAdvertisingRefresh::Immediate,
+            ReceiverAdvertisingRefresh::Deferred
+        );
+    }
+
+    #[test]
     fn receiver_refresh_policy_requires_visible_registered_advertising() {
         assert!(ReceiverAdvertiser::should_refresh(
             Visibility::Visible,
@@ -239,17 +247,23 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
     service_data
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReceiverAdvertisingRefresh {
+    Immediate,
+    Deferred,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReceiverAdvertiser {
     adapter: Arc<bluer::Adapter>,
     visibility_receiver: watch::Receiver<Visibility>,
-    refresh_sender: broadcast::Sender<()>,
+    refresh_sender: broadcast::Sender<ReceiverAdvertisingRefresh>,
 }
 
 impl ReceiverAdvertiser {
     pub async fn new(
         visibility_receiver: watch::Receiver<Visibility>,
-        refresh_sender: broadcast::Sender<()>,
+        refresh_sender: broadcast::Sender<ReceiverAdvertisingRefresh>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
         let adapter = session.default_adapter().await?;
@@ -270,6 +284,7 @@ impl ReceiverAdvertiser {
         let service_uuid = Uuid::from_u16(QS_SERVICE_UUID);
         let mut handle: Option<AdvertisementHandle> = None;
         let mut refresh_receiver = self.refresh_sender.subscribe();
+        let mut deferred_refresh_deadline: Option<tokio::time::Instant> = None;
 
         info!(
             "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({})",
@@ -324,11 +339,22 @@ impl ReceiverAdvertiser {
                 }
                 refresh = refresh_receiver.recv() => {
                     match refresh {
-                        Ok(()) | Err(broadcast::error::RecvError::Lagged(_)) => {
+                        Ok(ReceiverAdvertisingRefresh::Immediate) => {
                             let visibility = *self.visibility_receiver.borrow();
                             if Self::should_refresh(visibility, handle.is_some()) {
-                                debug!("{RX_INNER_NAME}: GATT activity requested advertising refresh");
+                                debug!("{RX_INNER_NAME}: immediate advertising refresh requested");
+                                deferred_refresh_deadline = None;
                                 handle.take();
+                            }
+                        }
+                        Ok(ReceiverAdvertisingRefresh::Deferred) | Err(broadcast::error::RecvError::Lagged(_)) => {
+                            let visibility = *self.visibility_receiver.borrow();
+                            if Self::should_refresh(visibility, handle.is_some()) {
+                                deferred_refresh_deadline = Some(
+                                    tokio::time::Instant::now()
+                                        + std::time::Duration::from_secs(2),
+                                );
+                                debug!("{RX_INNER_NAME}: deferred advertising refresh scheduled");
                             }
                         }
                         Err(broadcast::error::RecvError::Closed) => {
@@ -336,10 +362,23 @@ impl ReceiverAdvertiser {
                         }
                     }
                 }
+                _ = tokio::time::sleep_until(
+                    deferred_refresh_deadline.unwrap_or_else(|| {
+                        tokio::time::Instant::now() + std::time::Duration::from_secs(86_400)
+                    })
+                ), if deferred_refresh_deadline.is_some() => {
+                    let visibility = *self.visibility_receiver.borrow();
+                    deferred_refresh_deadline = None;
+                    if Self::should_refresh(visibility, handle.is_some()) {
+                        debug!("{RX_INNER_NAME}: applying deferred advertising refresh");
+                        handle.take();
+                    }
+                }
                 _ = tokio::time::sleep(std::time::Duration::from_secs(30)), if handle.is_some() => {
                     // Safety fallback. BlueZ consumes connectable advertising sets on some
                     // adapters; normal recovery is event-driven from GATT activity.
                     debug!("{RX_INNER_NAME}: periodic advertising refresh");
+                    deferred_refresh_deadline = None;
                     handle.take();
                 }
             }
