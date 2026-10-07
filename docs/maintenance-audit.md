@@ -61,12 +61,17 @@ There is no standing `dev -> master` PR. Promotion to `master` is a deliberate f
 
 ### Linux BLE lifecycle
 
-- Added background BLE scan duty-cycling to avoid keeping BlueZ in continuous discovery while the app sits in the tray.
+- The primary Linux receive-side FE2C detector is BlueZ Advertisement Monitor, not an always-running discovery session.
+- The monitor filters 16-bit Service Data advertisements for the Quick Share/Nearby service UUID 0xFE2C and emits the existing BLE activity signal used to refresh mDNS.
+- Advertisement Monitor is preferred because it can receive targeted advertisement events without holding an active BlueZ discovery session, avoiding the Bluetooth HID auto-reconnect regression described by upstream issue #429.
+- If Advertisement Monitor is unavailable at startup or its event stream terminates unexpectedly, the listener falls back to bounded active discovery rather than disabling inbound discovery. The fallback keeps the existing Linux tray policy of approximately 5 seconds scanning followed by 25 seconds idle.
+- Fallback activation and monitor termination must be logged. BLE discovery tasks must never fail silently.
+- The active-scan fallback remains continuous while the application is foregrounded and duty-cycled only while backgrounded on Linux.
 - Made BLE advertising follow receive visibility rather than outbound discovery mode.
 - Added foreground/background lifecycle signalling.
 - Unified scan/advertising lifecycle so send discovery and receive visibility do not fight each other.
 
-This work is intended to cover the same problem areas reported upstream in issues/PRs such as #429, #430 and #404.
+The monitor-first architecture supersedes duty-cycling as the normal Linux receive path. Duty-cycling is retained only as a compatibility fallback for BlueZ/controller combinations where Advertisement Monitor cannot be used. This covers the same problem areas reported upstream in issues/PRs such as #429, #430 and #404 while removing the intentional 0-25 second receive latency window from the normal path.
 
 ### Inbound hardening
 
