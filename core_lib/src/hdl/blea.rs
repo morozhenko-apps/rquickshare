@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bluer::adv::{Advertisement, AdvertisementHandle};
 use bluer::UuidExt;
 use bytes::Bytes;
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -24,6 +24,7 @@ pub struct BleAdvertiser {
 impl BleAdvertiser {
     pub async fn new(
         visibility_receiver: watch::Receiver<Visibility>,
+        refresh_sender: broadcast::Sender<()>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
         let adapter = session.default_adapter().await?;
@@ -156,6 +157,20 @@ mod tests {
     }
 
     #[test]
+    fn receiver_refresh_policy_requires_visible_registered_advertising() {
+        assert!(ReceiverAdvertiser::should_refresh(Visibility::Visible, true));
+        assert!(ReceiverAdvertiser::should_refresh(
+            Visibility::Temporarily,
+            true
+        ));
+        assert!(!ReceiverAdvertiser::should_refresh(
+            Visibility::Invisible,
+            true
+        ));
+        assert!(!ReceiverAdvertiser::should_refresh(Visibility::Visible, false));
+    }
+
+    #[test]
     fn receiver_advertisement_truncates_multibyte_names_on_utf8_boundary() {
         let data = receiver_service_data([1, 2, 3, 4], 3, &"é".repeat(200));
 
@@ -223,6 +238,7 @@ pub fn receiver_service_data(endpoint_id: [u8; 4], device_type: u8, device_name:
 pub struct ReceiverAdvertiser {
     adapter: Arc<bluer::Adapter>,
     visibility_receiver: watch::Receiver<Visibility>,
+    refresh_sender: broadcast::Sender<()>,
 }
 
 impl ReceiverAdvertiser {
@@ -236,12 +252,18 @@ impl ReceiverAdvertiser {
         Ok(Self {
             adapter: Arc::new(adapter),
             visibility_receiver,
+            refresh_sender,
         })
+    }
+
+    fn should_refresh(visibility: Visibility, has_handle: bool) -> bool {
+        has_handle && BleAdvertiser::should_advertise(visibility)
     }
 
     pub async fn run(mut self, ctk: CancellationToken) -> Result<(), anyhow::Error> {
         let service_uuid = Uuid::from_u16(QS_SERVICE_UUID);
         let mut handle: Option<AdvertisementHandle> = None;
+        let mut refresh_receiver = self.refresh_sender.subscribe();
 
         info!(
             "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({})",
@@ -294,9 +316,24 @@ impl ReceiverAdvertiser {
                         break;
                     }
                 }
+                refresh = refresh_receiver.recv() => {
+                    match refresh {
+                        Ok(()) | Err(broadcast::error::RecvError::Lagged(_)) => {
+                            let visibility = *self.visibility_receiver.borrow();
+                            if Self::should_refresh(visibility, handle.is_some()) {
+                                debug!("{RX_INNER_NAME}: GATT activity requested advertising refresh");
+                                handle.take();
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            debug!("{RX_INNER_NAME}: refresh channel closed");
+                        }
+                    }
+                }
                 _ = tokio::time::sleep(std::time::Duration::from_secs(30)), if handle.is_some() => {
-                    // BlueZ consumes connectable advertising sets on some adapters.
-                    // Re-register periodically so repeated transfers stay discoverable.
+                    // Safety fallback. BlueZ consumes connectable advertising sets on some
+                    // adapters; normal recovery is event-driven from GATT activity.
+                    debug!("{RX_INNER_NAME}: periodic advertising refresh");
                     handle.take();
                 }
             }

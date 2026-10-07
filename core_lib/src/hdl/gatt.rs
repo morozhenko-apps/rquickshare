@@ -110,6 +110,7 @@ pub struct ReceiverGattServer {
     sender: Sender<ChannelMessage>,
     tcp_port: u16,
     bwu_router: BwuRouter,
+    receiver_advertiser_refresh: tokio::sync::broadcast::Sender<()>,
 }
 
 impl ReceiverGattServer {
@@ -118,6 +119,7 @@ impl ReceiverGattServer {
         sender: Sender<ChannelMessage>,
         tcp_port: u16,
         bwu_router: BwuRouter,
+        receiver_advertiser_refresh: tokio::sync::broadcast::Sender<()>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
         let adapter = session.default_adapter().await?;
@@ -129,6 +131,7 @@ impl ReceiverGattServer {
             sender,
             tcp_port,
             bwu_router,
+            receiver_advertiser_refresh,
         })
     }
 
@@ -146,6 +149,8 @@ impl ReceiverGattServer {
         let channel_sender = self.sender.clone();
         let tcp_port = self.tcp_port;
         let bwu_router = self.bwu_router.clone();
+        let slot_refresh_sender = self.receiver_advertiser_refresh.clone();
+        let session_refresh_sender = self.receiver_advertiser_refresh.clone();
 
         let app = Application {
             services: vec![Service {
@@ -158,6 +163,7 @@ impl ReceiverGattServer {
                             read: true,
                             fun: Box::new(move |request| {
                                 let advertisement = advertisement.clone();
+                                let refresh_sender = slot_refresh_sender.clone();
                                 Box::pin(async move {
                                     let offset = usize::from(request.offset);
                                     let response = if offset >= advertisement.len() {
@@ -169,6 +175,9 @@ impl ReceiverGattServer {
                                         "{INNER_NAME}: slot0 read offset={offset}, returned={} bytes",
                                         response.len()
                                     );
+                                    if offset == 0 {
+                                        let _ = refresh_sender.send(());
+                                    }
                                     Ok(response)
                                 })
                             }),
@@ -208,6 +217,7 @@ impl ReceiverGattServer {
                                 let packet_receiver = packet_receiver.clone();
                                 let channel_sender = channel_sender.clone();
                                 let bwu_router = bwu_router.clone();
+                                let refresh_sender = session_refresh_sender.clone();
                                 Box::pin(async move {
                                     debug!("{INNER_NAME}: weave notify subscription started");
                                     if let Err(error) = weave_session(
@@ -223,6 +233,7 @@ impl ReceiverGattServer {
                                             "{INNER_NAME}: weave session ended with error: {error}"
                                         );
                                     }
+                                    let _ = refresh_sender.send(());
                                 })
                             })),
                             ..Default::default()

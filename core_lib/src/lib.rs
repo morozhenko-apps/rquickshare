@@ -193,10 +193,13 @@ impl RQS {
                 }
             });
 
+            let (receiver_adv_refresh_sender, _) = broadcast::channel::<()>(8);
+
             let visibility_rx = self.visibility_receiver.clone();
             let receiver_ctk = ctoken.clone();
+            let advertiser_refresh_sender = receiver_adv_refresh_sender.clone();
             tracker.spawn(async move {
-                match ReceiverAdvertiser::new(visibility_rx).await {
+                match ReceiverAdvertiser::new(visibility_rx, advertiser_refresh_sender).await {
                     Ok(advertiser) => {
                         if let Err(error) = advertiser.run(receiver_ctk).await {
                             error!("ReceiverAdvertiser stopped with error: {error}");
@@ -216,6 +219,7 @@ impl RQS {
                     gatt_sender,
                     gatt_tcp_port,
                     gatt_bwu_router,
+                    receiver_adv_refresh_sender,
                 )
                 .await
                 {
