@@ -34,6 +34,23 @@ impl Visibility {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReceiverRefreshAction {
+    Resend,
+    Disable,
+}
+
+fn receiver_refresh_action(
+    result: Result<(), tokio::sync::broadcast::error::RecvError>,
+) -> ReceiverRefreshAction {
+    match result {
+        Ok(()) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+            ReceiverRefreshAction::Resend
+        }
+        Err(tokio::sync::broadcast::error::RecvError::Closed) => ReceiverRefreshAction::Disable,
+    }
+}
+
 pub struct MDnsServer {
     daemon: ServiceDaemon,
     service_info: ServiceInfo,
@@ -71,6 +88,7 @@ impl MDnsServer {
         let receiver_refresh_receiver = &mut self.receiver_refresh_receiver;
         let mut visibility = *self.visibility_receiver.borrow();
         let mut interval = interval_at(Instant::now() + TICK_INTERVAL, TICK_INTERVAL);
+        let mut receiver_refresh_open = true;
 
         loop {
             tokio::select! {
@@ -113,13 +131,21 @@ impl MDnsServer {
                         self.daemon.register(self.service_info.clone())?;
                     }
                 },
-                _ = receiver_refresh_receiver.recv() => {
-                    if visibility == Visibility::Invisible {
-                        continue;
-                    }
+                refresh = receiver_refresh_receiver.recv(), if receiver_refresh_open => {
+                    match receiver_refresh_action(refresh) {
+                        ReceiverRefreshAction::Resend => {
+                            if visibility == Visibility::Invisible {
+                                continue;
+                            }
 
-                    debug!("{INNER_NAME}: receiver slot0 requested mDNS resend");
-                    self.daemon.register_resend(self.service_info.get_fullname())?;
+                            debug!("{INNER_NAME}: receiver slot0 requested mDNS resend");
+                            self.daemon.register_resend(self.service_info.get_fullname())?;
+                        }
+                        ReceiverRefreshAction::Disable => {
+                            receiver_refresh_open = false;
+                            debug!("{INNER_NAME}: receiver refresh channel closed; disabling slot0-triggered mDNS resends");
+                        }
+                    }
                 },
                 _ = interval.tick() => {
                     if visibility != Visibility::Temporarily {
@@ -169,5 +195,34 @@ impl MDnsServer {
         .enable_addr_auto(AddrType::V4);
 
         Ok(si)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn receiver_refresh_ok_and_lagged_request_resend() {
+        assert_eq!(
+            receiver_refresh_action(Ok(())),
+            ReceiverRefreshAction::Resend
+        );
+        assert_eq!(
+            receiver_refresh_action(Err(
+                tokio::sync::broadcast::error::RecvError::Lagged(2)
+            )),
+            ReceiverRefreshAction::Resend
+        );
+    }
+
+    #[test]
+    fn receiver_refresh_closed_disables_slot0_resends() {
+        assert_eq!(
+            receiver_refresh_action(Err(
+                tokio::sync::broadcast::error::RecvError::Closed
+            )),
+            ReceiverRefreshAction::Disable
+        );
     }
 }
