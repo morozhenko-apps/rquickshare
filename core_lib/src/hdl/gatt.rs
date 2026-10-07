@@ -45,13 +45,38 @@ const MAX_WEAVE_MESSAGE_SIZE: usize = MAX_INBOUND_FRAME_SIZE + 7;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ReceiverDiscoveryRefresh {
     resend_mdns: bool,
-    advertising: ReceiverAdvertisingRefresh,
+    advertising: Option<ReceiverAdvertisingRefresh>,
 }
 
-fn receiver_discovery_refresh(offset: usize) -> Option<ReceiverDiscoveryRefresh> {
+// The A/B override is restricted to debug builds. Release always retains the
+// normal deferred FEF3 recovery after a slot-0 read.
+fn slot0_deferred_advertising_enabled_for(
+    debug_build: bool,
+    diagnostic_value: Option<&str>,
+) -> bool {
+    !debug_build || diagnostic_value != Some("0")
+}
+
+fn slot0_deferred_advertising_enabled() -> bool {
+    #[cfg(debug_assertions)]
+    let diagnostic_value = std::env::var("RQS_DIAG_SLOT0_ADV_REFRESH").ok();
+
+    #[cfg(not(debug_assertions))]
+    let diagnostic_value: Option<String> = None;
+
+    slot0_deferred_advertising_enabled_for(
+        cfg!(debug_assertions),
+        diagnostic_value.as_deref(),
+    )
+}
+
+fn receiver_discovery_refresh(
+    offset: usize,
+    deferred_advertising_enabled: bool,
+) -> Option<ReceiverDiscoveryRefresh> {
     (offset == 0).then_some(ReceiverDiscoveryRefresh {
         resend_mdns: true,
-        advertising: ReceiverAdvertisingRefresh::Deferred,
+        advertising: deferred_advertising_enabled.then_some(ReceiverAdvertisingRefresh::Deferred),
     })
 }
 
@@ -157,6 +182,11 @@ impl ReceiverGattServer {
         let weave_write: Uuid = QS_WEAVE_TO_PERIPHERAL.parse()?;
         let weave_notify: Uuid = QS_WEAVE_FROM_PERIPHERAL.parse()?;
         let advertisement = self.advertisement.clone();
+        let deferred_slot0_advertising = slot0_deferred_advertising_enabled();
+        #[cfg(debug_assertions)]
+        info!(
+            "{INNER_NAME}: diagnostic slot0 deferred advertising refresh enabled={deferred_slot0_advertising}"
+        );
 
         const MAX_PENDING_GATT_WRITES: usize = 64;
         let (packet_sender, packet_receiver) = channel::<Vec<u8>>(MAX_PENDING_GATT_WRITES);
@@ -194,14 +224,22 @@ impl ReceiverGattServer {
                                         "{INNER_NAME}: slot0 read offset={offset}, returned={} bytes",
                                         response.len()
                                     );
-                                    if let Some(refresh) = receiver_discovery_refresh(offset) {
+                                    if let Some(refresh) =
+                                        receiver_discovery_refresh(offset, deferred_slot0_advertising)
+                                    {
                                         if refresh.resend_mdns {
                                             let _ = mdns_refresh_sender.send(());
                                         }
-                                        let _ = advertiser_refresh_sender.send(refresh.advertising);
-                                        debug!(
-                                            "{INNER_NAME}: slot0 requested mDNS resend and deferred advertising recovery"
-                                        );
+                                        if let Some(advertising) = refresh.advertising {
+                                            let _ = advertiser_refresh_sender.send(advertising);
+                                            debug!(
+                                                "{INNER_NAME}: slot0 requested mDNS resend and deferred advertising recovery"
+                                            );
+                                        } else {
+                                            debug!(
+                                                "{INNER_NAME}: slot0 requested mDNS resend; deferred advertising recovery skipped (debug A/B)"
+                                            );
+                                        }
                                     }
                                     Ok(response)
                                 })
@@ -515,16 +553,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn slot0_zero_offset_requests_mdns_resend_and_deferred_advertising() {
-        let refresh = receiver_discovery_refresh(0).expect("slot0 offset zero must refresh");
+    fn slot0_zero_offset_preserves_mdns_and_deferred_advertising_by_default() {
+        let refresh =
+            receiver_discovery_refresh(0, true).expect("slot0 offset zero must refresh");
         assert!(refresh.resend_mdns);
-        assert_eq!(refresh.advertising, ReceiverAdvertisingRefresh::Deferred);
+        assert_eq!(
+            refresh.advertising,
+            Some(ReceiverAdvertisingRefresh::Deferred)
+        );
     }
 
     #[test]
-    fn slot0_nonzero_offset_does_not_refresh_discovery() {
-        assert_eq!(receiver_discovery_refresh(1), None);
-        assert_eq!(receiver_discovery_refresh(usize::MAX), None);
+    fn slot0_debug_ab_skips_only_deferred_advertising() {
+        let refresh =
+            receiver_discovery_refresh(0, false).expect("slot0 offset zero must refresh");
+        assert!(refresh.resend_mdns);
+        assert_eq!(refresh.advertising, None);
+    }
+
+    #[test]
+    fn slot0_nonzero_offset_does_not_refresh_discovery_in_either_variant() {
+        for enabled in [true, false] {
+            assert_eq!(receiver_discovery_refresh(1, enabled), None);
+            assert_eq!(receiver_discovery_refresh(usize::MAX, enabled), None);
+        }
+    }
+
+    #[test]
+    fn slot0_ab_flag_is_debug_only_and_opt_out_only() {
+        assert!(slot0_deferred_advertising_enabled_for(true, None));
+        assert!(slot0_deferred_advertising_enabled_for(true, Some("1")));
+        assert!(slot0_deferred_advertising_enabled_for(true, Some("false")));
+        assert!(!slot0_deferred_advertising_enabled_for(true, Some("0")));
+        assert!(slot0_deferred_advertising_enabled_for(false, Some("0")));
     }
 
     #[test]
