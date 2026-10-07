@@ -157,10 +157,13 @@ impl RQS {
         }
 
         // Start MDnsServer in own "task"
+        let (receiver_mdns_refresh_sender, receiver_mdns_refresh_receiver) =
+            broadcast::channel::<()>(8);
         let mut mdns = MDnsServer::new(
             endpoint_id[..4].try_into()?,
             binded_addr.port(),
             self.ble_sender.subscribe(),
+            receiver_mdns_refresh_receiver,
             self.visibility_sender.clone(),
             self.visibility_receiver.clone(),
         )?;
@@ -193,7 +196,8 @@ impl RQS {
                 }
             });
 
-            let (receiver_adv_refresh_sender, _) = broadcast::channel::<()>(8);
+            let (receiver_adv_refresh_sender, _) =
+                broadcast::channel::<crate::hdl::ReceiverAdvertisingRefresh>(8);
 
             let visibility_rx = self.visibility_receiver.clone();
             let receiver_ctk = ctoken.clone();
@@ -220,6 +224,7 @@ impl RQS {
                     gatt_tcp_port,
                     gatt_bwu_router,
                     receiver_adv_refresh_sender,
+                    receiver_mdns_refresh_sender,
                 )
                 .await
                 {
