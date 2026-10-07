@@ -209,9 +209,7 @@ mod tests {
             ReceiverRefreshAction::Resend
         );
         assert_eq!(
-            receiver_refresh_action(Err(
-                tokio::sync::broadcast::error::RecvError::Lagged(2)
-            )),
+            receiver_refresh_action(Err(tokio::sync::broadcast::error::RecvError::Lagged(2))),
             ReceiverRefreshAction::Resend
         );
     }
@@ -219,9 +217,7 @@ mod tests {
     #[test]
     fn receiver_refresh_closed_disables_slot0_resends() {
         assert_eq!(
-            receiver_refresh_action(Err(
-                tokio::sync::broadcast::error::RecvError::Closed
-            )),
+            receiver_refresh_action(Err(tokio::sync::broadcast::error::RecvError::Closed)),
             ReceiverRefreshAction::Disable
         );
     }
