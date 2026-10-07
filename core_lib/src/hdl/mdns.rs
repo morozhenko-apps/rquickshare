@@ -38,6 +38,7 @@ pub struct MDnsServer {
     daemon: ServiceDaemon,
     service_info: ServiceInfo,
     ble_receiver: Receiver<()>,
+    receiver_refresh_receiver: Receiver<()>,
     visibility_sender: Arc<Mutex<watch::Sender<Visibility>>>,
     visibility_receiver: watch::Receiver<Visibility>,
 }
@@ -47,6 +48,7 @@ impl MDnsServer {
         endpoint_id: [u8; 4],
         service_port: u16,
         ble_receiver: Receiver<()>,
+        receiver_refresh_receiver: Receiver<()>,
         visibility_sender: Arc<Mutex<watch::Sender<Visibility>>>,
         visibility_receiver: watch::Receiver<Visibility>,
     ) -> Result<Self, anyhow::Error> {
@@ -56,6 +58,7 @@ impl MDnsServer {
             daemon: ServiceDaemon::new()?,
             service_info,
             ble_receiver,
+            receiver_refresh_receiver,
             visibility_sender,
             visibility_receiver,
         })
@@ -65,6 +68,7 @@ impl MDnsServer {
         info!("{INNER_NAME}: service starting");
         let monitor = self.daemon.monitor()?;
         let ble_receiver = &mut self.ble_receiver;
+        let receiver_refresh_receiver = &mut self.receiver_refresh_receiver;
         let mut visibility = *self.visibility_receiver.borrow();
         let mut interval = interval_at(Instant::now() + TICK_INTERVAL, TICK_INTERVAL);
 
@@ -108,6 +112,14 @@ impl MDnsServer {
                     } else {
                         self.daemon.register(self.service_info.clone())?;
                     }
+                },
+                _ = receiver_refresh_receiver.recv() => {
+                    if visibility == Visibility::Invisible {
+                        continue;
+                    }
+
+                    debug!("{INNER_NAME}: receiver slot0 requested mDNS resend");
+                    self.daemon.register_resend(self.service_info.get_fullname())?;
                 },
                 _ = interval.tick() => {
                     if visibility != Visibility::Temporarily {
