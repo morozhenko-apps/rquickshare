@@ -148,7 +148,6 @@ describe('display lifecycle', () => {
 				id: 'peer',
 				name: 'Mercury',
 				endpoint: true,
-				state: undefined,
 			}),
 		]);
 	});
