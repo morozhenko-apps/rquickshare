@@ -152,7 +152,11 @@ impl RQS {
             if let Ok(ble) = BleListener::new(self.ble_sender.clone()).await {
                 let ctk = ctoken.clone();
                 let foreground_rx = self.foreground_receiver.clone();
-                tracker.spawn(async move { ble.run(ctk, foreground_rx).await });
+                tracker.spawn(async move {
+                    if let Err(error) = ble.run(ctk, foreground_rx).await {
+                        error!("BleListener stopped with error: {error:#}");
+                    }
+                });
             }
         }
 
