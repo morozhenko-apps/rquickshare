@@ -518,10 +518,7 @@ mod tests {
     fn slot0_zero_offset_requests_mdns_resend_and_deferred_advertising() {
         let refresh = receiver_discovery_refresh(0).expect("slot0 offset zero must refresh");
         assert!(refresh.resend_mdns);
-        assert_eq!(
-            refresh.advertising,
-            ReceiverAdvertisingRefresh::Deferred
-        );
+        assert_eq!(refresh.advertising, ReceiverAdvertisingRefresh::Deferred);
     }
 
     #[test]
