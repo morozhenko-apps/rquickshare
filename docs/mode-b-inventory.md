@@ -612,3 +612,20 @@ Required invariants:
 9. Hardware smoke must perform at least three consecutive Pixel -> Linux receives without restarting rQuickShare and record passive-monitor/slot0 -> TCP-accept timing as applicable.
 10. Hardware smoke must also record whether the machine selected the passive monitor or active fallback and, for fallback, the exact logged monitor-unavailability reason.
 
+### Monitor-first hardware smoke result - 2026-10-07
+
+The Ubuntu 26.04 KDE hardware run on package SHA `e229ac8` completed three consecutive Pixel -> Linux image receives, all reporting `Finished` without restarting rQuickShare. It did **not** exercise the passive-monitor happy path:
+
+- At 21:34:34 UTC, BlueZ rejected `RegisterMonitor` on `org.bluez.AdvertisementMonitorManager1` with `org.freedesktop.DBus.Error.UnknownMethod`. `BleListener` logged this and selected the active-scan compatibility fallback without user-visible failure.
+- Active fallback matched a Quick Share FE2C advertisement at 21:34:37 UTC and emitted the existing mDNS refresh signal. Following `tray_show` at 21:34:39, foreground mode kept the active scan running; the slow first transfer cannot be attributed to the 5s/25s background duty cycle in this run.
+- First receive used GATT/Weave: slot-0 offset-0 read at 21:35:26, mDNS resend immediately, deferred receiver advertising re-registration at 21:35:28, Weave notify subscription and BWU TCP acceptance at 21:35:48, Wi-Fi LAN migration at 21:35:52, consent at 21:35:54, `Finished` at 21:35:57. The measured slot-0 -> Weave gap is **22 seconds**; do not conflate this with transfer payload time or with the user-observed approximate 18-second startup.
+- Second and third receives used direct inbound TCP instead of GATT: TCP accept at 21:36:07 -> `Finished` at 21:36:10, and 21:36:19 -> `Finished` at 21:36:22. All three files completed and no transport-level errors were recorded in this run.
+- No text transfer occurred in this run; earlier Pixel -> Linux text regressions still require a current-build smoke check.
+
+Remaining discovery-latency investigation:
+
+1. Treat the slot-0 -> Weave delay as a separately measured cold-start issue; the monitor-first refactor did not resolve it on this machine because its BlueZ API is unavailable.
+2. The 2-second FEF3 advertisement re-registration while Android is still in GATT bootstrap is a **hypothesis**, not a proven cause. Compare cold-start slot-0 -> notify latency with and without in-flight advertising re-registration in a controlled, reversible A/B experiment; do not disable it permanently from one sample.
+3. Preserve fast direct TCP receive, visibility suppression, bounded mDNS resend, Weave-session completion refresh, and the 30-second recovery fallback. Do not loosen protocol/BWU invariants or change the host's bluetoothd configuration automatically.
+4. Repeat at least three cold-start trials per variant with equivalent visibility and foreground state, plus warm/direct TCP receives and text receive. Record which discovery backend was active on every run.
+
