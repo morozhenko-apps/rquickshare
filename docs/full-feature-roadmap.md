@@ -177,3 +177,16 @@ Architecture decision (2026-10-06):
 7. Preview + resume/dedup.
 8. Streams / Remote Copy / multi-recipient.
 9. QR/account/AirDrop research.
+
+## Modern BWU endpoint identity compatibility
+
+Hardware smoke on 2026-10-07 exposed intermittent image-transfer startup latency/failure while text payloads remained reliable. A protocol audit against current Google Nearby found a concrete compatibility gap in the Wi-Fi bandwidth-upgrade handshake:
+
+- Modern `BandwidthUpgradeNegotiationFrame.ClientIntroduction` includes optional field 3, `last_endpoint_id`, used when the peer changes endpoint identity during dynamic BWU role switching.
+- rQuickShare currently models only `endpoint_id` and requires it to exactly match the BLE session's endpoint id. The primary TCP listener likewise routes a BWU socket only by the new `endpoint_id`.
+- A modern peer that sends a new endpoint id plus the prior BLE id in `last_endpoint_id` can therefore be rejected or dropped even though it belongs to the pending upgrade.
+- Compatibility rule: prefer an exact current-id match, otherwise accept/reroute only when the advertised `last_endpoint_id` exactly matches a pending/expected endpoint. Never consume an unrelated pending route.
+- Legacy peers that omit `last_endpoint_id` keep the existing exact-match behavior.
+- Add regression coverage for exact match, valid old-id alias, unrelated ids, missing ids and preservation of unrelated pending routes.
+- Keep BWU phase timeouts unchanged until hardware logs distinguish TCP-route timeout from old-channel drain timeout; do not hide handshake defects by shortening timers.
+
