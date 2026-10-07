@@ -2753,6 +2753,7 @@ mod security_tests {
                     client_introduction: Some(ClientIntroduction {
                         endpoint_id: Some("peer-1234".to_owned()),
                         supports_disabling_encryption: Some(false),
+                        last_endpoint_id: None,
                     }),
                     ..Default::default()
                 }),
