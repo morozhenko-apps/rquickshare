@@ -15,9 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::channel::{ChannelDirection, ChannelMessage, TransferType};
 use crate::errors::AppError;
-use crate::hdl::{
-    BwuRouter, InboundRequest, MigratableStream, ReceiverAdvertisingRefresh, State,
-};
+use crate::hdl::{BwuRouter, InboundRequest, MigratableStream, ReceiverAdvertisingRefresh, State};
 
 const INNER_NAME: &str = "ReceiverGattServer";
 
@@ -112,8 +110,7 @@ pub struct ReceiverGattServer {
     sender: Sender<ChannelMessage>,
     tcp_port: u16,
     bwu_router: BwuRouter,
-    receiver_advertiser_refresh:
-        tokio::sync::broadcast::Sender<ReceiverAdvertisingRefresh>,
+    receiver_advertiser_refresh: tokio::sync::broadcast::Sender<ReceiverAdvertisingRefresh>,
     mdns_refresh_sender: tokio::sync::broadcast::Sender<()>,
 }
 
@@ -123,8 +120,7 @@ impl ReceiverGattServer {
         sender: Sender<ChannelMessage>,
         tcp_port: u16,
         bwu_router: BwuRouter,
-        receiver_advertiser_refresh:
-            tokio::sync::broadcast::Sender<ReceiverAdvertisingRefresh>,
+        receiver_advertiser_refresh: tokio::sync::broadcast::Sender<ReceiverAdvertisingRefresh>,
         mdns_refresh_sender: tokio::sync::broadcast::Sender<()>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
@@ -248,8 +244,8 @@ impl ReceiverGattServer {
                                             "{INNER_NAME}: weave session ended with error: {error}"
                                         );
                                     }
-                                    let _ = refresh_sender
-                                        .send(ReceiverAdvertisingRefresh::Immediate);
+                                    let _ =
+                                        refresh_sender.send(ReceiverAdvertisingRefresh::Immediate);
                                 })
                             })),
                             ..Default::default()
