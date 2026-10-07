@@ -10,7 +10,8 @@ use ts_rs::TS;
 use crate::channel::{ChannelDirection, ChannelMessage};
 use crate::errors::AppError;
 use crate::hdl::{
-    peek_client_introduction, BwuRouter, InboundRequest, OutboundPayload, OutboundRequest, State,
+    peek_client_introduction, BwuClientIntroductionIdentity, BwuRouter, InboundRequest,
+    OutboundPayload, OutboundRequest, State,
 };
 use crate::utils::RemoteDeviceInfo;
 
@@ -31,7 +32,7 @@ async fn route_bandwidth_upgrade_if_pending(
         loop {
             let count = socket.peek(&mut buffer).await?;
             if count == 0 {
-                return Ok::<Option<String>, anyhow::Error>(None);
+                return Ok::<Option<BwuClientIntroductionIdentity>, anyhow::Error>(None);
             }
 
             if count >= 4 {
@@ -56,15 +57,33 @@ async fn route_bandwidth_upgrade_if_pending(
         Err(_) => None,
     };
 
-    let Some(endpoint_id) = endpoint_id else {
+    let Some(identity) = endpoint_id else {
         return Ok(Some(socket));
     };
 
-    match router.route(&endpoint_id, socket).await {
-        Ok(()) => Ok(None),
+    match router
+        .route_with_alias(
+            &identity.endpoint_id,
+            identity.last_endpoint_id.as_deref(),
+            socket,
+        )
+        .await
+    {
+        Ok(routed_as) => {
+            if routed_as != identity.endpoint_id {
+                info!(
+                    "{INNER_NAME}: routed dynamic BWU endpoint current={} last={:?} as {routed_as}",
+                    identity.endpoint_id,
+                    identity.last_endpoint_id
+                );
+            }
+            Ok(None)
+        }
         Err(_socket) => {
             warn!(
-                "{INNER_NAME}: received BWU CLIENT_INTRODUCTION for unregistered endpoint {endpoint_id}"
+                "{INNER_NAME}: received BWU CLIENT_INTRODUCTION for unregistered endpoint current={} last={:?}",
+                identity.endpoint_id,
+                identity.last_endpoint_id
             );
             Ok(None)
         }
@@ -300,6 +319,10 @@ mod tests {
     };
 
     fn client_introduction(endpoint_id: &str) -> Vec<u8> {
+        client_introduction_with_last(endpoint_id, None)
+    }
+
+    fn client_introduction_with_last(endpoint_id: &str, last_endpoint_id: Option<&str>) -> Vec<u8> {
         let frame = OfflineFrame {
             version: Some(offline_frame::Version::V1.into()),
             v1: Some(V1Frame {
@@ -309,6 +332,7 @@ mod tests {
                     client_introduction: Some(ClientIntroduction {
                         endpoint_id: Some(endpoint_id.to_owned()),
                         supports_disabling_encryption: Some(false),
+                        last_endpoint_id: last_endpoint_id.map(str::to_owned),
                     }),
                     ..Default::default()
                 }),
@@ -349,6 +373,35 @@ mod tests {
         routed.read_exact(&mut received).await.unwrap();
         assert_eq!(received, framed);
     }
+    #[tokio::test]
+    async fn routes_dynamic_bwu_endpoint_by_last_endpoint_id() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-old".to_owned()).await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        let framed = client_introduction_with_last("peer-new", Some("peer-old"));
+        client.write_all(&framed).await.unwrap();
+        client.flush().await.unwrap();
+
+        assert!(route_bandwidth_upgrade_if_pending(server, &router)
+            .await
+            .unwrap()
+            .is_none());
+
+        let mut routed = tokio::time::timeout(std::time::Duration::from_millis(250), receiver)
+            .await
+            .expect("dynamic BWU route did not deliver the socket")
+            .expect("dynamic BWU route sender dropped without a socket");
+        let mut received = vec![0_u8; framed.len()];
+        routed.read_exact(&mut received).await.unwrap();
+        assert_eq!(received, framed);
+        assert!(!router.has_pending().await);
+    }
+
     #[tokio::test]
     async fn returns_socket_when_no_bwu_route_is_pending() {
         let router = BwuRouter::new();
@@ -399,7 +452,7 @@ mod tests {
         let mut client = TcpStream::connect(address).await.unwrap();
         let (server, _) = listener.accept().await.unwrap();
 
-        let framed = client_introduction("peer-other");
+        let framed = client_introduction_with_last("peer-other", Some("peer-also-other"));
         client.write_all(&framed).await.unwrap();
         client.flush().await.unwrap();
 

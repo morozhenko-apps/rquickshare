@@ -420,7 +420,22 @@ async fn send_plain_frame_on<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-fn validate_client_introduction(frame_data: &[u8]) -> Result<String, anyhow::Error> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BwuClientIntroductionIdentity {
+    pub endpoint_id: String,
+    pub last_endpoint_id: Option<String>,
+}
+
+impl BwuClientIntroductionIdentity {
+    fn matches_expected(&self, expected_endpoint_id: &str) -> bool {
+        self.endpoint_id == expected_endpoint_id
+            || self.last_endpoint_id.as_deref() == Some(expected_endpoint_id)
+    }
+}
+
+fn validate_client_introduction(
+    frame_data: &[u8],
+) -> Result<BwuClientIntroductionIdentity, anyhow::Error> {
     use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
     use location_nearby_connections::v1_frame::FrameType;
 
@@ -447,20 +462,32 @@ fn validate_client_introduction(frame_data: &[u8]) -> Result<String, anyhow::Err
         ));
     }
 
-    let endpoint_id = negotiation
+    let introduction = negotiation
         .client_introduction
         .as_ref()
-        .map(|introduction| introduction.endpoint_id().to_owned())
+        .ok_or_else(|| anyhow!("CLIENT_INTRODUCTION has no identity payload"))?;
+    let endpoint_id = introduction.endpoint_id().to_owned();
+    if endpoint_id.is_empty() {
+        return Err(anyhow!("CLIENT_INTRODUCTION has no endpoint id"));
+    }
+    let last_endpoint_id = introduction
+        .last_endpoint_id
+        .as_ref()
         .filter(|id| !id.is_empty())
-        .ok_or_else(|| anyhow!("CLIENT_INTRODUCTION has no endpoint id"))?;
+        .cloned();
 
-    Ok(endpoint_id)
+    Ok(BwuClientIntroductionIdentity {
+        endpoint_id,
+        last_endpoint_id,
+    })
 }
 
 /// Inspect a non-consuming TCP peek buffer for a complete bandwidth-upgrade
 /// CLIENT_INTRODUCTION. Returns None for incomplete or ordinary Quick Share
 /// frames so the primary listener can continue with the normal inbound path.
-pub fn peek_client_introduction(buffer: &[u8]) -> Result<Option<String>, anyhow::Error> {
+pub fn peek_client_introduction(
+    buffer: &[u8],
+) -> Result<Option<BwuClientIntroductionIdentity>, anyhow::Error> {
     if buffer.len() < 4 {
         return Ok(None);
     }
@@ -2059,14 +2086,27 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         };
 
         let introduction = read_plain_frame_from(&mut tcp).await?;
-        let endpoint_id = validate_client_introduction(&introduction)?;
+        let identity = validate_client_introduction(&introduction)?;
         let expected_endpoint_id = expected_endpoint_id.as_str();
-        if endpoint_id != expected_endpoint_id {
+        if !identity.matches_expected(expected_endpoint_id) {
             return Err(anyhow!(
-                "BWU CLIENT_INTRODUCTION endpoint mismatch: expected {expected_endpoint_id}, got {endpoint_id}"
+                "BWU CLIENT_INTRODUCTION endpoint mismatch: expected {expected_endpoint_id}, got current={} last={:?}",
+                identity.endpoint_id,
+                identity.last_endpoint_id
             ));
         }
-        debug!("BWU: validated CLIENT_INTRODUCTION for endpoint {endpoint_id}");
+        if identity.endpoint_id != expected_endpoint_id {
+            info!(
+                "BWU: accepted dynamic endpoint alias current={} last={:?} for expected {expected_endpoint_id}",
+                identity.endpoint_id,
+                identity.last_endpoint_id
+            );
+        } else {
+            debug!(
+                "BWU: validated CLIENT_INTRODUCTION for endpoint {}",
+                identity.endpoint_id
+            );
+        }
 
         let ack = Self::client_introduction_ack_frame().encode_to_vec();
         send_plain_frame_on(&mut tcp, &ack).await?;
@@ -2722,17 +2762,43 @@ mod security_tests {
 
         assert_eq!(
             validate_client_introduction(&frame.encode_to_vec()).unwrap(),
-            "peer-1234"
+            BwuClientIntroductionIdentity {
+                endpoint_id: "peer-1234".to_owned(),
+                last_endpoint_id: None,
+            }
         );
 
         let encoded = frame.encode_to_vec();
         let mut framed = (encoded.len() as u32).to_be_bytes().to_vec();
         framed.extend_from_slice(&encoded);
         assert_eq!(
-            peek_client_introduction(&framed).unwrap().as_deref(),
-            Some("peer-1234")
+            peek_client_introduction(&framed).unwrap(),
+            Some(BwuClientIntroductionIdentity {
+                endpoint_id: "peer-1234".to_owned(),
+                last_endpoint_id: None,
+            })
         );
         assert_eq!(peek_client_introduction(&framed[..3]).unwrap(), None);
+
+        let mut dynamic_alias = frame.clone();
+        dynamic_alias
+            .v1
+            .as_mut()
+            .unwrap()
+            .bandwidth_upgrade_negotiation
+            .as_mut()
+            .unwrap()
+            .client_introduction
+            .as_mut()
+            .unwrap()
+            .last_endpoint_id = Some("peer-old".to_owned());
+        assert_eq!(
+            validate_client_introduction(&dynamic_alias.encode_to_vec()).unwrap(),
+            BwuClientIntroductionIdentity {
+                endpoint_id: "peer-1234".to_owned(),
+                last_endpoint_id: Some("peer-old".to_owned()),
+            }
+        );
 
         let mut wrong_event = frame.clone();
         wrong_event

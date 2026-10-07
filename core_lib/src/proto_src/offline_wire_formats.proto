@@ -280,6 +280,9 @@ message BandwidthUpgradeNegotiationFrame {
   message ClientIntroduction {
     optional string endpoint_id = 1;
     optional bool supports_disabling_encryption = 2;
+    // Previous endpoint id used by modern peers when BWU changes endpoint
+    // identity during dynamic role switching.
+    optional string last_endpoint_id = 3;
   }
 
   // Accompanies CLIENT_INTRODUCTION_ACK events.

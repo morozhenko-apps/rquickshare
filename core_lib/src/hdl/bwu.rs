@@ -44,6 +44,34 @@ impl BwuRouter {
         }
     }
 
+    /// Route a modern BWU connection by its current endpoint id, or by the
+    /// previous endpoint id explicitly carried by CLIENT_INTRODUCTION during a
+    /// dynamic role switch. Exact current-id ownership always takes precedence.
+    pub async fn route_with_alias(
+        &self,
+        endpoint_id: &str,
+        last_endpoint_id: Option<&str>,
+        socket: TcpStream,
+    ) -> Result<String, TcpStream> {
+        let mut pending = self.pending.lock().await;
+        let route_id = if pending.contains_key(endpoint_id) {
+            endpoint_id.to_owned()
+        } else if let Some(last_endpoint_id) =
+            last_endpoint_id.filter(|id| pending.contains_key(*id))
+        {
+            last_endpoint_id.to_owned()
+        } else {
+            return Err(socket);
+        };
+
+        let sender = pending
+            .remove(&route_id)
+            .expect("selected BWU route must exist while the router lock is held");
+        drop(pending);
+
+        sender.send(socket).map(|()| route_id)
+    }
+
     pub async fn cancel(&self, endpoint_id: &str) {
         self.pending.lock().await.remove(endpoint_id);
     }
@@ -146,6 +174,49 @@ mod tests {
         assert!(router.has_pending().await);
         router.cancel("peer-race").await;
         assert!(!router.has_pending().await);
+    }
+
+    #[tokio::test]
+    async fn dynamic_alias_routes_to_last_endpoint_id() {
+        let router = BwuRouter::new();
+        let receiver = router.register("peer-old".to_owned()).await.unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        let routed_as = router
+            .route_with_alias("peer-new", Some("peer-old"), server)
+            .await
+            .unwrap();
+        assert_eq!(routed_as, "peer-old");
+        assert!(!router.has_pending().await);
+        drop(receiver);
+    }
+
+    #[tokio::test]
+    async fn exact_endpoint_id_wins_over_dynamic_alias() {
+        let router = BwuRouter::new();
+        let current_receiver = router.register("peer-new".to_owned()).await.unwrap();
+        let old_receiver = router.register("peer-old".to_owned()).await.unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let _client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+
+        let routed_as = router
+            .route_with_alias("peer-new", Some("peer-old"), server)
+            .await
+            .unwrap();
+        assert_eq!(routed_as, "peer-new");
+        assert!(router.pending.lock().await.contains_key("peer-old"));
+        assert!(!router.pending.lock().await.contains_key("peer-new"));
+
+        router.cancel("peer-old").await;
+        drop(current_receiver);
+        drop(old_receiver);
     }
 
     #[tokio::test]
