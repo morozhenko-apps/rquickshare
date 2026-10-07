@@ -16,10 +16,10 @@ This document is the working log for the `morozhenko-apps/rquickshare` maintenan
 
 ## Current gate status
 
-The Pixel/BLE foundation and the current Full Quick Share work are consolidated on `dev`. PR #2 and PR #3 were merged into `dev` during the two-branch cleanup; the old `dev -> master` PR #1 was closed without changing `master`. Hardware smoke and the final Mode B gate still block promotion to `master`.
+The Pixel/BLE foundation and current Full Quick Share work are consolidated into the maintained two-branch workflow. On 2026-10-07 the user explicitly requested an **interim snapshot** fast-forward of `dev` at `0bc9b50` into `master` (400 commits ahead, zero behind). Both refs were verified identical after the non-forced update. This promotion is **not** a final Mode B completion or hardware release signoff: the remaining cold GATT startup latency and current-build Pixel -> Linux text smoke are still open. The complete 10x Mode B gate has not been claimed as passed.
 
-- Current feature preflight is green after the mutation-driven BWU test hardening and CI cleanup.
-- Linux debug `.deb` package smoke is green on application code head `a1b96b7` (run `37474172562`); all later changes before this documentation update are tests/CI only, so the packaged application code is unchanged.
+- The final implementation head `e229ac8` passed all five preflight jobs (run `37687010250`) and manual Linux debug `.deb` package smoke (run `37688585293`). The promoted `0bc9b50` differs only by subsequent documentation describing Pixel smoke results.
+- The next development-only experiment is the debug-only `RQS_DIAG_SLOT0_ADV_REFRESH=0` A/B variant. It must remain on `dev` until measured and validated; ordinary/release behavior must not change.
 - Historical pre-smoke Mode B is green after the BWU test hardening: stable suite 1x plus selected async transport/BWU tests 10x (run `37475497104`). The current SSOT is stricter, so a complete-suite 10x run is still required before completion.
 - Targeted mutation audit now reports 22 caught, 18 unviable, 1 missed and 0 timeouts across 41 mutants. The only survivor is the `MigratableStream::poll_flush -> Ok(())` mutation, which is equivalent/unobservable for the current concrete `DuplexStream` and `TcpStream` transports; the real delegation remains in production code.
 - Residual `unwrap`/`expect`/panic review of the 11 changed Rust modules found no such calls in production regions; remaining occurrences are under `#[cfg(test)]`.
