@@ -17,6 +17,7 @@ Legend:
 | `parseListeningPort` | P2 | Unit | Empty, min/max and common invalid values covered | Add NaN/Infinity and whitespace/format abuse cases |
 | `BleAdvertiser::should_advertise` | P1 | Unit | Visible/Temporary/Invisible covered | None |
 | `BleAdvertiser::{new,run,get_advertisement}` | P1 | Integration/Smoke | No deterministic BlueZ adapter seam | Keep smoke-only before hardware validation |
+| `PassiveBleMonitor::{new,run,quick_share_pattern}` | P0 | Unit + Integration/Smoke | FE2C service-data filter is unit-covered; BlueZ monitor lifecycle is OS-bound | Smoke monitor activation, repeated DeviceFound cycles, cancellation, and monitor-failure fallback |
 | `receiver_service_data` | P0 | Unit | Layout and long ASCII truncation covered | Add multibyte UTF-8 truncation/length-bound coverage |
 | `ReceiverAdvertiser::{new,run}` | P0 | Integration/Smoke | No deterministic BlueZ adapter seam | Smoke visibility, retry, periodic re-register, FE2C/FEF3 coexistence |
 | `BwuRouter::new` | P1 | Unit | Exercised indirectly | No dedicated test needed beyond router behavior |
@@ -65,6 +66,16 @@ Legend:
 3. Integer < 1024 -> reject.
 4. Integer > 65535 -> reject.
 5. Integer inside inclusive range -> accept.
+
+### Linux passive BLE monitor
+
+1. BlueZ monitor/session/adapter setup succeeds -> register an OrPatterns monitor for 16-bit Service Data UUID 0xFE2C.
+2. Monitor setup or registration fails -> return the contextual error so `BleListener` activates the compatibility active-scan fallback.
+3. `DeviceFound` -> emit the existing BLE activity signal used by `MDnsServer` to resend the receiver announcement.
+4. `DeviceLost` or another monitor event -> do not emit a discovery activity signal.
+5. Monitor event stream ends unexpectedly -> return an error and activate the compatibility fallback.
+6. Cancellation -> stop the monitor cleanly and do not activate fallback.
+7. The monitor path must not create or hold a `btleplug` discovery session.
 
 ### Receiver service data
 1. Device type is masked to three bits.
@@ -230,6 +241,7 @@ Legend:
 | Port parser | C | P | C | NA(no network) | NA(no retry) | NA(pure) | NA(no storage) | NA(no auth) | NA(no time) | NA(no UI interruption in parser) | NA(no PII) | NA(no billing) | NA(no storage) |
 | Receiver service data | C | P | C | NA(no network call) | NA(no retry) | NA(pure) | NA(no persisted data) | NA(no auth) | NA(no time) | NA(no UI) | NA(no PII log) | NA(no billing) | NA(no storage) |
 | Receiver advertiser lifecycle | S | NA(no external input parser) | S | S | S | S | NA(no persisted data) | NA(no auth) | NA(no time semantics) | S | NA(no PII) | NA(no billing) | NA(no storage) |
+| Linux passive BLE monitor | S | C(FE2C filter bytes) | C(pattern offset/type) | S(monitor unavailable/stream ends) | S(fallback activation) | S(repeated found/lost cycles) | NA(no persisted data) | NA(no auth) | NA(no wall-clock semantics) | S(cancel/shutdown) | C(no payload content logged) | NA(no billing) | NA(no storage) |
 | BWU router | C | P | P | NA(no network semantics beyond socket ownership) | P | P | NA(no persisted data) | P(endpoint identity) | NA(no time) | P(cancel/drop) | NA(no PII) | NA(no billing) | NA(no storage) |
 | Weave request/framing helpers | C | P | P | NA(pure helpers) | NA(no retry) | NA(pure helpers) | P(malformed frames) | P(protocol misuse) | NA(no time) | NA(no UI) | NA(no PII) | NA(no billing) | NA(no storage) |
 | Weave session | S | P | P | S | P | P | P | P | NA(no locale/time) | S(disconnect) | NA(no PII by contract) | NA(no billing) | NA(no storage) |
@@ -258,31 +270,36 @@ Mandatory interaction sets:
    - Automation: pure visibility predicate only.
    - Smoke: BlueZ coexistence and re-registration.
 
-2. BWU route state x incoming frame:
+2. Linux receive discovery backend x lifecycle:
+   - Advertisement Monitor available/unavailable/terminates x foreground/background x first/repeated Pixel receive.
+   - Preferred path must not start active discovery; unavailable/terminated monitor must select bounded active fallback.
+   - Cancellation must never be interpreted as monitor failure and must not start fallback.
+
+3. BWU route state x incoming frame:
    - no pending / pending other endpoint / pending same endpoint
    - ordinary frame / incomplete intro / malformed intro / valid intro.
    - Highest risk: valid intro for a stale or dropped registration.
 
-3. Transport x session state:
+4. Transport x session state:
    - BLE/TCP x pre-UKEY2/post-UKEY2/post-upgrade x read/write/shutdown.
    - Keys and sequence counters must remain request-owned rather than transport-owned.
 
-4. Filename x destination state x metadata validity:
+5. Filename x destination state x metadata validity:
    - safe/unsafe name x free/existing/reserved destination x positive/negative size x unique/duplicate payload ID.
    - Any invalid member of a batch must leave request state unchanged.
 
-5. Frame length x actual bytes x transport closure:
+6. Frame length x actual bytes x transport closure:
    - 0/1/max/max+1 x short/exact/trailing x open/EOF.
    - No allocation before validation.
 
-6. Outbound source x filesystem state:
+7. Outbound source x filesystem state:
    - image/video/audio/apk/other x exists/missing/unreadable/non-UTF8 x one/many files.
 
-7. LAN interfaces:
+8. LAN interfaces:
    - private/public x physical/virtual x IPv4/IPv6 x order permutations.
    - Private eligible address must win over public fallback regardless of order.
 
-8. User action x outbound state:
+9. User action x outbound state:
    - cancel/accept/reject x Initial/WaitingForConsent/transferring/Finished.
    - Foreign transfer IDs and LibToFront messages must not cancel the active transfer.
 
@@ -309,6 +326,8 @@ Estimated additional automated scenarios before hardware smoke: **29-40**. This 
 
 | Production file | Important functions/branches | Current state | Remaining reason |
 |---|---|---|---|
+| `hdl/ble.rs` | monitor-first orchestration, active fallback lifecycle, foreground/background duty policy | Partial | Backend selection and BlueZ active-scan lifecycle require package/live smoke |
+| `hdl/ble_monitor.rs` | FE2C pattern, BlueZ monitor registration/events/cancellation | Partial | Pattern is unit-covered; D-Bus Advertisement Monitor lifecycle is hardware-bound |
 | `hdl/blea.rs` | visibility predicate, receiver data, BlueZ lifecycle | Partial | BlueZ lifecycle is hardware-bound; UTF-8 boundary gap is deterministic |
 | `hdl/bwu.rs` | register/route/cancel lifecycle | High line coverage | Negative/concurrency lifecycle branches still need explicit tests |
 | `hdl/gatt.rs` | request parsing, frame length, weave reassembly/fragmentation | Partial | Core session is coupled to BlueZ notifier; pure branches can be extracted/tested |
@@ -575,4 +594,21 @@ Required invariants:
 6. Invisible visibility still suppresses mDNS re-announcement and receiver advertising.
 7. Existing 30-second FEF3 refresh stays only as a safety fallback.
 8. Hardware smoke must measure slot-0 -> TCP-accept latency across at least three consecutive Pixel -> Linux attempts.
+
+### Monitor-first Linux receive discovery
+
+The 2026-10-07 startup-latency investigation showed that the previous 5-second scan / 25-second idle Linux tray policy can itself add up to 25 seconds before FE2C activity is observed. A fresh smoke run also showed the active scan stopping after its first window without a later restart, while the task error was not surfaced by the top-level runner.
+
+Required invariants:
+
+1. Linux prefers the BlueZ Advertisement Monitor backend for FE2C detection and initializes `btleplug` active discovery only after monitor setup/runtime failure.
+2. The passive monitor filters AD type 0x16 at offset 0 for the little-endian Quick Share service UUID bytes `2C FE`.
+3. A passive `DeviceFound` event emits the existing BLE activity signal and therefore requests the existing mDNS receiver refresh path.
+4. Cancellation of the passive backend exits cleanly and must not trigger fallback.
+5. Unsupported/disabled/terminated Advertisement Monitor is explicitly logged before activating the compatibility active-scan backend.
+6. Active fallback preserves foreground continuous discovery and background 5-second scan / 25-second idle duty-cycling; it is compatibility behavior, not the preferred Linux path.
+7. Any terminal `BleListener` error is logged by the RQS task owner; discovery backend failure must never disappear silently.
+8. On a system where Advertisement Monitor is active, rQuickShare must not hold BlueZ `Discovering: yes` merely while sitting in the tray.
+9. Hardware smoke must perform at least three consecutive Pixel -> Linux receives without restarting rQuickShare and record passive-monitor/slot0 -> TCP-accept timing as applicable.
+10. Hardware smoke must also record whether the machine selected the passive monitor or active fallback and, for fallback, the exact logged monitor-unavailability reason.
 

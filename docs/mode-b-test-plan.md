@@ -170,6 +170,9 @@ Required live checks:
 - repeat receive without restarting;
 - Linux -> Android send;
 - FE2C/FEF3 BlueZ coexistence.
+- passive FE2C Advertisement Monitor activation or an explicit logged fallback reason;
+- when the passive monitor path is active, tray receive discovery must not keep BlueZ in continuous `Discovering: yes`;
+- three consecutive Pixel -> Linux receives without restarting, recording monitor/slot-0 -> TCP-accept latency where those signals occur.
 
 After smoke, re-run the final automated Mode B gate and record Stage 12 answers.
 
