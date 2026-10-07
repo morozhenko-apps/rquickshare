@@ -2,8 +2,6 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context as _};
-#[cfg(target_os = "linux")]
-use bluer::monitor::{Monitor, MonitorEvent, Pattern, RssiSamplingPeriod};
 use btleplug::api::{Central, CentralEvent, Manager as _, ScanFilter};
 use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;
@@ -12,17 +10,15 @@ use tokio::time::{sleep, Instant, Sleep};
 use tokio_util::sync::CancellationToken;
 use uuid::{uuid, Uuid};
 
+#[cfg(target_os = "linux")]
+use super::ble_monitor::PassiveBleMonitor;
+
 const SERVICE_UUID_SHARING: Uuid = uuid!("0000fe2c-0000-1000-8000-00805f9b34fb");
 
 const INNER_NAME: &str = "BleListener";
 const DUTY_CYCLE_SCAN: Duration = Duration::from_secs(5);
 const DUTY_CYCLE_IDLE: Duration = Duration::from_secs(25);
 const ALERT_COOLDOWN: Duration = Duration::from_secs(30);
-
-#[cfg(target_os = "linux")]
-const AD_TYPE_SERVICE_DATA_16_BIT: u8 = 0x16;
-#[cfg(target_os = "linux")]
-const QUICK_SHARE_UUID_LE: [u8; 2] = [0x2c, 0xfe];
 
 pub struct BleListener {
     sender: Sender<()>,
@@ -35,79 +31,6 @@ impl BleListener {
 
     fn should_duty_cycle(foreground: bool) -> bool {
         cfg!(target_os = "linux") && !foreground
-    }
-
-    #[cfg(target_os = "linux")]
-    fn quick_share_monitor_pattern() -> Pattern {
-        Pattern {
-            data_type: AD_TYPE_SERVICE_DATA_16_BIT,
-            start_position: 0,
-            content: QUICK_SHARE_UUID_LE.to_vec(),
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    async fn run_passive_monitor(&self, ctk: CancellationToken) -> Result<(), anyhow::Error> {
-        let session = bluer::Session::new()
-            .await
-            .context("failed to create BlueZ session for passive BLE monitor")?;
-        let adapter = session
-            .default_adapter()
-            .await
-            .context("failed to get default adapter for passive BLE monitor")?;
-        adapter
-            .set_powered(true)
-            .await
-            .context("failed to power Bluetooth adapter for passive BLE monitor")?;
-
-        let monitor_manager = adapter
-            .monitor()
-            .await
-            .context("BlueZ Advertisement Monitor is unavailable")?;
-        let mut monitor_handle = monitor_manager
-            .register(Monitor {
-                monitor_type: bluer::monitor::Type::OrPatterns,
-                rssi_low_threshold: None,
-                rssi_high_threshold: None,
-                rssi_low_timeout: None,
-                rssi_high_timeout: None,
-                rssi_sampling_period: Some(RssiSamplingPeriod::First),
-                patterns: Some(vec![Self::quick_share_monitor_pattern()]),
-                ..Default::default()
-            })
-            .await
-            .context("failed to register Quick Share FE2C Advertisement Monitor")?;
-
-        info!(
-            "{INNER_NAME}: passive FE2C advertisement monitor active on {}",
-            adapter.name()
-        );
-
-        loop {
-            tokio::select! {
-                _ = ctk.cancelled() => {
-                    info!("{INNER_NAME}: passive monitor cancelled");
-                    return Ok(());
-                }
-                event = monitor_handle.next() => {
-                    match event {
-                        Some(MonitorEvent::DeviceFound(device)) => {
-                            debug!(
-                                "{INNER_NAME}: passive monitor matched Quick Share device {:?}",
-                                device
-                            );
-                            let _ = self.sender.send(());
-                        }
-                        Some(_) => {}
-                        None => {
-                            return Err(anyhow!(
-                                "BlueZ Advertisement Monitor event stream ended unexpectedly"
-                            ));
-                        }
-                    }
-                }
-            }
-        }
     }
 
     async fn active_adapter() -> Result<Adapter, anyhow::Error> {
@@ -260,12 +183,15 @@ impl BleListener {
         info!("{INNER_NAME}: service starting");
 
         #[cfg(target_os = "linux")]
-        match self.run_passive_monitor(ctk.clone()).await {
-            Ok(()) => return Ok(()),
-            Err(error) => {
-                warn!(
-                    "{INNER_NAME}: passive FE2C monitor stopped ({error:#}); falling back to active discovery"
-                );
+        {
+            let monitor = PassiveBleMonitor::new(self.sender.clone());
+            match monitor.run(ctk.clone()).await {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    warn!(
+                        "{INNER_NAME}: passive FE2C monitor stopped ({error:#}); falling back to active discovery"
+                    );
+                }
             }
         }
 
@@ -284,15 +210,5 @@ mod tests {
             BleListener::should_duty_cycle(false),
             cfg!(target_os = "linux")
         );
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn passive_monitor_targets_fe2c_service_data() {
-        let pattern = BleListener::quick_share_monitor_pattern();
-
-        assert_eq!(pattern.data_type, AD_TYPE_SERVICE_DATA_16_BIT);
-        assert_eq!(pattern.start_position, 0);
-        assert_eq!(pattern.content, QUICK_SHARE_UUID_LE);
     }
 }

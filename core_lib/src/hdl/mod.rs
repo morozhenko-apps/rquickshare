@@ -17,6 +17,8 @@ mod ble;
 #[cfg(feature = "experimental")]
 pub use ble::*;
 #[cfg(all(feature = "experimental", target_os = "linux"))]
+mod ble_monitor;
+#[cfg(all(feature = "experimental", target_os = "linux"))]
 mod blea;
 #[cfg(all(feature = "experimental", target_os = "linux"))]
 pub use blea::*;
