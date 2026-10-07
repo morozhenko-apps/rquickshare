@@ -42,6 +42,19 @@ const MAX_WEAVE_PACKET_SIZE: u16 = 509;
 const MAX_INBOUND_FRAME_SIZE: usize = 5 * 1024 * 1024;
 const MAX_WEAVE_MESSAGE_SIZE: usize = MAX_INBOUND_FRAME_SIZE + 7;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ReceiverDiscoveryRefresh {
+    resend_mdns: bool,
+    advertising: ReceiverAdvertisingRefresh,
+}
+
+fn receiver_discovery_refresh(offset: usize) -> Option<ReceiverDiscoveryRefresh> {
+    (offset == 0).then_some(ReceiverDiscoveryRefresh {
+        resend_mdns: true,
+        advertising: ReceiverAdvertisingRefresh::Deferred,
+    })
+}
+
 fn parse_connection_request(packet: &[u8]) -> Result<u16, anyhow::Error> {
     if packet.len() < 7 {
         return Err(anyhow!(
@@ -181,10 +194,11 @@ impl ReceiverGattServer {
                                         "{INNER_NAME}: slot0 read offset={offset}, returned={} bytes",
                                         response.len()
                                     );
-                                    if offset == 0 {
-                                        let _ = mdns_refresh_sender.send(());
-                                        let _ = advertiser_refresh_sender
-                                            .send(ReceiverAdvertisingRefresh::Deferred);
+                                    if let Some(refresh) = receiver_discovery_refresh(offset) {
+                                        if refresh.resend_mdns {
+                                            let _ = mdns_refresh_sender.send(());
+                                        }
+                                        let _ = advertiser_refresh_sender.send(refresh.advertising);
                                         debug!(
                                             "{INNER_NAME}: slot0 requested mDNS resend and deferred advertising recovery"
                                         );
@@ -499,6 +513,22 @@ async fn weave_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn slot0_zero_offset_requests_mdns_resend_and_deferred_advertising() {
+        let refresh = receiver_discovery_refresh(0).expect("slot0 offset zero must refresh");
+        assert!(refresh.resend_mdns);
+        assert_eq!(
+            refresh.advertising,
+            ReceiverAdvertisingRefresh::Deferred
+        );
+    }
+
+    #[test]
+    fn slot0_nonzero_offset_does_not_refresh_discovery() {
+        assert_eq!(receiver_discovery_refresh(1), None);
+        assert_eq!(receiver_discovery_refresh(usize::MAX), None);
+    }
 
     #[test]
     fn inbound_error_message_surfaces_disconnected_state() {
