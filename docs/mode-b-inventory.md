@@ -555,3 +555,24 @@ Required invariants:
 6. Bursty/duplicate refresh requests are harmless and bounded; no unbounded queue is allowed.
 7. Add unit coverage for refresh policy/state transitions where hardware-independent, and retain hardware smoke for repeated Pixel -> Linux transfers.
 
+### GATT slot-0 to mDNS handoff
+
+Hardware smoke on 2026-10-07 after event-driven advertisement refresh refined the remaining startup issue:
+
+- Three Pixel -> Linux file transfers reached backend `Finished`, even though Android reported one attempt as failed. This indicates the Android-side bootstrap/UI timeout can expire before the Linux TCP session arrives.
+- Fresh runs use two receiver paths: BLE Weave + BWU on some attempts, but direct inbound TCP on others. In the slow direct-TCP path, Pixel reads FEF3 slot 0 and only much later opens the advertised TCP service.
+- Immediate receiver-advertisement re-registration from inside the slot-0 read is too aggressive because it mutates the active connectable advertising set while the peer is still in bootstrap.
+- The slot-0 read is nevertheless the best deterministic signal that Android is actively discovering this receiver. It should immediately refresh the Nearby mDNS announcement so the direct-TCP endpoint is visible during the same discovery cycle.
+- Receiver BLE advertising recovery after slot-0 should be deferred briefly and remain best-effort; Weave-session completion can still refresh it immediately because that GATT session is already ending.
+
+Required invariants:
+
+1. Slot-0 offset-0 read triggers an immediate mDNS `register_resend` signal.
+2. Slot-0 read does not synchronously drop/re-register the active FEF3 advertisement handle.
+3. A short delayed best-effort FEF3 advertisement refresh may be scheduled after slot-0 read so adapters that consume connectable advertising recover without disturbing current bootstrap.
+4. Weave session completion continues to request immediate FEF3 advertisement refresh.
+5. mDNS resend and FEF3 refresh use separate bounded channels; no UI/visibility side effects are introduced.
+6. Invisible visibility still suppresses mDNS re-announcement and receiver advertising.
+7. Existing 30-second FEF3 refresh stays only as a safety fallback.
+8. Hardware smoke must measure slot-0 -> TCP-accept latency across at least three consecutive Pixel -> Linux attempts.
+
