@@ -629,3 +629,14 @@ Remaining discovery-latency investigation:
 3. Preserve fast direct TCP receive, visibility suppression, bounded mDNS resend, Weave-session completion refresh, and the 30-second recovery fallback. Do not loosen protocol/BWU invariants or change the host's bluetoothd configuration automatically.
 4. Repeat at least three cold-start trials per variant with equivalent visibility and foreground state, plus warm/direct TCP receives and text receive. Record which discovery backend was active on every run.
 
+### Cold-start FEF3 advertising recovery A/B experiment
+
+The measured 22-second slot-0 -> Weave gap is not yet causally attributed to receiver-advertisement re-registration. Evaluate the 2-second slot-0 deferred FEF3 refresh without changing default/release behavior:
+
+- Debug-only startup control: `RQS_DIAG_SLOT0_ADV_REFRESH=0` disables **only** the deferred FEF3 recovery request from a slot-0 offset-zero read. Unset/default or `=1` retains the existing deferred refresh.
+- The experiment must always preserve slot-0 mDNS resend, normal visibility policy, immediate refresh after a completed Weave session, and the 30-second safety refresh. Release builds ignore the control.
+- Emit an explicit startup log identifying which variant is active and a distinct slot-0 event log so every hardware trial can be associated with the correct treatment.
+- For each variant, run at least three **cold** Pixel -> Ubuntu receives (restart receiver before each; same phone, network, visibility, foreground/background state) and at least one repeated/warm direct-TCP receive. Keep the successful transfer path and compare slot-0 -> notify/TCP acceptance, total Android UI time, fallback use, and failures.
+- System BlueZ configuration must remain unchanged throughout. No release-policy change from a single faster observation. Restore the diagnostic flag to its default after experiment.
+- Verify Android -> Ubuntu **text** at least once, since this smoke log contains only images. A/B comparison must not suppress text/clipboard regressions.
+
