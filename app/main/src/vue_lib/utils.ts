@@ -4,7 +4,30 @@ import { autostartKey, DisplayedItem, downloadPathKey, numberToVisibility, realc
 import { SendInfo } from '@martichou/core_lib/bindings/SendInfo';
 import { ChannelMessage } from '@martichou/core_lib/bindings/ChannelMessage';
 import { ChannelAction } from '@martichou/core_lib';
+import { State } from '@martichou/core_lib/bindings/State';
 import { gt } from 'semver';
+
+const terminalHistoryStates = new Set<State>([
+	'Finished',
+	'Cancelled',
+	'Rejected',
+	'Disconnected',
+]);
+
+function isTerminalHistoryState(state: State | null | undefined): boolean {
+	return state !== null && state !== undefined && terminalHistoryStates.has(state);
+}
+
+function hasLiveDisplayContent(vm: TauriVM): boolean {
+	if (vm.outboundPayload !== undefined || vm.endpointsInfo.length > 0) {
+		return true;
+	}
+
+	return vm.requests.some((request) => {
+		const state = request.state ?? 'Initial';
+		return stateToDisplay.includes(state) && !isTerminalHistoryState(state);
+	});
+}
 
 function _displayedItems(vm: TauriVM): Array<DisplayedItem> {
 	const ndisplayed = new Array<DisplayedItem>();
@@ -24,6 +47,15 @@ function _displayedItems(vm: TauriVM): Array<DisplayedItem> {
 	vm.requests.filter((el) => stateToDisplay.includes(el.state ?? 'Initial')).forEach((el) => {
 		const idx = ndisplayed.findIndex((nel) => el.id == nel.id);
 		const existing = idx !== -1 ? ndisplayed[idx] : undefined;
+
+		if (
+			vm.outboundPayload !== undefined
+			&& existing?.endpoint
+			&& isTerminalHistoryState(el.state)
+		) {
+			return;
+		}
+
 		const elem: DisplayedItem = {
 			id: el.id,
 			name: el.meta?.source?.name ?? existing?.name ?? 'Unknown',
@@ -215,6 +247,7 @@ async function getLatestVersion(vm: TauriVM) {
 // Default export
 export const utils = {
 	_displayedItems,
+	hasLiveDisplayContent,
 	setAutoStart,
 	applyAutoStart,
 	setRealClose,

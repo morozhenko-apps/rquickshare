@@ -3,12 +3,18 @@ import { describe, expect, test, vi } from 'vitest';
 import { utils } from '../../src/vue_lib/utils';
 import type { TauriVM } from '../../src/vue_lib/helper/ParamsHelper';
 
-function vm(payload: TauriVM['outboundPayload'], invoke: TauriVM['invoke']): TauriVM {
+function vm(
+	payload: TauriVM['outboundPayload'],
+	invoke: TauriVM['invoke'],
+	overrides: Partial<TauriVM> = {},
+): TauriVM {
 	return {
 		outboundPayload: payload,
 		invoke,
 		discoveryRunning: true,
 		endpointsInfo: [{ id: 'peer' }],
+		requests: [],
+		...overrides,
 	} as TauriVM;
 }
 
@@ -64,3 +70,123 @@ describe('clearSending', () => {
 		expect(invoke).toHaveBeenCalledWith('stop_discovery');
 	});
 });
+
+describe('display lifecycle', () => {
+	test('terminal history alone keeps the outbound composer available', () => {
+		const target = vm(undefined, vi.fn(), {
+			discoveryRunning: false,
+			endpointsInfo: [],
+			requests: [{
+				id: 'peer',
+				direction: 'LibToFront',
+				action: null,
+				meta: null,
+				state: 'Finished',
+				rtype: null,
+				error: null,
+			}],
+		});
+
+		expect(utils.hasLiveDisplayContent(target)).toBe(false);
+		expect(utils._displayedItems(target)).toHaveLength(1);
+		expect(utils._displayedItems(target)[0].state).toBe('Finished');
+	});
+
+	test('active transfer, live endpoint, or outbound payload switches to live mode', () => {
+		const invoke = vi.fn();
+
+		expect(utils.hasLiveDisplayContent(vm(undefined, invoke, {
+			endpointsInfo: [],
+			requests: [{
+				id: 'peer',
+				direction: 'LibToFront',
+				action: null,
+				meta: null,
+				state: 'ReceivingFiles',
+				rtype: null,
+				error: null,
+			}],
+		}))).toBe(true);
+
+		expect(utils.hasLiveDisplayContent(vm(undefined, invoke))).toBe(true);
+
+		expect(utils.hasLiveDisplayContent(vm(
+			{ Files: ['/tmp/photo.jpg'] },
+			invoke,
+			{ endpointsInfo: [], requests: [] },
+		))).toBe(true);
+	});
+
+	test('live endpoint wins over stale terminal history while preparing a new send', () => {
+		const target = vm({ Files: ['/tmp/photo.jpg'] }, vi.fn(), {
+			endpointsInfo: [{
+				id: 'peer',
+				name: 'Mercury',
+				rtype: 'Phone',
+				ip: '192.168.1.2',
+				port: 12345,
+				present: true,
+			}],
+			requests: [{
+				id: 'peer',
+				direction: 'LibToFront',
+				action: null,
+				meta: {
+					source: {
+						name: 'Mercury',
+						device_type: 'Phone',
+					},
+				},
+				state: 'Finished',
+				rtype: null,
+				error: null,
+			}],
+		});
+
+		expect(utils._displayedItems(target)).toEqual([
+			expect.objectContaining({
+				id: 'peer',
+				name: 'Mercury',
+				endpoint: true,
+				state: undefined,
+			}),
+		]);
+	});
+
+	test('active transfer still wins over the live endpoint with the same id', () => {
+		const target = vm({ Files: ['/tmp/photo.jpg'] }, vi.fn(), {
+			endpointsInfo: [{
+				id: 'peer',
+				name: 'Mercury',
+				rtype: 'Phone',
+				ip: '192.168.1.2',
+				port: 12345,
+				present: true,
+			}],
+			requests: [{
+				id: 'peer',
+				direction: 'LibToFront',
+				action: null,
+				meta: {
+					source: {
+						name: 'Mercury',
+						device_type: 'Phone',
+					},
+				},
+				state: 'SendingFiles',
+				rtype: null,
+				error: null,
+			}],
+		});
+
+		expect(utils._displayedItems(target)).toEqual([
+			expect.objectContaining({
+				id: 'peer',
+				name: 'Mercury',
+				endpoint: false,
+				state: 'SendingFiles',
+			}),
+		]);
+	});
+});
+

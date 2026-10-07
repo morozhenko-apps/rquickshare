@@ -354,7 +354,7 @@ export default {
 			return this;
 		},
 		displayedIsEmpty(): boolean {
-			return this.displayedItems.length == 0
+			return !this.hasLiveDisplayContent(this)
 		},
 		displayedItems(): Array<DisplayedItem> {
 			return this._displayedItems(this);
