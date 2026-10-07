@@ -157,7 +157,10 @@ mod tests {
 
     #[test]
     fn receiver_refresh_policy_requires_visible_registered_advertising() {
-        assert!(ReceiverAdvertiser::should_refresh(Visibility::Visible, true));
+        assert!(ReceiverAdvertiser::should_refresh(
+            Visibility::Visible,
+            true
+        ));
         assert!(ReceiverAdvertiser::should_refresh(
             Visibility::Temporarily,
             true
@@ -166,7 +169,10 @@ mod tests {
             Visibility::Invisible,
             true
         ));
-        assert!(!ReceiverAdvertiser::should_refresh(Visibility::Visible, false));
+        assert!(!ReceiverAdvertiser::should_refresh(
+            Visibility::Visible,
+            false
+        ));
     }
 
     #[test]
