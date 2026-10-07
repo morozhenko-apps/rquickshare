@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::os::unix::fs::FileExt;
 use std::path::{Component, Path};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -2056,6 +2056,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
         use location_nearby_connections::v1_frame::FrameType;
 
+        let bwu_started = Instant::now();
         let expected_endpoint_id = self
             .peer_endpoint_id
             .clone()
@@ -2066,11 +2067,16 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             router.cancel(&expected_endpoint_id).await;
             return Err(error);
         }
+        info!(
+            "BWU timing: upgrade offer sent at {} ms for endpoint {expected_endpoint_id}",
+            bwu_started.elapsed().as_millis()
+        );
 
         let mut tcp = match tokio::time::timeout(Duration::from_secs(15), socket_receiver).await {
             Ok(Ok(socket)) => {
                 info!(
-                    "BWU: primary listener routed TCP connection for endpoint {expected_endpoint_id}"
+                    "BWU timing: TCP route established at {} ms for endpoint {expected_endpoint_id}",
+                    bwu_started.elapsed().as_millis()
                 );
                 socket
             }
@@ -2080,7 +2086,10 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             }
             Err(_) => {
                 router.cancel(&expected_endpoint_id).await;
-                warn!("BWU: no routed TCP connection within timeout; continuing on BLE");
+                warn!(
+                    "BWU timing: no routed TCP connection after {} ms; continuing on BLE",
+                    bwu_started.elapsed().as_millis()
+                );
                 return Ok(());
             }
         };
@@ -2107,6 +2116,10 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                 identity.endpoint_id
             );
         }
+        info!(
+            "BWU timing: CLIENT_INTRODUCTION validated at {} ms",
+            bwu_started.elapsed().as_millis()
+        );
 
         let ack = Self::client_introduction_ack_frame().encode_to_vec();
         send_plain_frame_on(&mut tcp, &ack).await?;
@@ -2117,6 +2130,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         ))
         .await?;
 
+        let drain_started = Instant::now();
         for _ in 0..16 {
             let offline = match tokio::time::timeout(
                 Duration::from_secs(5),
@@ -2127,7 +2141,11 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                 Ok(Ok(frame)) => frame,
                 Ok(Err(error)) => return Err(error),
                 Err(_) => {
-                    warn!("BWU: timed out while draining prior BLE channel");
+                    warn!(
+                        "BWU timing: prior BLE drain timed out after {} ms ({} ms total)",
+                        drain_started.elapsed().as_millis(),
+                        bwu_started.elapsed().as_millis()
+                    );
                     break;
                 }
             };
@@ -2156,7 +2174,11 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                     .await?;
                 }
                 Some(EventType::SafeToClosePriorChannel) => {
-                    debug!("BWU: peer marked prior channel safe to close");
+                    debug!(
+                        "BWU timing: peer marked prior channel safe to close after {} ms drain ({} ms total)",
+                        drain_started.elapsed().as_millis(),
+                        bwu_started.elapsed().as_millis()
+                    );
                     break;
                 }
                 Some(other) => {
@@ -2185,7 +2207,10 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         self.socket = crate::hdl::MigratableStream::Tcp(tcp);
-        info!("BWU: migrated inbound session from BLE to Wi-Fi LAN");
+        info!(
+            "BWU timing: migrated inbound session from BLE to Wi-Fi LAN in {} ms total",
+            bwu_started.elapsed().as_millis()
+        );
         Ok(())
     }
 }
