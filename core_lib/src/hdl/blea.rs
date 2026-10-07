@@ -24,7 +24,6 @@ pub struct BleAdvertiser {
 impl BleAdvertiser {
     pub async fn new(
         visibility_receiver: watch::Receiver<Visibility>,
-        refresh_sender: broadcast::Sender<()>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
         let adapter = session.default_adapter().await?;
@@ -244,6 +243,7 @@ pub struct ReceiverAdvertiser {
 impl ReceiverAdvertiser {
     pub async fn new(
         visibility_receiver: watch::Receiver<Visibility>,
+        refresh_sender: broadcast::Sender<()>,
     ) -> Result<Self, anyhow::Error> {
         let session = bluer::Session::new().await?;
         let adapter = session.default_adapter().await?;
