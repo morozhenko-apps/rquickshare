@@ -640,3 +640,14 @@ The measured 22-second slot-0 -> Weave gap is not yet causally attributed to rec
 - System BlueZ configuration must remain unchanged throughout. No release-policy change from a single faster observation. Restore the diagnostic flag to its default after experiment.
 - Verify Android -> Ubuntu **text** at least once, since this smoke log contains only images. A/B comparison must not suppress text/clipboard regressions.
 
+### A/B execution helper
+
+The repository includes `scripts/receiver-ab-smoke.sh` to make cold-trial startup reproducible after installing the **debug** Debian package built from the corresponding `dev` HEAD.
+
+```bash
+bash scripts/receiver-ab-smoke.sh baseline
+bash scripts/receiver-ab-smoke.sh skip-deferred
+```
+
+Run the commands in separate trials, not simultaneously. Exit the previous rQuickShare tray process before starting the next variant. The helper refuses to start if a user-owned `rquickshare` process remains, sets `RQS_LOG=trace`, sets the A/B switch explicitly to `1` or `0`, and writes per-run timestamped logs to `~/Downloads/rquickshare-smoke/ab-logs/`. It prints the relevant BLE/GATT/BWU/TCP events after exit but retains the complete log. If the debug diagnostic startup marker is absent, discard that trial: a release binary or missing GATT initialization may have ignored the test treatment. Never compare baseline and variant sessions with different visibility, foreground/background state, networking, or receiver startup conditions.
+
