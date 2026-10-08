@@ -68,5 +68,5 @@ if ! grep -q "diagnostic slot0 deferred advertising refresh enabled=" "$log_file
 fi
 
 printf '\nA/B signals from %s:\n' "$log_file"
-grep -E 'diagnostic slot0|PassiveBleMonitor|passive FE2C monitor|slot0 read|slot0 requested|deferred advertising refresh|weave notify|weave session|TCP connection|TCP peer|BWU:|state: Some\\(Finished\\)|state: Some\\(Disconnected\\)|BleListener stopped' "$log_file" | tail -n 90 || true
+grep -E 'diagnostic slot0|PassiveBleMonitor|passive FE2C monitor|slot0 read|slot0 requested|deferred advertising refresh|weave notify|weave session|TCP connection|TCP peer|BWU:|state: Some\(Finished\)|state: Some\(Disconnected\)|BleListener stopped' "$log_file" | tail -n 90 || true
 printf '\nKeep the complete log for the comparison. App exit code: %s\n' "$app_status"
