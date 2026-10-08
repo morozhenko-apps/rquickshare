@@ -703,6 +703,9 @@ Do not infer causation from comparing minimized baseline 30s to visible-window p
 
 ### Desktop notification and Android completion synchronization gate
 
+For reducing the user's manual hardware smoke burden without dropping Mode B checks, see [hardware-test-automation.md](hardware-test-automation.md). It contains the provisional 33-scenario automation matrix, Ubuntu runner/ADB architecture, planning estimates and access/security constraints.
+
+
 New user report (2026-10-08): the Linux-side desktop notification vanishes very quickly while the Android sender still displays a waiting state. Do **not** assume this is the same event as backend `Finished` without a synchronized phone video or timestamps.
 
 Code audit:
