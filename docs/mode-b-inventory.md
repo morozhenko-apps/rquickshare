@@ -678,3 +678,26 @@ Follow-up criteria:
 5. Maintain a text-transfer test as a separate scenario. Backend `Finished` validates text delivery on Linux but does not validate phone-side UI latency.
 6. If graceful mDNS goodbyes are logged but ghosts remain, investigate Android mDNS cache/advertisement TTL and server identity before changing protocol identity.
 
+### 2026-10-08 graceful-exit follow-up and discovery confounder
+
+The next target-device run used the refreshed launcher from `dev`; the attached terminal capture and cumulative application log both include two **baseline** foreground-process runs (the application was actually minimized in the tray, so the *active fallback BLE scan ran in background duty-cycle mode*). The startup marker showed `RQS_DIAG_SLOT0_ADV_REFRESH=1` in both. Both cleanly exited through the Tauri tray Quit handler and logged `MDnsServer: service unregistered: OK`.
+
+| Baseline run (UTC) | TCP accepted | Outcome | Exit | Periodic FEF3 refresh | Active fallback scan restart |
+|---|---|---|---|---|---|
+| 19:13:22 | 19:13:59 (37 s) | image Finished 19:14:03 | 19:14:13 clean unregister | 19:13:52 | 19:13:52 |
+| 19:14:19 | 19:14:51 (32 s) | first transfer Cancelled at 19:15:27; retry TCP at 19:15:28, Finished at 19:15:32 | 19:15:36 clean unregister | 19:14:49 | 19:14:49 |
+
+The second first-request state reached `WaitingForUserConsent` at 19:14:51 and remained until Android canceled it at 19:15:27; no `AcceptTransfer` was logged for that first request. The second request was explicitly accepted at 19:15:31 and completed one second later. Do not report this as a protocol crash.
+
+**Confounder:** Every initial TCP connection arrived shortly after **both** the 30-second FEF3 advertisement refresh and the 5s/25s active-FE2C fallback scan restarted. Both timers are aligned at boot in this log. The evidence cannot distinguish receiver advertising exhaustion from BLE scan duty cycling, Android-side discovery delay, or mDNS behavior. Neither run read slot0, so the 2-second slot0 A/B experiment remains inconclusive. These start-to-TCP measurements also include arbitrary user interaction time.
+
+**Confirmed:** the Linux mDNS unregister path completes on a proper tray Quit. Earlier duplicate Android entries cannot be attributed to failure to unregister on these two clean exits; their persistence/absence on the Android screen is still unknown. Previous 19:09:15 process log had no clean exit marker before the next startup at 19:13:22, so stale Android cache remains plausible for earlier duplicates. The intentional Tauri tray Quit uses exit code -1 (reported by Bash as 255); the smoke launcher now labels that code as a *normal* shutdown only when `tray_quit` and mDNS unregister are both logged.
+
+### Debug-only periodic receiver advertising A/B
+
+A second diagnostic knob `RQS_DIAG_RX_PERIODIC_ADV_SECS` now selects the **FEF3 receiver advertiser safety-refresh** interval in debug builds only: 5–120 whole seconds, default 30. Unsupported inputs fall back to 30; release builds ignore this override. The debug log states the selected interval. It does not change the FE2C discovery scan duty cycle, GATT slot0 behavior, mDNS register/resend, visibility handling or post-Weave refresh.
+
+The smoke launcher now supports `baseline` (FEF3 periodic 30s), `periodic-10` (FEF3 periodic 10s), and the original `skip-deferred` (slot0 deferred disabled, FEF3 periodic 30s). **A freshly built and installed debug .deb is required for the new periodic-10 variant.**
+
+Do not infer causation from comparing minimized baseline 30s to visible-window periodic-10 10s. To separate timer effects, keep visibility and window state fixed across variants; explicitly record whether `BleListener: active fallback scan stopped` occurs during each trial. Prefer first conducting a *foreground/continuous-scan* baseline with Show from the tray versus the background/duty-cycle baseline, then conduct a 30s vs 10s periodic comparison at the same window state. Record phone-side discovery/tap timing separately. Preserve Mode B hardware gates and the default release interval pending replicated results.
+
