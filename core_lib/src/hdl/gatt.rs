@@ -64,10 +64,7 @@ fn slot0_deferred_advertising_enabled() -> bool {
     #[cfg(not(debug_assertions))]
     let diagnostic_value: Option<String> = None;
 
-    slot0_deferred_advertising_enabled_for(
-        cfg!(debug_assertions),
-        diagnostic_value.as_deref(),
-    )
+    slot0_deferred_advertising_enabled_for(cfg!(debug_assertions), diagnostic_value.as_deref())
 }
 
 fn receiver_discovery_refresh(
@@ -224,9 +221,10 @@ impl ReceiverGattServer {
                                         "{INNER_NAME}: slot0 read offset={offset}, returned={} bytes",
                                         response.len()
                                     );
-                                    if let Some(refresh) =
-                                        receiver_discovery_refresh(offset, deferred_slot0_advertising)
-                                    {
+                                    if let Some(refresh) = receiver_discovery_refresh(
+                                        offset,
+                                        deferred_slot0_advertising,
+                                    ) {
                                         if refresh.resend_mdns {
                                             let _ = mdns_refresh_sender.send(());
                                         }
@@ -554,8 +552,7 @@ mod tests {
 
     #[test]
     fn slot0_zero_offset_preserves_mdns_and_deferred_advertising_by_default() {
-        let refresh =
-            receiver_discovery_refresh(0, true).expect("slot0 offset zero must refresh");
+        let refresh = receiver_discovery_refresh(0, true).expect("slot0 offset zero must refresh");
         assert!(refresh.resend_mdns);
         assert_eq!(
             refresh.advertising,
@@ -565,8 +562,7 @@ mod tests {
 
     #[test]
     fn slot0_debug_ab_skips_only_deferred_advertising() {
-        let refresh =
-            receiver_discovery_refresh(0, false).expect("slot0 offset zero must refresh");
+        let refresh = receiver_discovery_refresh(0, false).expect("slot0 offset zero must refresh");
         assert!(refresh.resend_mdns);
         assert_eq!(refresh.advertising, None);
     }
