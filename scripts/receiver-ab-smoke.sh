@@ -7,12 +7,15 @@ usage() {
   cat <<'USAGE'
 Usage: bash scripts/receiver-ab-smoke.sh baseline|skip-deferred|periodic-10
 
-Runs one foreground rQuickShare session and captures a timestamped log under
-~/Downloads/rquickshare-smoke/ab-logs/. Close the app from its tray before starting each trial. After receiving the
-file, select Quit from the rQuickShare tray menu, not Ctrl+C: the graceful
-shutdown unregisters its mDNS service so Android does not cache stale peers.
-Run three independent cold-start trials of each variant with the same device,
-network, visibility and app foreground/background state.
+Runs one rQuickShare session and captures a timestamped log under
+~/Downloads/rquickshare-smoke/ab-logs/.
+For foreground trials, choose Show from the tray and leave the window open:
+active BLE fallback should keep scanning continuously.
+For background trials, leave the window minimized; fallback uses a 5s/25s
+scan/idle cycle. Record which mode you tested.
+After receiving the file, select Quit from the tray, NOT Ctrl+C:
+graceful shutdown unregisters the mDNS service.
+Repeat trials with identical device, network and visibility settings.
 USAGE
 }
 
@@ -61,8 +64,9 @@ stamp="$(date -u +%Y%m%dT%H%M%S.%NZ)"
 log_file="${log_dir}/${variant}-${stamp}.log"
 printf 'Variant: %s (slot0 deferred=%s, periodic advertising=%ss)\n' "$variant" "$refresh" "$periodic"
 printf 'Log: %s\n' "$log_file"
-printf 'Set the same visibility/foreground state, share one image from Pixel,\n'
-printf 'then select Quit from the rQuickShare tray menu to stop gracefully.\n'
+printf 'Keep the app open with Show in tray for foreground (continuous-scan) trials,\n'
+printf 'or leave it minimized for background (5s/25s fallback-scan) trials.\n'
+printf 'Share one image from Pixel; then select Quit from tray to stop gracefully.\n'
 printf 'Do NOT use Ctrl+C here: it can prevent mDNS service unregistration.\n'
 
 # This switch is intentionally ignored by release builds. The diagnostic
