@@ -330,7 +330,9 @@ impl ReceiverAdvertiser {
         let mut deferred_refresh_deadline: Option<tokio::time::Instant> = None;
         let periodic_refresh_secs = receiver_periodic_refresh_secs();
         #[cfg(debug_assertions)]
-        info!("{RX_INNER_NAME}: diagnostic periodic advertising refresh interval={periodic_refresh_secs}s");
+        info!(
+            "{RX_INNER_NAME}: diagnostic periodic advertising refresh interval={periodic_refresh_secs}s"
+        );
 
         info!(
             "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({})",
