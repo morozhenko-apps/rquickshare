@@ -8,8 +8,9 @@ usage() {
 Usage: bash scripts/receiver-ab-smoke.sh baseline|skip-deferred
 
 Runs one foreground rQuickShare session and captures a timestamped log under
-~/Downloads/rquickshare-smoke/ab-logs/. Close the app from its tray before
-starting each trial. Press Ctrl+C to finish the capture after the transfer.
+~/Downloads/rquickshare-smoke/ab-logs/. Close the app from its tray before starting each trial. After receiving the
+file, select Quit from the rQuickShare tray menu, not Ctrl+C: the graceful
+shutdown unregisters its mDNS service so Android does not cache stale peers.
 Run three independent cold-start trials of each variant with the same device,
 network, visibility and app foreground/background state.
 USAGE
@@ -54,7 +55,8 @@ log_file="${log_dir}/${variant}-${stamp}.log"
 printf 'Variant: %s (RQS_DIAG_SLOT0_ADV_REFRESH=%s)\n' "$variant" "$refresh"
 printf 'Log: %s\n' "$log_file"
 printf 'Set the same visibility/foreground state, share one image from Pixel,\n'
-printf 'and finish this capture with Ctrl+C once the attempt completes.\n'
+printf 'then select Quit from the rQuickShare tray menu to stop gracefully.\n'
+printf 'Do NOT use Ctrl+C here: it can prevent mDNS service unregistration.\n'
 
 # This switch is intentionally ignored by release builds. The diagnostic
 # startup line in the log proves that the installed binary is a debug build.
@@ -65,6 +67,13 @@ set -e
 
 if ! grep -q "diagnostic slot0 deferred advertising refresh enabled=" "$log_file"; then
   printf '\nWarning: debug diagnostic marker missing; do not use this run for A/B results.\n' >&2
+fi
+
+# A sudden SIGINT/SIGTERM may leave a stale randomized mDNS endpoint on Android.
+# Do not infer a daemon bug until a trial completed with a graceful tray Quit.
+if ! grep -q "MDnsServer: service unregistered" "$log_file"; then
+  printf '\nWarning: mDNS graceful unregistration was not confirmed.\n' >&2
+  printf 'Quit via tray instead of Ctrl+C. This run cannot establish whether stale Android devices were cleaned up.\n' >&2
 fi
 
 printf '\nA/B signals from %s:\n' "$log_file"
