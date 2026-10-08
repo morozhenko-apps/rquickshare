@@ -701,3 +701,32 @@ The smoke launcher now supports `baseline` (FEF3 periodic 30s), `periodic-10` (F
 
 Do not infer causation from comparing minimized baseline 30s to visible-window periodic-10 10s. To separate timer effects, keep visibility and window state fixed across variants; explicitly record whether `BleListener: active fallback scan stopped` occurs during each trial. Prefer first conducting a *foreground/continuous-scan* baseline with Show from the tray versus the background/duty-cycle baseline, then conduct a 30s vs 10s periodic comparison at the same window state. Record phone-side discovery/tap timing separately. Preserve Mode B hardware gates and the default release interval pending replicated results.
 
+### Desktop notification and Android completion synchronization gate
+
+New user report (2026-10-08): the Linux-side desktop notification vanishes very quickly while the Android sender still displays a waiting state. Do **not** assume this is the same event as backend `Finished` without a synchronized phone video or timestamps.
+
+Code audit:
+- `app/main/src-tauri/src/notification.rs` constructs request and completion notifications via `notify_rust::Notification` on Linux but specifies no explicit expiration policy. The desktop notification server controls their lifespan. The request's `Accept`/`Reject` action waiter may outlive the visible popup; the in-app `WaitingForUserConsent` card remains an alternate acceptance route.
+- The separate Vue `useToastStore` has a hard-coded 3000 ms auto-dismiss for in-window toasts, but those toasts are not the native inbound transfer notification. Avoid conflating them.
+- `core_lib/src/hdl/inbound.rs` sets `State::Finished` when file payload chunks are fully assembled (also for finished text byte payloads), emits the state to the UI, **then** sends a final encrypted Nearby `Disconnection` frame. This ordering can allow Linux UI completion to precede Android sender completion. It does not prove Android waits because of this ordering.
+- The 2026-10-08 hardware log contains a `WaitingForUserConsent` first session which Android cancelled after 36 s and immediately retried. Another earlier session completed at the Linux backend. Phone-side action/ack state was not captured, so root cause must not be asserted.
+
+Release-blocking acceptance checks:
+1. With Linux window hidden, Android sends a file. Keep the phone waiting 20+ seconds: actionable Accept/Reject must remain reachable and operable; provide an in-app fallback and record KDE notification lifetime.
+2. Verify Accept, Reject and phone-side cancellation as distinct outcomes; no actionable stale prompt may remain after the session ends. Notification lifecycle cleanup is required if persistence is introduced; simply setting `Timeout::Never` without dismissal on peer cancellation is insufficient.
+3. For one image and one text payload, capture both phone sender status (screen recording/timestamps) and Linux event timestamps: `WaitingForUserConsent`, user action, `Finished`, final disconnection send, socket close, Android UI completion. A Linux `Finished` event alone cannot certify remote UI completion.
+4. Do not reorder encrypted connection teardown or declare sender success until a protocol-specific regression test establishes the correct wire lifecycle.
+
+Remaining hardware matrix for progression (counts are individual scenario executions, not disjoint tests; scenarios may share successful trials):
+- Request notification and cancellation: 3 outcomes.
+- Sender/receiver completion comparison: 2 payloads.
+- Cold discovery background/foreground: 3 each (6).
+- FEF3 periodic 30s/10s matched window-state A/B: 3 each (6; baseline can be reused from preceding matched trials).
+- FEF3 slot0 deferred on/off: 3 slot0-reaching attempts each (6, conditionally needed if GATT path is implicated).
+- mDNS duplicate-device behavior after two clean restarts: 2 cycles.
+- Current build feature smoke: incoming text + URL and outgoing image + text + nested folder: 5 paths.
+- Warm consecutive inbound receives without restart: 3 sessions.
+- A fresh debug Debian package gate: 1 build. Final strict Mode B: complete-suite 10 consecutive green executions plus mutation/coverage and Stage-12 YES/NO matrix review.
+
+These counts describe a controlled smoke plan, not a claim that each is a uniquely missing unit test. The 10x final Mode B gate is distinct from the standard one-pass dev preflight, which was green at `1e2f690`. Moving to the next product feature may proceed on `dev` after the targeted discovery/notification blockers are characterized; promoting the resulting feature-complete build to `master` requires final signoff.
+
