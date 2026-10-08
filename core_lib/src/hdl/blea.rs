@@ -184,6 +184,25 @@ mod tests {
     }
 
     #[test]
+    fn receiver_periodic_refresh_default_and_release_are_fixed() {
+        assert_eq!(receiver_periodic_refresh_secs_for(true, None), 30);
+        assert_eq!(receiver_periodic_refresh_secs_for(false, None), 30);
+        assert_eq!(receiver_periodic_refresh_secs_for(false, Some("10")), 30);
+        assert_eq!(receiver_periodic_refresh_secs_for(false, Some("120")), 30);
+    }
+
+    #[test]
+    fn receiver_periodic_refresh_debug_accepts_only_bounded_seconds() {
+        assert_eq!(receiver_periodic_refresh_secs_for(true, Some("5")), 5);
+        assert_eq!(receiver_periodic_refresh_secs_for(true, Some("10")), 10);
+        assert_eq!(receiver_periodic_refresh_secs_for(true, Some("30")), 30);
+        assert_eq!(receiver_periodic_refresh_secs_for(true, Some("120")), 120);
+        for invalid in ["", "0", "1", "4", "121", "-1", "10s", " 10", "18446744073709551616"] {
+            assert_eq!(receiver_periodic_refresh_secs_for(true, Some(invalid)), 30);
+        }
+    }
+
+    #[test]
     fn receiver_advertisement_truncates_multibyte_names_on_utf8_boundary() {
         let data = receiver_service_data([1, 2, 3, 4], 3, &"é".repeat(200));
 
@@ -204,6 +223,28 @@ mod tests {
 const RX_INNER_NAME: &str = "ReceiverAdvertiser";
 const QS_SERVICE_UUID: u16 = 0xFEF3;
 const QS_SVC_HASH: [u8; 3] = [0xfc, 0x9f, 0x5e];
+const RX_PERIODIC_REFRESH_DEFAULT_SECS: u64 = 30;
+
+// Only debug builds may override the safety refresh frequency. Keep the
+// release schedule unchanged while diagnosing BlueZ/Android cold discovery.
+fn receiver_periodic_refresh_secs_for(debug_build: bool, raw: Option<&str>) -> u64 {
+    if !debug_build {
+        return RX_PERIODIC_REFRESH_DEFAULT_SECS;
+    }
+
+    raw.and_then(|value| value.parse::<u64>().ok())
+        .filter(|seconds| (5..=120).contains(seconds))
+        .unwrap_or(RX_PERIODIC_REFRESH_DEFAULT_SECS)
+}
+
+fn receiver_periodic_refresh_secs() -> u64 {
+    #[cfg(debug_assertions)]
+    let raw = std::env::var("RQS_DIAG_RX_PERIODIC_ADV_SECS").ok();
+    #[cfg(not(debug_assertions))]
+    let raw: Option<String> = None;
+
+    receiver_periodic_refresh_secs_for(cfg!(debug_assertions), raw.as_deref())
+}
 
 /// Build the Nearby Connections receiver advertisement carried as 0xFEF3
 /// service data. The endpoint id must match the id used by mDNS.
@@ -285,6 +326,9 @@ impl ReceiverAdvertiser {
         let mut handle: Option<AdvertisementHandle> = None;
         let mut refresh_receiver = self.refresh_sender.subscribe();
         let mut deferred_refresh_deadline: Option<tokio::time::Instant> = None;
+        let periodic_refresh_secs = receiver_periodic_refresh_secs();
+        #[cfg(debug_assertions)]
+        info!("{RX_INNER_NAME}: diagnostic periodic advertising refresh interval={periodic_refresh_secs}s");
 
         info!(
             "{RX_INNER_NAME}: prepared Quick Share receiver advertisement on {} ({})",
@@ -374,7 +418,7 @@ impl ReceiverAdvertiser {
                         handle.take();
                     }
                 }
-                _ = tokio::time::sleep(std::time::Duration::from_secs(30)), if handle.is_some() => {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(periodic_refresh_secs)), if handle.is_some() => {
                     // Safety fallback. BlueZ consumes connectable advertising sets on some
                     // adapters; normal recovery is event-driven from GATT activity.
                     debug!("{RX_INNER_NAME}: periodic advertising refresh");
