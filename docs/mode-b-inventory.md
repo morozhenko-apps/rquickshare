@@ -649,5 +649,32 @@ bash scripts/receiver-ab-smoke.sh baseline
 bash scripts/receiver-ab-smoke.sh skip-deferred
 ```
 
-Run the commands in separate trials, not simultaneously. Exit the previous rQuickShare tray process before starting the next variant. The helper refuses to start if a user-owned `rquickshare` process remains, sets `RQS_LOG=trace`, sets the A/B switch explicitly to `1` or `0`, and writes per-run timestamped logs to `~/Downloads/rquickshare-smoke/ab-logs/`. It prints the relevant BLE/GATT/BWU/TCP events after exit but retains the complete log. If the debug diagnostic startup marker is absent, discard that trial: a release binary or missing GATT initialization may have ignored the test treatment. Never compare baseline and variant sessions with different visibility, foreground/background state, networking, or receiver startup conditions.
+Run the commands in separate trials, not simultaneously. **Always use the tray Quit action after each transfer, never Ctrl+C**. This lets the server cancel its tasks and unregister the mDNS service before exit. Exit the previous rQuickShare tray process before starting the next variant. The helper refuses to start if a user-owned `rquickshare` process remains, sets `RQS_LOG=trace`, sets the A/B switch explicitly to `1` or `0`, and writes per-run timestamped logs to `~/Downloads/rquickshare-smoke/ab-logs/`. It prints the relevant BLE/GATT/BWU/TCP events after exit but retains the complete log. If the debug diagnostic startup marker is absent, discard that trial: a release binary or missing GATT initialization may have ignored the test treatment. Never compare baseline and variant sessions with different visibility, foreground/background state, networking, or receiver startup conditions.
+
+
+### 2026-10-08 A/B smoke findings: seven Pixel attempts
+
+Received archive: three baseline logs and four skip-deferred logs (the fourth is plain text). All seven inbound sessions reached backend `Finished`. Six image payloads and one text payload were recorded; the text was processed and completed, though Android-side timing is not instrumented.
+
+| Variant | Run UTC | Start -> TCP accept | TCP accept -> Finished | GATT slot0 read | Outcome |
+|---|---|---:|---:|---|---|
+| Baseline | 18:36:27 | 23 s | 4 s | none logged | image Finished |
+| Baseline | 18:37:04 | 8 s | 4 s | none logged | image Finished |
+| Baseline | 18:37:43 | 64 s | 6 s | 18:38:01, **46 s** before TCP | image Finished following user-reported Android error/retry |
+| Skip deferred | 18:39:15 | 30 s | 7 s | none logged | image Finished |
+| Skip deferred | 18:40:02 | 10 s | 5 s | none logged | image Finished |
+| Skip deferred | 18:40:23 | 12 s | 6 s | none logged | image Finished |
+| Skip deferred | 18:40:56 | 42 s | 4 s | none logged | text Finished; user reported slow discovery |
+
+The start-to-TCP interval is **not** a tap-to-device-discovery metric; trials did not record Android tap timestamps. The baseline outlier included a GATT slot0 read at 18:38:01, deferred FEF3 re-registration at 18:38:03, periodic re-registration at 18:38:33, then inbound TCP only at 18:38:47. This single observation cannot prove that re-registration caused the delay. No skip-deferred trial read slot0, so the A/B treatment was **not exercised on the same protocol path** and causal conclusions are invalid. The BlueZ AdvertisementMonitor `RegisterMonitor` API remains unsupported (`UnknownMethod`) in all trials, so fallback active scans were used.
+
+Android displayed an increasing number of identically named `Alcotester` entries over restarts (up to four). At application startup, the endpoint ID is randomly generated (`core_lib/src/lib.rs`) and embedded into a fresh mDNS service instance name (`gen_mdns_name`). All seven logs end without the expected `tray_quit`, `MDnsServer: service unregistered`, or `Application stopped` messages. The old A/B script incorrectly instructed Ctrl+C, which can terminate the process before its `MDnsServer::run` unregister/goodbye completes. This is a **plausible primary explanation**, not a confirmed Android cache bug. Do not stabilize the endpoint ID as a quick fix: that would introduce a linkability/privacy tradeoff. The smoke helper now requires tray Quit and warns when graceful unregister is not logged.
+
+Follow-up criteria:
+1. Reinstall the new helper only by pulling `dev` (no new package needed for a shell-script-only change). On Pixel, dismiss stale device lists or restart Quick Share discovery between separate cold-start trials.
+2. Run at least two trials in which the last log includes `tray_quit` and `MDnsServer: service unregistered`. Verify whether ghost `Alcotester` entries stop accumulating without any Android-side reset; record the display before and after Quit.
+3. Record exact phone-side tap/discovery/connect timestamps or a screen recording for long-running attempts, separately from the host process-start timestamp.
+4. To evaluate the FEF3 hypothesis, compare at least three **slot0-reaching** cold GATT attempts per variant. If only direct TCP attempts occur, mark the A/B experiment inconclusive instead of picking a winner.
+5. Maintain a text-transfer test as a separate scenario. Backend `Finished` validates text delivery on Linux but does not validate phone-side UI latency.
+6. If graceful mDNS goodbyes are logged but ghosts remain, investigate Android mDNS cache/advertisement TTL and server identity before changing protocol identity.
 
