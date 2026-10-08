@@ -159,6 +159,8 @@ Architecture decision (2026-10-06):
 
 ## Test policy
 
+A prospective local Ubuntu + physical Pixel/ADB hardware automation harness is specified in [hardware-test-automation.md](hardware-test-automation.md). The proposed harness reduces manual interventions but does not waive any Mode B, Bluetooth interoperability or physical-device smoke gate.
+
 - Every fixed protocol bug gets a regression test.
 - Normal `dev` commits run the fast preflight once.
 - The final Mode B gate runs the complete Rust and frontend automated suite 10 consecutive times.
