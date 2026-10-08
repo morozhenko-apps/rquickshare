@@ -198,7 +198,15 @@ mod tests {
         assert_eq!(receiver_periodic_refresh_secs_for(true, Some("30")), 30);
         assert_eq!(receiver_periodic_refresh_secs_for(true, Some("120")), 120);
         for invalid in [
-            "", "0", "1", "4", "121", "-1", "10s", " 10", "18446744073709551616",
+            "",
+            "0",
+            "1",
+            "4",
+            "121",
+            "-1",
+            "10s",
+            " 10",
+            "18446744073709551616",
         ] {
             assert_eq!(receiver_periodic_refresh_secs_for(true, Some(invalid)), 30);
         }
