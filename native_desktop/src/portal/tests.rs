@@ -258,6 +258,129 @@ async fn given_directory_contents_action_when_fd_is_regular_then_it_is_rejected_
     );
 }
 #[tokio::test]
+async fn given_path_only_directory_descriptor_when_contents_requested_then_rejected_without_portal_connection(
+) {
+    // Arrange: O_PATH is a directory handle but cannot authorize a portal
+    // operation that expects a genuinely read-only directory descriptor.
+    let directory = tempfile::tempdir().unwrap();
+    let path_only = Arc::new(File::from(
+        rustix::fs::open(
+            directory.path(),
+            rustix::fs::OFlags::PATH | rustix::fs::OFlags::CLOEXEC,
+            rustix::fs::Mode::empty(),
+        )
+        .unwrap(),
+    ));
+    assert!(path_only.metadata().unwrap().is_dir());
+    assert!(rustix::fs::fcntl_getfl(&*path_only)
+        .unwrap()
+        .contains(rustix::fs::OFlags::PATH));
+
+    // Act: invalid FD must fail before the production function contacts
+    // the session bus, regardless of whether a portal service exists.
+    assert_eq!(
+        show_directory_contents(path_only, CancellationToken::new()).await,
+        Err(Error::Protocol)
+    );
+
+    // Assert: a normal read-only directory has the precise contrasting
+    // precondition. Its external portal admission is tested separately.
+    let readonly = File::open(directory.path()).unwrap();
+    let flags = rustix::fs::fcntl_getfl(&readonly).unwrap();
+    assert!(readonly.metadata().unwrap().is_dir());
+    assert!(!flags.contains(rustix::fs::OFlags::PATH));
+    assert_eq!(
+        flags & rustix::fs::OFlags::ACCMODE,
+        rustix::fs::OFlags::RDONLY
+    );
+}
+
+#[tokio::test]
+async fn given_directory_contents_portal_response_variants_when_received_then_only_valid_openfile_is_acknowledged(
+) {
+    // Arrange: exercise the real OpenFile branch, contrasting the already
+    // tested OpenDirectory branch, against the private contract-level broker.
+    for (version, code, expected) in [
+        (3, 0, Ok(())),
+        (3, 1, Err(Error::Cancelled)),
+        (3, 2, Err(Error::Rejected)),
+        (3, 3, Err(Error::Protocol)),
+        (3, 92, Err(Error::Protocol)),
+        (3, 93, Err(Error::Protocol)),
+        (2, 0, Err(Error::Unsupported)),
+    ] {
+        let broker = Broker::new();
+        let (server, mut admitted, mut closed) = server(&broker, version, code).await;
+        let directory = tempfile::tempdir().unwrap();
+        let file = Arc::new(File::open(directory.path()).unwrap());
+
+        // Act: the mock is the external D-Bus portal ONLY; the real
+        // application request/path/FD validation and result mapping run.
+        let result = show_on_mode(
+            broker.connection().await,
+            file,
+            CancellationToken::new(),
+            true,
+        )
+        .await;
+
+        // Assert: only portal code zero at supported v3 succeeds.
+        assert_eq!(result, expected, "version={version} code={code}");
+        if version < 3 {
+            assert!(admitted.try_recv().is_err());
+        } else {
+            assert!(admitted.try_recv().is_ok());
+        }
+        if matches!(code, 3 | 92 | 93) && version >= 3 {
+            closed.recv().await.expect("missing owned pending request Close");
+            assert!(closed.try_recv().is_err(), "duplicate portal Close");
+        } else {
+            assert!(closed.try_recv().is_err(), "unexpected portal Close");
+        }
+        server.close().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn given_inflight_directory_contents_portal_when_cancelled_then_request_closes_and_no_success_leaks(
+) {
+    // Arrange: the external portal deliberately never emits a Response.
+    // A real private D-Bus Request is admitted before cancellation.
+    let broker = Broker::new();
+    let (server, mut admitted, mut closed) = server(&broker, 3, 99).await;
+    let directory = tempfile::tempdir().unwrap();
+    let file = Arc::new(File::open(directory.path()).unwrap());
+    let weak_file = Arc::downgrade(&file);
+    let cancel = CancellationToken::new();
+    let mut operation = Box::pin(show_on_mode(
+        broker.connection().await,
+        file.clone(),
+        cancel.clone(),
+        true,
+    ));
+
+    // Act: an admission event (not elapsed wall-clock time) establishes
+    // an in-flight OpenFile before stopping its owning GUI operation.
+    tokio::select! {
+        admitted_path = admitted.recv() => {
+            assert!(admitted_path.is_some(), "portal never admitted OpenFile");
+        }
+        result = &mut operation => panic!("portal returned before cancellation: {result:?}"),
+    }
+    cancel.cancel();
+
+    // Assert: cancellation is terminal, and the exact owned portal
+    // request is closed once without exposing a fake success.
+    assert_eq!(operation.await, Err(Error::Cancelled));
+    closed.recv().await.expect("cancelled request did not Close");
+    assert!(closed.try_recv().is_err(), "duplicate cancelled Close");
+    assert!(admitted.try_recv().is_err(), "duplicate OpenFile admission");
+    drop(file);
+    assert!(weak_file.upgrade().is_none(), "file descriptor owner leaked");
+    server.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn given_checked_directory_when_contents_are_requested_then_portal_receives_directory_only_and_acknowledges_response(
 ) {
     let broker = Broker::new();
