@@ -1,5 +1,47 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P0/P1 seven native domain guard tests + two Core gate races
+
+Seven new independently named Native GTK Rust unit tests
+added under existing production file test modules:
+`native_desktop/src/cli.rs` (2, exact Unix local URI
+percent bytes/whole-argv rejection),
+`native_desktop/src/card_policy.rs` (2, consent-over-
+terminal priority, dismissal/new revision/epoch,
+busy automatic stale peer hiding),
+`native_desktop/src/panel/results.rs` (2, only fresh
+same-epoch inbound Finish, FIFO and no stale replay),
+`native_desktop/src/panel/idle.rs` (1, 18 desktop
+safety observation combinations and daemon draining).
+Two independently named Core Rust tests under
+`core_lib/src/service/client/desktop/tests.rs`
+check real `PreparationGate`: exactly one of 16
+synchronized threads acquires an outstanding
+permit, and an already-closed gate never
+reauthorizes after the permit drops.
+
+The two scoped docs,
+[CLI/card/results/idle branch and N1–N12 inventory](mode-b-p0-batch-native-guards-2026-10-18.md)
+and [gate race branch and N1–N12 plan](mode-b-p0-preparation-gate-races-2026-10-18.md),
+preceded test implementation. Only
+`#[cfg(test)]` sections changed, no
+runtime, public API, installed program
+or `master` changes. Initial red native
+formatter and consumed `Surface`
+fixture failures were fixed as test-only
+changes without changing expected behavior.
+Latest candidate code `4a29bc02` was
+sent to [Preflight 39132422424](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422424)
+and [Native GTK 39132422435](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422435).
+**Pending actual logs:** do not mark
+a method PASS from the workflow trigger
+or infer a coverage-percentage increase
+from nine method names. Full strict 10x
+and complete Stage 12 still NO, as are
+physical Google/BlueZ/Wayland tests
+and Issues #8 and #9.
+
+
 ## 2026-10-18 P0 real GTK clipboard ownership transition and queued cancellation
 
 Two additional fixture functions in
