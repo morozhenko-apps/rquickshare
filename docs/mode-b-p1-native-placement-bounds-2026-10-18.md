@@ -152,3 +152,23 @@ and execute only after actual CI
 evidence on source `5a3056bf`
 (or a later format-only SHA).
 No production changes.
+
+## First CI red-state triage
+
+Initial exact code `5a3056bf`,
+[Native GTK 39134805749](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134805749)
+failed at **native rustfmt before test execution**.
+The actual job log lists six layout-only differences:
+three in the movement test and three in the
+placement test. Test-only formatting commits
+`721ebb89` and `00a0a76b` apply the
+expected layouts without changing assertions,
+input grids or runtime code. The intermediate
+Preflight may have been cancelled by branch
+concurrency and cannot count as PASS.
+
+A complete Native GTK + Preflight outcome at
+`00a0a76b` must be verified by actual job
+logs before any new four methods are marked
+passing or 68 native methods asserted.
+Global 10× and hardware are unaffected.
