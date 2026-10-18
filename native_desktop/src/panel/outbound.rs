@@ -530,10 +530,7 @@ mod tests {
             ),
             ("text/plain", b"file:///tmp/a\n".as_slice(), None),
         ] {
-            let provider = gtk::gdk::ContentProvider::for_bytes(
-                mime,
-                &glib::Bytes::from(input),
-            );
+            let provider = gtk::gdk::ContentProvider::for_bytes(mime, &glib::Bytes::from(input));
             clipboard.set_content(Some(&provider)).unwrap();
 
             // Act: this is a real GDK async clipboard stream on Xvfb.
