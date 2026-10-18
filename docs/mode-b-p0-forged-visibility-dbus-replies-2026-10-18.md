@@ -36,3 +36,16 @@ Implement the specified service in test-only code through `#[zbus::interface]` a
 
 ## 11–12. Execution and completion gate
 Exact-source Core Rust, rustfmt, Clippy, Native GTK, Tauri and frontend jobs required before scoped PASS. Full MODE B `mode-b.yml` strict 10x, current-source instrumented coverage, additional hardware BLE/Android/mDNS and global Stage 12 remain OPEN. No `master` merge, release or production behavior change. Rollback: remove these test-only additions.
+
+
+## Implementation and exact-code execution checkpoint
+
+- Plan recorded first at `ede67ecf`.
+- Created `core_lib/src/service/client/tests/visibility_forged.rs` at `56ed0dcb`, registered the nested test module at `324ee6b2`, and applied `rustfmt` at `4b814f6a`. All changes are under `#[cfg(test)]` or Markdown; production behavior is unchanged.
+- Test-only service implements Manager2 snapshot bootstrap, Operations1 initial ledger and Visibility2 `Read`/`Set` via `#[zbus::interface]` on a real private D-Bus daemon, and owns the exact service name through a real broker request. Both tests use a standard authenticated `NativeClient::connect`.
+- Forged `Read`: eight independently invalid states (epoch, unavailable/running, unavailable/revision, stopped/visible, invalid mode, overflow timer, visible/countdown and stopped/countdown), all rejected as `ClientError::Protocol` and followed by an accepted ordinary reply without an outgoing `Set`.
+- Forged `Set`: structurally valid `SettingsView` with foreign `last_request` twice returns `ClientError::Protocol`, retains exact pending intent, and only explicit third retry with matching request returns success and clears pending.
+- Exact test-source [Preflight 39172628608](https://github.com/morozhenko-apps/rquickshare/actions/runs/39172628608) **Core Rust SUCCESS: 765 passed / 0 failed / 0 ignored; 8 filtered probes**, with both named forged D-Bus tests explicitly `ok`; two auxiliary integration suites have 4 passes each. Core Clippy, frontend and rustfmt also **SUCCESS**.
+- Exact test-source [Native GTK 39172628563](https://github.com/morozhenko-apps/rquickshare/actions/runs/39172628563) **SUCCESS: 80 passed / 0 failed**.
+- Tauri desktop unit job was still running at this checkpoint; do not mark complete Preflight green until job conclusion is verified. Stage 10 mutation hypotheses were reviewed against asserted failures but mutant execution/score was not measured.
+- Global Stage 11 strict 10x **complete-suite** CI, exact-current-source line/branch coverage audit and Stage 12 hardware acceptance remain OPEN. This is a scoped positive gate only.
