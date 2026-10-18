@@ -486,11 +486,138 @@ pub(super) fn verify(panel: &Rc<Panel>) {
     assert!(!strip.reveals_child());
     assert!(!panel.sending.is_visible());
     panel.model.borrow_mut().safety_active = saved_safety;
+    tests::verify_real_gdk_clipboard_stream(panel);
+    tests::verify_pending_preparation_cancel_and_stale_reply(panel);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    pub(super) fn verify_real_gdk_clipboard_stream(panel: &Rc<Panel>) {
+        // Arrange: the isolated GTK widget suite already owns this display.
+        // Only the external GDK MIME provider is synthesized; production
+        // clipboard_paths performs the real asynchronous read and close.
+        let clipboard = gtk::prelude::WidgetExt::display(&panel.window).clipboard();
+        for (mime, input, expected) in [
+            (
+                "text/uri-list",
+                b"file:///tmp/first%20file\r\nfile:///tmp/Caf%C3%A9\r\n".as_slice(),
+                Some(vec![
+                    PathBuf::from("/tmp/first file"),
+                    PathBuf::from("/tmp/Café"),
+                ]),
+            ),
+            (
+                "x-special/gnome-copied-files",
+                b"copy\nfile:///tmp/a\nfile:///tmp/b\n".as_slice(),
+                Some(vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")]),
+            ),
+            (
+                "x-special/gnome-copied-files",
+                b"cut\nfile:///tmp/Caf%C3%A9\n".as_slice(),
+                Some(vec![PathBuf::from("/tmp/Café")]),
+            ),
+            (
+                "text/uri-list",
+                b"file:///tmp/a\nfile://remote.invalid/tmp/secret\n".as_slice(),
+                None,
+            ),
+            (
+                "text/uri-list",
+                b"file:///tmp/a\nfile:///tmp/%GG\n".as_slice(),
+                None,
+            ),
+            ("text/plain", b"file:///tmp/a\n".as_slice(), None),
+        ] {
+            let provider = gtk::gdk::ContentProvider::for_bytes(
+                mime,
+                &glib::Bytes::from(input),
+            );
+            clipboard.set_content(Some(&provider)).unwrap();
+
+            // Act: this is a real GDK async clipboard stream on Xvfb.
+            let result = glib::MainContext::default().block_on(clipboard_paths(&clipboard));
+
+            // Assert: no partial successful import after a bad second URI,
+            // and unsupported MIME must not fall back to text as files.
+            match expected {
+                Some(paths) => assert_eq!(result.unwrap(), paths, "mime={mime}"),
+                None => assert!(result.is_err(), "unexpected clipboard admit for {mime}"),
+            }
+        }
+
+        let too_large = format!(
+            "file:///tmp/{}",
+            "x".repeat(URI_BYTES + 1 - "file:///tmp/".len())
+        );
+        let provider = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from(too_large.as_bytes()),
+        );
+        clipboard.set_content(Some(&provider)).unwrap();
+        assert!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .is_err(),
+            "oversized live clipboard stream was accepted"
+        );
+        clipboard.set_text("clipboard restored after outbound integration");
+    }
+
+    pub(super) fn verify_pending_preparation_cancel_and_stale_reply(panel: &Rc<Panel>) {
+        // Arrange: a real GLib completion task waits on a real one-shot
+        // response. No Selection token is forged and no send is possible.
+        let previous_notice = panel.model.borrow().notice;
+        let old_generation = panel.input_generation.borrow().clone();
+        let cancelled = CancellationToken::new();
+        panel.input_cancel.replace(Some(cancelled.clone()));
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Option<Selection>>();
+        panel.wait_selection(receiver, 123, None, old_generation.clone());
+        panel.model.borrow_mut().strip_target = Some("device".into());
+        assert!(panel.model.borrow().input_active);
+        assert!(panel.input_task.borrow().is_some());
+
+        // Act: simulate the user closing the preparation during an
+        // unresolved selection. The actual Panel method owns cancellation.
+        panel.close_input();
+
+        // Assert: no old callback can reauthorize an outbound send.
+        assert!(cancelled.is_cancelled());
+        assert!(!Rc::ptr_eq(
+            &old_generation,
+            &panel.input_generation.borrow()
+        ));
+        assert!(panel.input_cancel.borrow().is_none());
+        assert!(panel.input_task.borrow().is_none());
+        assert!(!panel.model.borrow().input_active);
+        assert!(panel.model.borrow().strip_target.is_none());
+        drop(sender);
+        panel.finish_prepared(123, None, old_generation, None);
+        assert_eq!(panel.model.borrow().notice, previous_notice);
+
+        // A current but unsuccessful completion follows the actual UI
+        // failure path: it never invents a valid selection or sends files.
+        let generation = panel.input_generation.borrow().clone();
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Option<Selection>>();
+        panel.wait_selection(receiver, 123, None, generation);
+        assert!(panel.model.borrow().input_active);
+        sender.send(None).unwrap();
+        let task = panel.input_task.borrow_mut().take().unwrap();
+        glib::MainContext::default().block_on(task).unwrap();
+        assert!(!panel.model.borrow().input_active);
+        assert_eq!(
+            panel.model.borrow().notice,
+            Some(
+                "Content preparation did not complete. Review Recover or discard the pending preparation."
+            )
+        );
+        assert!(panel.input_task.borrow().is_none());
+
+        panel.model.borrow_mut().notice = previous_notice;
+        panel.render();
+    }
+
     #[test]
     fn given_overlapping_formats_when_selected_then_files_win_before_image_and_text_without_fallback(
     ) {
