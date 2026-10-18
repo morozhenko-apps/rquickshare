@@ -28,9 +28,9 @@ independently `... ok`. Same-source
 [Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201)
 Core **740/740 stable + 4+4 integrations**,
 format/frontend/Core Clippy successful;
-desktop Tauri status must be independently
-confirmed before declaring the full quick
-Preflight 5/5.
+desktop Tauri **10/10** independently
+confirmed from job logs. Full same-source
+quick Preflight **5/5 SUCCESS**.
 
 Real Wayland clipboard acquisition and native
 GUI→daemon→Google Android/Windows transfer,
