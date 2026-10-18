@@ -178,6 +178,158 @@ mod tests {
         assert!(!results.visible("new"));
     }
     #[test]
+    fn given_repeated_terminal_and_cross_direction_snapshots_when_observed_then_only_fresh_inbound_success_is_presented(
+    ) {
+        let mut results = Results::default();
+
+        // A persisted Finished baseline is historical, not a new delivery.
+        observe(
+            &mut results,
+            41,
+            &[("historical", Direction::Inbound, Phase::Finished)],
+        );
+        assert!(!results.has_visible());
+        assert!(results.pending_empty());
+
+        // A same-epoch live transition is the only route to a new result.
+        observe(
+            &mut results,
+            41,
+            &[
+                ("in", Direction::Inbound, Phase::Receiving),
+                ("out", Direction::Outbound, Phase::Sending),
+            ],
+        );
+        observe(
+            &mut results,
+            41,
+            &[
+                ("in", Direction::Inbound, Phase::Finished),
+                ("out", Direction::Outbound, Phase::Finished),
+            ],
+        );
+        assert!(results.visible("in"));
+        assert!(!results.visible("out"));
+        assert_eq!(
+            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["in"]
+        );
+
+        // Duplicate terminal observations do not add a second reveal.
+        observe(
+            &mut results,
+            41,
+            &[
+                ("in", Direction::Inbound, Phase::Finished),
+                ("out", Direction::Outbound, Phase::Finished),
+            ],
+        );
+        assert_eq!(results.pending.len(), 1);
+        results.dismiss();
+        assert!(!results.visible("in") && results.pending_empty());
+        observe(
+            &mut results,
+            41,
+            &[("in", Direction::Inbound, Phase::Finished)],
+        );
+        assert!(results.pending_empty());
+
+        // A later epoch's already-finished record cannot replay either.
+        observe(
+            &mut results,
+            42,
+            &[("in", Direction::Inbound, Phase::Finished)],
+        );
+        assert!(results.pending_empty());
+        assert!(!results.has_visible());
+    }
+
+    #[test]
+    fn given_multiple_live_successes_and_removed_rows_when_observed_then_queue_remains_fifo_and_prunes_stale_results(
+    ) {
+        let mut results = Results::default();
+        observe(&mut results, 7, &[]);
+
+        // Arrival order is the authoritative order for notifications.
+        observe(
+            &mut results,
+            7,
+            &[
+                ("b", Direction::Inbound, Phase::Receiving),
+                ("a", Direction::Inbound, Phase::Receiving),
+                ("z", Direction::Inbound, Phase::Failed),
+            ],
+        );
+        observe(
+            &mut results,
+            7,
+            &[
+                ("b", Direction::Inbound, Phase::Finished),
+                ("a", Direction::Inbound, Phase::Receiving),
+                ("z", Direction::Inbound, Phase::Failed),
+            ],
+        );
+        observe(
+            &mut results,
+            7,
+            &[
+                ("b", Direction::Inbound, Phase::Finished),
+                ("a", Direction::Inbound, Phase::Finished),
+            ],
+        );
+        assert_eq!(
+            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["b", "a"]
+        );
+        results.hide_rows();
+        assert!(!results.has_visible());
+        assert_eq!(results.pending.len(), 2);
+
+        // Removing B from the current daemon snapshot must immediately
+        // revoke its pending reveal, but A remains.
+        observe(
+            &mut results,
+            7,
+            &[("a", Direction::Inbound, Phase::Finished)],
+        );
+        assert_eq!(
+            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["a"]
+        );
+        assert!(!results.visible("b"));
+        results.dismiss();
+        assert!(results.pending_empty());
+
+        // An explicit new in-progress→Finished transition can re-arm A,
+        // whereas a repeated Finished snapshot remains silent.
+        observe(
+            &mut results,
+            7,
+            &[("a", Direction::Inbound, Phase::Finished)],
+        );
+        assert!(results.pending_empty());
+        observe(
+            &mut results,
+            7,
+            &[("a", Direction::Inbound, Phase::Receiving)],
+        );
+        assert!(results.pending_empty());
+        observe(
+            &mut results,
+            7,
+            &[("a", Direction::Inbound, Phase::Finished)],
+        );
+        assert_eq!(
+            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["a"]
+        );
+        observe(&mut results, 7, &[]);
+        assert!(results.pending_empty());
+        assert!(!results.has_visible());
+        assert!(results.phases.is_empty());
+    }
+
+    #[test]
     fn given_live_transitions_when_finished_then_inbound_success_is_queued_once_in_observed_order_and_hide_preserves_active_work(
     ) {
         let mut results = Results::default();
