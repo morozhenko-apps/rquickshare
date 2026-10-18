@@ -429,6 +429,124 @@ mod tests {
         assert!(policy.shown.is_none());
     }
     #[test]
+    fn given_multiple_incoming_consents_and_outcomes_when_reconciled_then_consent_priority_and_revision_replay_are_bounded(
+    ) {
+        // Arrange: terminal outcome sorts lexically before two consent rows;
+        // priority must select the actual consent rather than that outcome.
+        let mut policy = CardPolicy::default();
+        let first = [
+            pending_row("a-outcome", Phase::Finished),
+            row("z-consent", Phase::AwaitingConsent, Some(9)),
+            row("b-consent", Phase::AwaitingConsent, Some(9)),
+        ];
+        let selected = shown(
+            policy.reconcile(17, &first, safe()),
+            "b-consent",
+            Phase::AwaitingConsent,
+        );
+        assert_eq!((selected.epoch, selected.round, selected.revision), (17, Some(9), 9));
+        assert_eq!(policy.records.len(), 3);
+        assert!(matches!(policy.reconcile(17, &first, safe()), Effect::None));
+
+        // Order of rows supplied by the daemon does not change prioritization.
+        let reversed = [
+            row("b-consent", Phase::AwaitingConsent, Some(9)),
+            row("z-consent", Phase::AwaitingConsent, Some(9)),
+            pending_row("a-outcome", Phase::Finished),
+        ];
+        assert!(matches!(policy.reconcile(17, &reversed, safe()), Effect::None));
+        let dismissed = policy.dismiss();
+        assert_eq!(dismissed.len(), 3);
+        assert!(dismissed.iter().any(|notice| notice == &selected));
+        assert!(matches!(
+            policy.reconcile(17, &reversed, safe()),
+            Effect::None
+        ));
+
+        // A new explicit consent revision may reopen its own card; unchanged
+        // requests remain dismissed, and epoch replacement forgets old cards.
+        shown(
+            policy.reconcile(
+                17,
+                &[
+                    row("b-consent", Phase::AwaitingConsent, Some(10)),
+                    row("z-consent", Phase::AwaitingConsent, Some(9)),
+                    pending_row("a-outcome", Phase::Finished),
+                ],
+                safe(),
+            ),
+            "b-consent",
+            Phase::AwaitingConsent,
+        );
+        policy.dismiss();
+        let fresh = shown(
+            policy.reconcile(18, &reversed, safe()),
+            "b-consent",
+            Phase::AwaitingConsent,
+        );
+        assert_eq!((fresh.epoch, fresh.round), (18, Some(9)));
+        assert!(policy.records.contains_key("a-outcome"));
+    }
+
+    #[test]
+    fn given_busy_automatic_card_with_removed_peer_when_reconciled_then_stale_notice_hides_before_new_peer_can_show(
+    ) {
+        // Arrange: a card is currently on screen, but its owning endpoint
+        // disappears while the user is busy with an unrelated UI action.
+        let mut policy = CardPolicy::default();
+        shown(
+            policy.reconcile(4, &[row("former", Phase::AwaitingConsent, Some(1))], safe()),
+            "former",
+            Phase::AwaitingConsent,
+        );
+        let mut busy = safe();
+        busy.visible = true;
+        busy.automatic = true;
+        busy.busy = true;
+
+        // Act: a new incoming request must not replace the visible card
+        // while busy, and the old removed owner's identity cannot remain.
+        assert!(matches!(
+            policy.reconcile(4, &[row("current", Phase::AwaitingConsent, Some(2))], busy),
+            Effect::Hide
+        ));
+        assert!(policy.shown.is_none());
+        assert!(!policy.records.contains_key("former"));
+        assert!(policy.records.contains_key("current"));
+        assert!(matches!(
+            policy.reconcile(4, &[row("current", Phase::AwaitingConsent, Some(2))], busy),
+            Effect::None
+        ));
+
+        // Only an idle/eligible surface may show the new request.
+        let fresh = shown(
+            policy.reconcile(
+                4,
+                &[row("current", Phase::AwaitingConsent, Some(2))],
+                safe(),
+            ),
+            "current",
+            Phase::AwaitingConsent,
+        );
+        assert_eq!((fresh.epoch, fresh.round), (4, Some(2)));
+        assert!(matches!(
+            policy.reconcile(4, &[], {
+                let mut visible = safe();
+                visible.visible = true;
+                visible.automatic = true;
+                visible
+            }),
+            Effect::Hide
+        ));
+        assert!(policy.records.is_empty());
+        shown(
+            policy.reconcile(5, &[row("current", Phase::AwaitingConsent, Some(2))], safe()),
+            "current",
+            Phase::AwaitingConsent,
+        );
+    }
+
+    #[test]
     fn given_authoritative_pending_outcome_when_renderer_starts_then_it_presents_and_daemon_dismissal_retires_it(
     ) {
         // Arrange / Act
