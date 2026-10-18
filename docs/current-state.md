@@ -31,9 +31,10 @@ type without changing production logic.
 Same-source [Preflight 39130339110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339110)
 Core **742/742 stable + 4/4 + 4/4**,
 format, frontend and Core Clippy SUCCESS;
-desktop Tauri completion requires a
-final independent verdict before quick
-Preflight 5/5 is claimed.
+desktop Tauri Clippy/unit **10/10
+PASS** in its actual job log; all
+five same-source Preflight jobs
+**5/5 SUCCESS**.
 
 Still unverified: GInputStream owner loss
 **during** a blocked async read, full
