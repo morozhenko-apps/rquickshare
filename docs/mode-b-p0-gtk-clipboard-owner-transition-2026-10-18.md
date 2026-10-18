@@ -150,7 +150,7 @@ mutation engine claim.
 1. [x] Stage 1–8 inventory, risk, branch map,
    N1–N12, interaction, estimates and per-file map
    written **before tests**.
-2. [ ] Add both fixture groups and call from existing
+2. [x] Add both fixture groups and call from existing
    `outbound::verify`.
 3. [ ] Verify same-SHA native GTK, stable Core, Tauri
    and frontend/Clippy/format via CI; log red triage.
@@ -162,3 +162,25 @@ mutation engine claim.
 
 Rollback only test-module and docs commits.
 No production security/OS contract/API change.
+
+## Stage 9 implementation checkpoint
+
+The source-only commit `9306ae91` adds both documented
+test fixture groups and invokes them within the existing
+`outbound::verify` actual GTK widget smoke:
+- Real GDK provider A => read exact A, revoke clipboard
+  ownership before the next read => error, provider B => exact B,
+  hostile provider C => error, provider D => exact D.
+- Actual pending oneshot `wait_selection` result delivered
+  to the receiver *before* GLib task polling, explicit
+  `close_input` (twice), cancellation token and generation
+  invalidation, stale callback inertness and cleared input state.
+
+No production code, application interface or original user's
+clipboard was changed. There are zero new `#[test]` methods,
+two new test fixtures exercised by the existing widget smoke.
+The initial same-source runs are:
+[Native GTK 39130166873](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130166873)
+and [Preflight 39130166917](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130166917).
+These links are not proof of passing tests until each
+job completes; do not infer a 10× or Stage 12 closure.
