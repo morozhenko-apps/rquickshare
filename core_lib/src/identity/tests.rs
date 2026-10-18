@@ -225,8 +225,8 @@ async fn given_acknowledged_consumer_loss_when_renamed_then_no_false_applied_res
             owner.wait_applied(2, &CancellationToken::new()).await,
             Err(IdentityError::Unavailable)
         );
-        assert_eq!(owner.subscribe(ConsumerKind::Mdns).is_ok(), false);
-        assert_eq!(owner.subscribe(ConsumerKind::Gatt).is_ok(), false);
+        assert!(owner.subscribe(ConsumerKind::Mdns).is_err());
+        assert!(owner.subscribe(ConsumerKind::Gatt).is_err());
     }
 }
 
