@@ -86,9 +86,36 @@ not an executed mutator.
 
 1. [x] Source/risk/inventory/branch/negative/
    interactions/counts/production map written first.
-2. [ ] Add two tests, no production code.
+2. [x] Add two tests, no production code.
 3. [ ] Verify exact CI test names, Core Rust,
    Native GTK and all quick Preflight jobs.
 4. [ ] Update D1–D5, inventory/current-state.
 5. [ ] Full complete 10× and global Stage12 still NO.
 Rollback only tests/doc. No master/package/release.
+
+## Implemented code and first exact-source CI checkpoint
+
+Two independently named P0 tests were added in
+test-only commit `4015ad70` to
+`core_lib/src/service/client/desktop/tests.rs`.
+
+1. 16 real `std::thread` contender calls start at one
+   `Barrier`, and hold any winning permit until a second
+   barrier proves all 16 attempts have happened.
+   Asserts exactly one winner, 15 blocked, published
+   busy cleared on Drop and reacquire possible only
+   after release.
+2. A separate thread closes the real gate while the
+   original permit is held; subsequent Drop publishes
+   idle but must never reopen authorization; repeated
+   close/try_acquire remain denied.
+
+No sleeps, domain mock, test-only production adapter,
+or runtime source changes. After the concurrent
+batch of 7 separate native methods was reformatted,
+the combined newest same-code CI source is
+`0e227a9e`, [Preflight 39132196768](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132196768)
+and [Native GTK 39132196774](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132196774).
+Only actual job logs may certify D2 pass and
+overall Stage 11. The strict ten-consecutive
+full-source and global Stage 12 remain OPEN.
