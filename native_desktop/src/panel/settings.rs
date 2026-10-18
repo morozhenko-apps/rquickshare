@@ -1194,7 +1194,7 @@ mod tests {
         ] {
             assert_eq!(parse_port(invalid), Err(()), "{invalid:?}");
         }
-        for blank in ["", " ", "\\t", "\\n", "\\u{2003}"] {
+        for blank in ["", " ", "\t", "\n", "\u{2003}"] {
             assert_eq!(parse_port(blank), Ok(-1), "{blank:?}");
         }
     }
