@@ -1,5 +1,48 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P0 real broker Selection cross-owner and reconnect replay
+
+Two new original tests in
+`core_lib/src/service/client/controller/tests.rs`
+exercise real typed Selection returned by
+`PanelController::choose` on the private
+SelectionBus. A second NativeClient
+must receive `ForeignHandle` on single,
+batch and queued dispatch, with no
+pending operation and no queued transfer;
+the original owner still dispatches
+one legitimate transfer. A new client
+must not replay an unsent Selection
+from a controller that already closed;
+its own freshly committed Selection
+must transfer and preserve the original
+local files.
+
+The [scoped Stage 1–10 inventory,
+positive/N1–N12, interaction map
+and D1–D5](mode-b-p0-selection-lifetime-2026-10-18.md)
+was written before tests. Exact code SHA
+`e5731932`
+[Preflight 39129396907](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396907)
+Core job **742/742 stable**,
+**4+4 integrations**, both new test
+methods separately `... ok`.
+Format/frontend/Core Clippy PASS;
+desktop completion required a separate
+final checkpoint. Independent
+[Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
+**57/57 PASS**. The original red rustfmt
+check was resolved without
+weakening any assertions.
+
+This tests actual daemon/client authorization,
+**not** a real connected GTK Panel or
+Bluetooth-to-TCP delivery. Physical Android/
+Windows, BWU security Issue #8,
+mDNS SDK Issue #9, global full 10×
+and Stage 12 remain **OPEN/NO**.
+
+
 ## 2026-10-18 P0 actual GDK async clipboard and preparation cancellation
 
 The existing actual Native GTK widget smoke
