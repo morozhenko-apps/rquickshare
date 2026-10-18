@@ -282,3 +282,46 @@ without modifying any assertion or
 production implementation. This red
 run is retained, not counted as success.
 Final source jobs must be verified afresh.
+
+## First executed card-policy tests: two invalid presentation-fixture assumptions
+
+At exact code SHA `913fac10`,
+[Native GTK run 39132639231](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132639231)
+reached the complete test executable for the first time:
+**62 passed, 2 failed**, both newly written CardPolicy
+methods, no ignored/filtered cases. Full job
+`117690759565` pinpoints failures at
+`card_policy.rs:452` and `:529`.
+
+Source analysis identifies **fixture contract mismatches**
+rather than an established production regression:
+- `CardPolicy::reconcile` intentionally sends
+  `Effect::Show(notice)` on an otherwise unchanged
+  notice when `surface.visible=false`, because
+  the surface must reopen to present it. The new
+  idempotency tests incorrectly passed `safe()`
+  (invisible), then required `Effect::None`.
+  For the intended unchanged visible automatic
+  surface, use `visible=true; automatic=true`;
+  require exactly `Effect::None` and that the
+  shown notice identity remains unchanged.
+- While `surface.busy=true` and
+  `automatic=true; visible=true`, a stale
+  currently shown notice must be hidden even
+  if the same new unrelated pending peer is
+  still eligible; `Effect::Hide` may repeat
+  on redraw, rather than `Effect::None`.
+  The new fixture incorrectly asserted None.
+  Preserve the strong safety assertion that
+  there is never a displayed old or new
+  notice while busy and the old row has
+  been pruned.
+
+Only correct test preconditions and expected
+presentation effects to match the actual
+documented production state machine;
+**do not** modify `CardPolicy::reconcile`,
+suppress failures, remove negative branches
+or relax no-stale-notice ownership checks.
+Both failed tests must be rerun and pass
+on exact source before a success claim.
