@@ -1,5 +1,42 @@
 # Current implementation and continuation state
 
+## MODE B P0/P1 batch: CLI, consent card, result queue, idle safety and preparation gate — 2026-10-18
+
+Two documentation-first scoped Mode B plans:
+[Native CLI/card/results/idle](mode-b-p0-batch-native-guards-2026-10-18.md) and
+[concurrent gate ownership](mode-b-p0-preparation-gate-races-2026-10-18.md).
+Nine new **independent Rust test methods** added across
+five files on `dev`: 2 native CLI argument validation,
+2 `CardPolicy` notice/consent lifecycle,
+2 `Results` inbound completion and replay safety,
+1 `idle::free` desktop lock/daemon lifecycle,
+and 2 Core `PreparationGate` simultaneous
+contenders and permanent shutdown. Each table-driven
+method asserts multiple independent states, including
+a 16-thread barrier without sleeps.
+
+The batch remains strictly **test-only**:
+no runtime/security/IPC implementation,
+system clipboard, `master`, installed
+program or release changes.
+Intermediate CI discovered rustfmt-only
+differences and a test-fixture E0382
+reused moved `Surface`; both were
+diagnosed and corrected without weakening
+assertions. The final code candidate at this
+checkpoint is `4a29bc02`, with
+[Preflight 39132422424](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422424)
+and [Native GTK 39132422435](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422435)
+requiring final job-log verification.
+Do NOT claim nine passing tests until all
+actual methods pass and final source SHA
+matches the completed workflow.
+The release-tag-gated complete 10×,
+live KDE/Wayland/Google device acceptance,
+Issue #8 BWU and Issue #9 mDNS remain OPEN.
+Global Stage 12 **NO**.
+
+
 ## MODE B P0 GTK clipboard owner transition and queued cancellation — 2026-10-18
 
 Two new **test-only fixture groups** in
