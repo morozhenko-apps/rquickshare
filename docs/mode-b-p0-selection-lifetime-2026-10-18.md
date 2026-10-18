@@ -167,3 +167,24 @@ Manual mutation review only; no mutation engine.
 
 Rollback only test source and docs. No
 production security policy changed.
+
+## First test implementation / red CI triage
+
+Added the two original controller/broker methods,
+test-only SHA `11ae9bd7`. Initial
+[Preflight 39129305604](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129305604)
+reports **Rust formatter failure** on three
+format-only differences (one extra blank line,
+two multiline assertion layouts and one short
+`let ... else` construction) in the new
+`controller/tests.rs` test region. No test
+assertions or product logic have been changed.
+The formatter job could not prove the new
+test results; do not count this run as a
+clean same-source Preflight. Apply only
+the exact rustfmt-recommended line layouts
+then rerun. The security invariant remains
+unchanged: three wrong-owner admission
+methods must reject before pending or queue,
+and a new owner must work after old owner
+close. No architecture/security decision.
