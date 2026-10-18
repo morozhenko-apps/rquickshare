@@ -283,6 +283,120 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn given_eight_parallel_bwu_connections_when_one_owner_waits_then_only_one_receives_a_socket(
+    ) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Arrange: one live ownership token, eight independent TCP connections.
+        let router = BwuRouter::new();
+        let owner = router.register("owner".to_owned()).await.unwrap();
+        let mut peers = Vec::new();
+        let mut sockets = Vec::new();
+        for _ in 0..8 {
+            let (peer, socket) = bwu_tcp_pair().await;
+            peers.push(peer);
+            sockets.push(socket);
+        }
+
+        // Act: both exact and alias routes compete for the same one-shot owner.
+        let attempts = sockets.into_iter().enumerate().map(|(index, socket)| {
+            let contender = router.clone();
+            async move {
+                let result = if index % 2 == 0 {
+                    contender.route_with_alias("owner", None, socket).await
+                } else {
+                    contender
+                        .route_with_alias("unknown", Some("owner"), socket)
+                        .await
+                };
+                (index, result)
+            }
+        });
+        let results = futures::future::join_all(attempts).await;
+
+        // Assert: one winner, no duplicate delivery and usable rejected sockets.
+        let mut winner = None;
+        for (index, result) in results {
+            match result {
+                Ok(route_id) => {
+                    assert_eq!(route_id, "owner");
+                    assert!(winner.replace(index).is_none(), "duplicate BWU owner");
+                }
+                Err(mut returned) => {
+                    peers[index].write_all(&[index as u8]).await.unwrap();
+                    let mut byte = [0u8; 1];
+                    returned.read_exact(&mut byte).await.unwrap();
+                    assert_eq!(byte, [index as u8]);
+                }
+            }
+        }
+        let selected = winner.expect("one contender must acquire the owner");
+        let mut delivered = owner.await.unwrap();
+        peers[selected]
+            .write_all(&[selected as u8])
+            .await
+            .unwrap();
+        let mut byte = [0u8; 1];
+        delivered.read_exact(&mut byte).await.unwrap();
+        assert_eq!(byte, [selected as u8]);
+        assert_eq!(
+            delivered.peer_addr().unwrap(),
+            peers[selected].local_addr().unwrap()
+        );
+        assert!(!router.has_pending().await);
+    }
+
+    #[tokio::test]
+    async fn given_eight_independent_bwu_owners_when_parallel_routes_arrive_then_no_peer_receives_foreign_bytes(
+    ) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Arrange: each active BLE session has a distinct expected Wi-Fi peer.
+        let router = BwuRouter::new();
+        let mut owners = Vec::new();
+        let mut peers = Vec::new();
+        let mut sockets = Vec::new();
+        for index in 0..8 {
+            owners.push(
+                router
+                    .register(format!("owner-{index}"))
+                    .await
+                    .unwrap(),
+            );
+            let (peer, socket) = bwu_tcp_pair().await;
+            peers.push(peer);
+            sockets.push(socket);
+        }
+
+        // Act: alias claims never override an existing exact registration.
+        let attempts = sockets.into_iter().enumerate().map(|(index, socket)| {
+            let contender = router.clone();
+            async move {
+                let expected_id = format!("owner-{index}");
+                contender
+                    .route_with_alias(&expected_id, Some("owner-0"), socket)
+                    .await
+            }
+        });
+        let results = futures::future::join_all(attempts).await;
+        for (index, result) in results.into_iter().enumerate() {
+            assert_eq!(result.unwrap(), format!("owner-{index}"));
+        }
+        assert!(!router.has_pending().await);
+
+        // Assert: every owner receives its own independently identified stream.
+        for (index, (owner, mut peer)) in owners.into_iter().zip(peers).enumerate() {
+            let mut delivered = owner.await.unwrap();
+            let payload = [index as u8, 255 - index as u8];
+            peer.write_all(&payload).await.unwrap();
+            let mut received = [0u8; 2];
+            delivered.read_exact(&mut received).await.unwrap();
+            assert_eq!(received, payload);
+            assert_eq!(delivered.peer_addr().unwrap(), peer.local_addr().unwrap());
+        }
+    }
+
+    #[tokio::test]
     async fn route_delivers_the_registered_socket() {
         let router = BwuRouter::new();
         let receiver = router.register("peer-route".to_owned()).await.unwrap();
