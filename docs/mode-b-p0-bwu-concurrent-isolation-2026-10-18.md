@@ -30,3 +30,11 @@ Eight candidate endpoints × exact/alias attempt × accepted/denied socket outco
 Implementation: append both documented tests in `bwu.rs` test module. Mutation review: duplicating successful deliveries, allowing unknown socket admission, choosing alias despite live exact, dropping rejected sockets, overwriting active tokens or routing wrong peer must fail assertions. This is a manual mutation *design*, not measured kills. Run source-matched Core/Preflight and native GTK; final strict full ten consecutive runs and Stage 12 global inventory still OPEN. Rollback limited to tests and this document.
 
 Status: documentation authored before test code.
+
+## Implementation and verification checkpoint
+- Documentation-first plan: `21f6faff`.
+- Implemented exactly two async methods in `core_lib/src/hdl/bwu.rs` at `ea1e4edc` (no production changes): eight simultaneous route attempts for one token, and eight simultaneous independent exact routes with alias claims. Both use real loopback sockets and check payload and transport peer identity.
+- Scoped method count: 2 new tests. One-owner contention includes up to 7 rejected socket ownership checks and exactly one admitted owner. Independent routing validates 8 assigned owners and distinct payloads.
+- Source-matched [Preflight 39162296958](https://github.com/morozhenko-apps/rquickshare/actions/runs/39162296958) and [Native GTK 39162296940](https://github.com/morozhenko-apps/rquickshare/actions/runs/39162296940) were started. Do not count as PASS until jobs complete.
+- Mutation review: the suite explicitly rejects duplicate successful routes, foreign endpoint ownership, alias stealing a live exact registration, returned socket corruption and misrouting. No automated mutation engine was executed.
+- The full strict 10× run, BlueZ/LAN physical handoff and repository-wide MODE B Stage 12 remain OPEN.
