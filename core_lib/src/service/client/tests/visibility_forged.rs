@@ -13,7 +13,19 @@ struct ForgedManager;
 impl ForgedManager {
     fn begin_snapshot(
         &self,
-    ) -> (String, String, u64, String, bool, u32, u32, u64, u32, u32, u32) {
+    ) -> (
+        String,
+        String,
+        u64,
+        String,
+        bool,
+        u32,
+        u32,
+        u64,
+        u32,
+        u32,
+        u32,
+    ) {
         (
             format!("{EPOCH:032x}-{:016x}", 1),
             format!("{EPOCH:032x}"),
@@ -89,9 +101,7 @@ async fn fixture() -> (PrivateBus, Connection, NativeClient, Arc<Mutex<Replies>>
         .await
         .unwrap();
     server.request_name(SERVICE).await.unwrap();
-    let client = NativeClient::connect(private.socket().await)
-        .await
-        .unwrap();
+    let client = NativeClient::connect(private.socket().await).await.unwrap();
     assert_eq!(client.epoch, EPOCH);
     (private, server, client, replies)
 }
@@ -180,10 +190,7 @@ async fn given_authenticated_success_reply_with_foreign_request_when_retried_the
         );
         assert!(client.has_pending_visibility());
         assert_eq!(client.pending_visibility.as_ref(), Some(&intent));
-        assert_eq!(
-            client.retry_visibility().await,
-            Err(ClientError::Protocol)
-        );
+        assert_eq!(client.retry_visibility().await, Err(ClientError::Protocol));
         assert_eq!(replies.lock().unwrap().set_calls, 2);
         assert_eq!(client.pending_visibility.as_ref(), Some(&intent));
 
