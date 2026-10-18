@@ -332,10 +332,7 @@ mod tests {
         }
         let selected = winner.expect("one contender must acquire the owner");
         let mut delivered = owner.await.unwrap();
-        peers[selected]
-            .write_all(&[selected as u8])
-            .await
-            .unwrap();
+        peers[selected].write_all(&[selected as u8]).await.unwrap();
         let mut byte = [0u8; 1];
         delivered.read_exact(&mut byte).await.unwrap();
         assert_eq!(byte, [selected as u8]);
@@ -357,12 +354,7 @@ mod tests {
         let mut peers = Vec::new();
         let mut sockets = Vec::new();
         for index in 0..8 {
-            owners.push(
-                router
-                    .register(format!("owner-{index}"))
-                    .await
-                    .unwrap(),
-            );
+            owners.push(router.register(format!("owner-{index}")).await.unwrap());
             let (peer, socket) = bwu_tcp_pair().await;
             peers.push(peer);
             sockets.push(socket);
