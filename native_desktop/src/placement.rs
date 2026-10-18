@@ -133,23 +133,14 @@ mod tests {
         // monitor in logical pixels. Reconstruct the absolute card rectangle
         // from its returned edge and margin rather than trusting a label.
         for (width, height) in [(50, 30), (360, 250), (1920, 1080)] {
-            for (origin_x, origin_y) in [
-                (0, 0),
-                (-1300, 400),
-                (i32::MAX - 2000, i32::MIN + 1000),
-            ] {
+            for (origin_x, origin_y) in [(0, 0), (-1300, 400), (i32::MAX - 2000, i32::MIN + 1000)] {
                 let monitor = Rect {
                     x: origin_x,
                     y: origin_y,
                     width,
                     height,
                 };
-                for size in [
-                    (1, 1),
-                    (20, 15),
-                    (width / 2, height / 2),
-                    (width, height),
-                ] {
+                for size in [(1, 1), (20, 15), (width / 2, height / 2), (width, height)] {
                     for x in [0, 1, width / 2, width - 2, width - 1] {
                         for y in [0, 1, height / 2, height - 2, height - 1] {
                             let result =
@@ -177,8 +168,11 @@ mod tests {
                                 (y, Edge::Top),
                                 (height - 1 - y, Edge::Bottom),
                             ];
-                            let nearest =
-                                distances.into_iter().min_by_key(|(distance, _)| *distance).unwrap().1;
+                            let nearest = distances
+                                .into_iter()
+                                .min_by_key(|(distance, _)| *distance)
+                                .unwrap()
+                                .1;
                             match nearest {
                                 Edge::Left => assert_eq!(left, 0),
                                 Edge::Right => assert_eq!(left + size.0, width),
