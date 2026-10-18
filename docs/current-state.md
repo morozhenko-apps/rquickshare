@@ -1,5 +1,46 @@
 # Current implementation and continuation state
 
+## MODE B P1 signed monitor geometry placement — 2026-10-18
+
+Added **four independently named Native GTK Rust
+test methods** across `native_desktop/src/placement.rs`
+and `native_desktop/src/panel/movement.rs`,
+test-only final source `00a0a76b`.
+Tests reconstruct left/top margins for 900
+monitor origin/size/card/pointer combinations,
+assert explicit nearest-edge ties and i32
+extreme monitor coordinates, validate 196
+signed drag/size combinations against
+independent i64 arithmetic and 252
+bottom-margin checked inverse/bad geometry
+cases. No compositor mock, production code
+or installed desktop modification.
+
+[Native GTK 39134995889](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995889)
+**SUCCESS, 68/68** native tests, four new
+methods independently `... ok`. Same-source
+[Preflight 39134995892](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995892)
+Core **744/744 + 4/4 + 4/4**, formatter,
+Core Clippy and frontend SUCCESS; desktop
+Tauri job required independent completion
+check at initial ledger time.
+[Scoped branch/N1–N12/D1–D5 report](mode-b-p1-native-placement-bounds-2026-10-18.md)
+includes interim red rustfmt and exact
+test-only corrections. These 4 methods follow
+the earlier verified 9-test CLI/consent/
+result/idle/preparation gate package.
+
+Created [22-case physical installed-device
+acceptance matrix](mode-b-p0-device-acceptance-matrix-2026-10-18.md)
+with **all cases OPEN/NOT RUN**, explicitly
+separate from Core/native green unit suites.
+Real GTK→Google/Android/Windows transfer,
+Wayland ownership loss mid-stream,
+Bluetooth→TCP alias authentication,
+mDNS lifecycle, full newest-source 10×
+and global Stage12 remain OPEN/NO.
+
+
 ## MODE B P0/P1 batch: CLI, consent card, result queue, idle safety and preparation gate — 2026-10-18
 
 Two documentation-first scoped Mode B plans:
