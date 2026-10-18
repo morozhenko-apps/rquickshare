@@ -582,6 +582,149 @@ async fn given_anonymous_source_when_prepared_over_actual_broker_then_seals_byte
     .await;
 }
 
+
+#[tokio::test]
+async fn given_foreign_prepared_selection_when_other_client_sends_queues_or_batches_then_no_transfer_is_admitted_and_owner_can_send(
+) {
+    scenario(async {
+        // Arrange: only the real daemon may mint a Selection. A second
+        // private-broker client can observe the daemon but never owns it.
+        let (bus, host, client) = fixture().await;
+        let controller = PanelController::spawn(client);
+        let handle = controller.handle();
+        let mut updates = handle.subscribe();
+        ready(&mut updates).await;
+        let (file, opened) = opened(1);
+        let ActionResult::Selection(selected) =
+            handle.choose(opened).unwrap().wait().await.unwrap()
+        else {
+            panic!("expected a genuine committed selection")
+        };
+        let mut foreign = NativeClient::connect(bus.socket().await).await.unwrap();
+
+        // Act/Assert: all three wire-facing dispatch entry points must
+        // reject cross-connection ownership *before* queuing any operation.
+        assert_eq!(
+            foreign.send_selection(&selected, "peer").await,
+            Err(ClientError::ForeignHandle)
+        );
+        assert!(!foreign.has_pending());
+        assert_eq!(
+            foreign.queue_recipient(&selected, "peer".into()).await,
+            Err(ClientError::ForeignHandle)
+        );
+        assert!(!foreign.has_pending());
+        assert_eq!(
+            foreign.send_many(&selected, vec!["peer".into()]).await,
+            Err(ClientError::ForeignHandle)
+        );
+        assert!(!foreign.has_pending());
+
+        let intact = updates.borrow().view.as_ref().unwrap().clone();
+        assert_eq!(intact.selections, vec![selected.clone()]);
+        assert!(intact.transfers.is_empty());
+
+        // A rejected foreign attempt must never poison the owner's
+        // independent legitimate preparation and explicit send.
+        let ActionResult::Transfer(transfer) = handle
+            .send(selected, "peer".into())
+            .unwrap()
+            .wait()
+            .await
+            .unwrap()
+        else {
+            panic!("original owner could not dispatch")
+        };
+        assert_eq!(
+            updates.borrow().view.as_ref().unwrap().transfers[0].transfer,
+            transfer
+        );
+        foreign.close().await.unwrap();
+        controller.close().await.unwrap();
+        let (mut coordinator, result) = host.finish().await;
+        assert_eq!(result, Ok(()));
+        assert_eq!(coordinator.transfers.len(), 1);
+        assert_eq!(coordinator.queue.len(), 1);
+        let dispatch = coordinator.next_send().unwrap().unwrap();
+        assert_eq!(dispatch.selection.files().len(), 1);
+        assert_eq!(dispatch.selection.files()[0].memory_bytes(), 0);
+        assert!(coordinator.next_send().unwrap().is_none());
+        assert!(file.path().is_file());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn given_closed_preparation_owner_when_new_gui_receives_old_selection_then_replay_is_denied_and_new_selection_sends(
+) {
+    scenario(async {
+        // Arrange: commit a real Selection but close its owning GUI without
+        // sending anything. The local filesystem must remain untouched.
+        let (bus, host, client) = fixture().await;
+        let previous = PanelController::spawn(client);
+        let old_handle = previous.handle();
+        let mut old_updates = old_handle.subscribe();
+        ready(&mut old_updates).await;
+        let (old_file, first) = opened(1);
+        let ActionResult::Selection(stale) =
+            old_handle.choose(first).unwrap().wait().await.unwrap()
+        else {
+            panic!("expected the former owner's genuine selection")
+        };
+        assert!(old_updates.borrow().view.as_ref().unwrap().transfers.is_empty());
+        previous.close().await.unwrap();
+
+        // Act: the daemon is still available, but a new connection cannot
+        // reuse the old connection-bound Selection after GUI replacement.
+        let mut replacement = NativeClient::connect(bus.socket().await).await.unwrap();
+        assert_eq!(
+            replacement.send_selection(&stale, "peer").await,
+            Err(ClientError::ForeignHandle)
+        );
+        assert!(!replacement.has_pending());
+        assert_eq!(
+            replacement.send_many(&stale, vec!["peer".into()]).await,
+            Err(ClientError::ForeignHandle)
+        );
+        assert!(!replacement.has_pending());
+
+        // Assert: fresh controller + fresh real selection remain usable,
+        // and no data from the closed owner enters the transfer queue.
+        let current = PanelController::spawn(replacement);
+        let handle = current.handle();
+        let mut updates = handle.subscribe();
+        ready(&mut updates).await;
+        assert!(updates.borrow().view.as_ref().unwrap().selections.is_empty());
+        let (new_file, fresh) = opened(2);
+        let ActionResult::Selection(selected) =
+            handle.choose(fresh).unwrap().wait().await.unwrap()
+        else {
+            panic!("fresh owner could not prepare")
+        };
+        assert_ne!(selected, stale);
+        assert!(updates.borrow().view.as_ref().unwrap().transfers.is_empty());
+        let ActionResult::Transfer(_sent) = handle
+            .send(selected, "peer".into())
+            .unwrap()
+            .wait()
+            .await
+            .unwrap()
+        else {
+            panic!("fresh owner could not send")
+        };
+        current.close().await.unwrap();
+        let (mut coordinator, outcome) = host.finish().await;
+        assert_eq!(outcome, Ok(()));
+        assert_eq!(coordinator.transfers.len(), 1);
+        assert_eq!(coordinator.queue.len(), 1);
+        let dispatch = coordinator.next_send().unwrap().unwrap();
+        assert_eq!(dispatch.selection.files().len(), 2);
+        assert!(coordinator.next_send().unwrap().is_none());
+        assert!(old_file.path().is_file() && new_file.path().is_file());
+    })
+    .await;
+}
+
 #[tokio::test]
 async fn given_extension_interrupted_at_each_preparation_boundary_when_recovered_then_exact_aggregate_is_admitted_without_sending(
 ) {
