@@ -3,6 +3,11 @@ name: Preflight
 on:
   push:
     branches: [ "dev", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - 'doc/**'
+      - '**/*.md'
+      - '**/*.mdx'
   pull_request:
 
 concurrency:
