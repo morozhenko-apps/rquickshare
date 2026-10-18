@@ -167,10 +167,10 @@ mutant-engine execution.
 2. [x] Add 2 table-driven parser test methods.
 3. [x] Expand actual `outbound::verify` GUI
    security gate smoke and restore fixture state.
-4. [ ] Run exact-source Native GTK and Preflight;
+4. [x] Run exact-source Native GTK and Preflight;
    inspect 2 new method names and non-ignored
    native totals, document any red CI.
-5. [ ] Record D2–D5 actual, mutation review,
+5. [x] Record D2–D5 actual, mutation review,
    update Current State and global Mode B Inventory.
 6. [ ] Strict full 10× after latest source,
    actual installed desktop and all-public-branch
@@ -221,3 +221,97 @@ Latest same-source CI:
 [Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201).
 Report actual test results only when the
 completed job logs prove all new methods pass.
+
+## Actual scoped D1–D5 and verified native run
+
+**D1 — source and runner.** All actual production
+functions under test are unmodified:
+`paths` uses real GIO URI decoding and
+`input_allowed` is called by the existing
+full GTK panel smoke. No new production seam or
+GUI fake was added. The final test-only code SHA
+`c911fc02816b5f1052f5f24d72f68a4397081483`
+was compiled/run in
+[Native GTK 39126241182](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241182)
+(job `117671867546`). The complete native log
+states **57 passed / 0 failed / 0 ignored**.
+Each of the **two new original method names**
+appeared independently **exactly once as `... ok`**.
+The previous GTK total was 55; +2 is reconciled.
+The existing GTK panel-smoke method also passed,
+now executing the larger fail-closed recipient
+and safety matrix.
+
+**D2 — actual category evidence**, counted by
+unique new methods only (2), with the expanded
+existing GTK smoke listed separately:
+
+| Category | New unique methods | Actual evidence |
+|---|---:|---|
+| Positive | 2 | PASS: ordered local files, valid GIO Unicode and exact budget |
+| N1 bad input | 2 | PASS: malformed GNOME header, invalid late list item |
+| N2 bounds | 2 | PASS: long input / 256 KiB + 1 and zero/empty list |
+| N3 external failures | 0 | N/A: no external clipboard/device transfer in parser |
+| N4 repeat/idempotency | 2 | PASS: no partial batch, duplicate local URIs retain order |
+| N5 concurrency | 0 | N/A: pure path parser; existing GTK smoke validates state gate |
+| N6 corrupt data | 2 | PASS: truncated/invalid % hex, null byte, UTF-8 corruption |
+| N7 authority | 2 | PASS: rejects remote host, userinfo and nonlocal port |
+| N8 locale/unicode | 2 | PASS: encoded UTF-8 and CRLF/list whitespace |
+| N9 interruption | 0 | N/A for parser; closing/stale states exercised by smoke |
+| N10 privacy | 2 | PASS: remote/partial URI batches never admitted |
+| N11 monetization | 0 | N/A: no entitlement in path parser |
+| N12 local FS | 2 | PASS: only absolute local GIO paths returned |
+
+Existing `outbound::verify` GTK smoke now
+covers 5 independent controller-disqualifying
+flags, 5 stale/invalid view branches, closing,
+preview, 3 unsafe desktop lock/provider states,
+and an unlocked/inhibited manual-action
+positive control. These **do not count as new
+methods**. They do not prove a real pending
+daemon send was attempted.
+
+**D3 — test-only source commits.**
+`44c9fec8` adds two new parser tests,
+`3186526e` expands real GTK smoke,
+`11f4e875` and `c911fc02` apply exact
+native rustfmt corrections without weakening
+assertions. [Native GTK 39126097688](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126097688)
+failed at formatting before running the
+new tests; it is historical red CI,
+not counted toward pass evidence. No
+runtime code changed.
+
+**D4 — refactor/audit.** No refactor needed
+to test these pure URI and real GTK guard
+branches. `clipboard_paths` asynchronous
+stream/close, controller action scheduling,
+real Wayland clipboard and cross-device
+sending remain OPEN and require separate
+integration/hardware acceptance.
+
+**D5 — manual mutation review.** Mutations
+that admit a remote host, process GNOME
+`copy` as a file, accept malformed percent
+escapes, drop/shift/reorder a decoded path,
+accept an invalid late entry, ignore the
+URI_BYTES cap, allow a stale epoch,
+unsynchronized view, locked desktop, busy
+controller, closing window or missing target
+will contradict explicit assertions.
+This is NOT an executed mutation framework
+or a final full 10× Mode B suite.
+
+**Same-code general CI checkpoint.**
+[Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201)
+Core job `117671870007` **SUCCESS**
+with **740/740 stable Core**, both existing
+integration binaries **4/4 + 4/4**, no
+failed/ignored cases. Rust formatter,
+frontend and Core Clippy jobs also completed
+SUCCESS. Desktop Tauri still awaited its
+final result at the Core-checkpoint time;
+do not claim quick Preflight 5/5 until
+the overall run completes.
+Global Stage 11 final-source ten-pass and
+Stage 12 completion gate remain **OPEN/NO**.
