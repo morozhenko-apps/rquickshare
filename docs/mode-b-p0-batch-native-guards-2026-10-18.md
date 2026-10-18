@@ -248,3 +248,20 @@ therefore intermediate cancelled CI cannot
 be counted as final. Correct the strictly
 formatting diffs on final source before
 claiming any PASS. No weakening allowed.
+
+## First combined-code test fixture compile diagnosis
+
+At test source `0e227a9e`,
+[Native GTK 39132196774](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132196774)
+native formatting passed but native Clippy/test
+compilation failed at `card_policy.rs:523` with
+Rust `E0382`: newly written test reused a
+`Surface` after it had been moved into
+`CardPolicy::reconcile`, which takes
+the Surface by value. The production API is
+intentionally unchanged. Replace the local
+test fixture with a zero-argument constructor
+closure producing an independent busy Surface
+for each invocation. All negative assertions
+are preserved. The test did **not** execute
+and the run is NOT a passing receipt.
