@@ -19,3 +19,14 @@ Two transport types × two directions × shutdown-before-inbound-control-respons
 
 ## Completion gate
 Source-matched Core Rust tests, Clippy and formatting must succeed; global MODE B Stage 12 and ten consecutive runs remain OPEN. Rollback: remove these two tests and this test plan only. Status: plan recorded before implementation.
+
+
+## Stage 9 implementation checkpoint
+
+- Documentation-first plan: `3e3031ce`.
+- Added two test-only async half-close cases to `core_lib/src/hdl/migratable.rs`: `b59bd73b`. The methods cover BLE duplex and TCP loopback separately; both verify buffered outbound data, peer EOF, and an inbound acknowledgement after local writer shutdown.
+- Exact-source [Native GTK run 39158983654](https://github.com/morozhenko-apps/rquickshare/actions/runs/39158983654): **SUCCESS**, 80/80 passed.
+- Exact-source [Preflight run 39158983660](https://github.com/morozhenko-apps/rquickshare/actions/runs/39158983660): Core Rust **750 passed, 8 filtered**; format, frontend and Core Clippy succeeded. Tauri desktop tests were still executing at the documentation checkpoint. Treat complete Preflight as pending until the workflow finishes.
+- The previous frame-header formatting fix at `7652ad26` was included in the same source revision and passed the new Core test run.
+- Mutation review is reasoning-based only, not a mutation-engine report; mutation kills have not been measured.
+- Global strict 10× / Stage 12 is still **OPEN**. No hardware acceptance or product code changes are claimed.
