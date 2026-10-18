@@ -543,6 +543,105 @@ mod tests {
     }
 
     #[test]
+    fn given_each_rfc1918_lan_class_when_public_precedes_private_then_private_endpoint_wins() {
+        // Arrange: the phone must see the physical LAN, not an earlier WAN IP.
+        for private in [
+            "10.0.0.1",
+            "10.255.255.254",
+            "172.16.0.1",
+            "172.31.255.254",
+            "192.168.0.1",
+            "192.168.255.254",
+        ] {
+            let expected = private.parse::<std::net::Ipv4Addr>().unwrap().octets();
+            let selected = select_lan_ipv4([
+                ("eth0".into(), "203.0.113.10".parse().unwrap()),
+                ("wlan0".into(), private.parse().unwrap()),
+                ("eth1".into(), "198.51.100.20".parse().unwrap()),
+            ]);
+            assert_eq!(selected, Some(expected), "private={private}");
+        }
+    }
+
+    #[test]
+    fn given_reordered_lan_candidates_when_selecting_then_first_eligible_private_or_public_wins() {
+        // Arrange: the fallback may be seen before or after a private address.
+        let cases = [
+            (
+                vec![
+                    ("eth0", "203.0.113.10"),
+                    ("wlan0", "192.168.1.20"),
+                    ("eth1", "10.1.2.3"),
+                ],
+                [192, 168, 1, 20],
+            ),
+            (
+                vec![
+                    ("wlan0", "10.1.2.3"),
+                    ("eth0", "203.0.113.10"),
+                    ("eth1", "192.168.1.20"),
+                ],
+                [10, 1, 2, 3],
+            ),
+            (
+                vec![
+                    ("eth0", "203.0.113.10"),
+                    ("eth1", "198.51.100.20"),
+                ],
+                [203, 0, 113, 10],
+            ),
+            (
+                vec![
+                    ("eth1", "198.51.100.20"),
+                    ("eth0", "203.0.113.10"),
+                ],
+                [198, 51, 100, 20],
+            ),
+        ];
+
+        for (interfaces, expected) in cases {
+            let selected = select_lan_ipv4(interfaces.iter().map(|(name, ip)| {
+                ((*name).to_owned(), ip.parse::<std::net::IpAddr>().unwrap())
+            }));
+            assert_eq!(selected, Some(expected), "interfaces={interfaces:?}");
+        }
+        assert_eq!(select_lan_ipv4(Vec::new()), None);
+    }
+
+    #[test]
+    fn given_virtual_or_unroutable_lan_candidates_when_selecting_then_no_tunnel_is_advertised() {
+        // Arrange: even a private IP on a known tunnel must lose to physical WAN.
+        for virtual_name in [
+            "docker0",
+            "VETH1234",
+            "br-1234",
+            "virbr0",
+            "TUN0",
+            "tap2",
+            "WG0",
+            "TAILSCALE0",
+            "warp0",
+        ] {
+            let selected = select_lan_ipv4([
+                (virtual_name.to_owned(), "10.1.2.3".parse().unwrap()),
+                ("eth0".to_owned(), "203.0.113.10".parse().unwrap()),
+            ]);
+            assert_eq!(selected, Some([203, 0, 113, 10]), "{virtual_name}");
+        }
+
+        // Act/Assert: no public fallback should be fabricated from IPv6,
+        // link-local, loopback or only virtual IPv4 interfaces.
+        let invalid = [
+            ("lo".to_owned(), "127.0.0.1".parse().unwrap()),
+            ("eth0".to_owned(), "169.254.1.1".parse().unwrap()),
+            ("wlan0".to_owned(), "2001:db8::2".parse().unwrap()),
+            ("docker0".to_owned(), "172.17.0.1".parse().unwrap()),
+            ("wg0".to_owned(), "10.1.2.3".parse().unwrap()),
+        ];
+        assert_eq!(select_lan_ipv4(invalid), None);
+    }
+
+    #[test]
     fn lan_selector_prefers_private_physical_ipv4() {
         let selected = select_lan_ipv4([
             (
