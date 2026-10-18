@@ -1,5 +1,37 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P1 signed monitor placement multi-grid
+
+Four new original unit methods execute actual
+`placement::place`, `movement::clamp_position`
+and `movement::bottom_margin` across explicit
+signed origin/size, nearest-edge tie and
+i32 overflow/invalid geometry grids.
+Final test SHA `00a0a76b`:
+[Native GTK 39134995889](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995889)
+**68/68 PASS**, four names independently
+`... ok` in the complete job log.
+[Preflight 39134995892](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995892)
+Core **744 stable + 8 integration** PASS;
+formatter/frontend/Core Clippy PASS.
+Desktop Tauri required a final outcome
+check at inventory timestamp. No production
+change. [Bounded Stage1–10 and D1–D5 report](mode-b-p1-native-placement-bounds-2026-10-18.md)
+documents all positive/negative/interaction
+rows and initial red formatter repair.
+The new 4 follow the previous 9 verified
+independent CLI/consent/result/idle/gate
+tests (13 across both batches).
+
+The [22-case OS/device acceptance matrix](mode-b-p0-device-acceptance-matrix-2026-10-18.md)
+is planned, **zero of its 22 physical tests
+have been executed**. Actual Wayland
+hotplug/scaling, Linux↔Google device
+transfer, mDNS/BWU authorization and
+full current-source 10× are outstanding.
+Global Stage 12 remains **NO**.
+
+
 ## 2026-10-18 P0/P1 seven native domain guard tests + two Core gate races
 
 Seven new independently named Native GTK Rust unit tests
