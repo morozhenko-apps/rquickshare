@@ -173,7 +173,10 @@ async fn given_invalid_visibility_intents_when_submitted_then_client_rejects_loc
             assert!(!client.has_pending_settings(), "{case}");
             assert_eq!(client.read_visibility().await.unwrap(), initial, "{case}");
         }
-        assert_eq!(client.retry_visibility().await, Err(ClientError::InvalidInput));
+        assert_eq!(
+            client.retry_visibility().await,
+            Err(ClientError::InvalidInput)
+        );
         assert_eq!(client.operation_state().await.unwrap(), (0, 0));
         assert!(!format!("{canonical:?}").contains(&canonical.token));
         assert!(!format!("{canonical:?}").contains(&canonical.request));
