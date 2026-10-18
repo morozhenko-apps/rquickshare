@@ -1,0 +1,192 @@
+# MODE B P0/P1 batch: native CLI input, consent-card, result queue and idle safety
+
+Date: 2026-10-18. Current branch dev. The authoritative user
+agent.md testing SSOT is followed. **MODE B testing only**:
+write documented test cases and assertions, no production
+behavior/security changes, installed desktop/master/release untouched.
+
+## Stage 1: repository scan and scope
+
+Sources inspected before edits: docs/mode-b-inventory.md,
+docs/mode-b-completion-audit-2026-10-18.md,
+docs/current-state.md, native_desktop/src/cli.rs,
+native_desktop/src/card_policy.rs,
+native_desktop/src/panel/results.rs,
+native_desktop/src/panel/idle.rs and native GTK CI.
+Existing baseline at dev `024aac6f`:
+Core 742 stable, GTK 57, Tauri 10; full 10x and
+global all-method Stage12 still NO.
+All proposed tests use **real production functions**,
+not mocked domain logic.
+
+## Stage 2: risks/invariants
+
+1. **P0 CLI local authority**: command-line local file URIs
+   must percent-decode bytes exactly on Unix, reject
+   remote owner/userinfo/port, foreign URI scheme,
+   malformed escapes and encoded NUL. Unicode and
+   non-UTF8 filename bytes must be preserved, never
+   replaced or normalized; no partial admission after
+   an invalid later argument. Count and total-byte cap
+   must apply to whole argv, not per-item only.
+2. **P0 consent-card**: automatic display is only a
+   presentation effect; an incoming consent request
+   outranks terminal outcome notices, deterministic
+   order independent of snapshot input order. Dismissal
+   must suppress unchanged revision and not persist
+   across new consent round/epoch, cannot implicitly
+   accept user consent. A busy visible automatic
+   stale notice must hide rather than leak stale
+   information from removed peers.
+3. **P1 success results**: only a LIVE nonterminal→
+   inbound Finished transition in the same daemon epoch
+   may become a reveal pending result; duplicate
+   Finished, initial historical Finished, outbound
+   Finished, old epoch, missing or restarted source
+   cannot surface unowned capabilities. Queue insertion
+   respects observation order and teardown retains
+   only current rows.
+4. **P0 idle**: a native card never auto-dismisses
+   while daemon is draining, security lock/unknown,
+   a local source/selection is prepared or actual
+   nonterminal transfer exists. Existing time deadlines
+   are synthetic but must not authorize accidental
+   dismissal with outstanding work.
+
+No new refactor or mock permits, and no true GTK
+client/hardware delivery is implied.
+
+## Stage 3: artifact inventory & planned methods
+
+| Production file and testable branch | Level/risk | New unique methods |
+|---|---|---:|
+| cli.rs paths local percent decode; escaped non-UTF8 and NUL/query/fragment | P0 security parser | 1 |
+| cli.rs paths batch 255/256/257 cap, total 64 KiB, late invalid remote/malformed | P0 security/atomicity | 1 |
+| card_policy.rs CardPolicy::reconcile priority/order/dismiss/new consent revision | P0 consent presentation | 1 |
+| card_policy.rs CardPolicy::reconcile visible+busy old notice removed, epoch replacement | P0 stale UI/privacy | 1 |
+| panel/results.rs Results::observe live-transition duplicate, directions, reconnect/epoch | P1 result capability | 1 |
+| panel/results.rs Results::observe pending FIFO/snapshot prune/dismiss/replay | P1 result state | 1 |
+| panel/idle.rs free real view with lifecycle draining, active source/selection/transfer | P0 user work safety | 1 |
+
+**Seven** original independent Rust test methods; table-driven
+cases each count as one method. No API test-only adapter needed.
+
+## Stage 4: branch-to-test map
+
+- CLI 1: literal relative path, percent-escaped bytes
+  [0x20, 0xFF, 0x2F], non-UTF8 raw OsString,
+  uppercase/lowercase hex, escaped NUL, query/hash
+  rejected, remote/userinfo/port/encoded authority
+  rejected. Validate exact OsStr bytes.
+- CLI 2: mixed valid + invalid second/last => whole Err,
+  multi-args 255 and 256 accepted, 257 rejected,
+  total raw argv byte sum 65535/65536/65537
+  and empty/missing --; preserve order/repeats.
+- Card 1: three pending notices across two priorities;
+  incoming round 9 prioritized over outcome, deterministic
+  BTreeMap ID even if rows permute. Dismiss once => exact
+  emitted set, repeated same snapshot => None; incoming
+  round 10 reopens, new epoch resets stale dismissal.
+- Card 2: visible automatic showing A; busy rerender
+  with A removed and B ready => Hide, no unsolicited
+  Show while busy, subsequent not busy => Show B;
+  old epoch new ID resets all records.
+- Results 1: baseline historical finished is inert;
+  receiving -> inbound finished once; repeated finish
+  inert, outbound finished inert; epoch reset never
+  replays old Finished.
+- Results 2: queue order A/B, removal prunes, dismissal
+  suppresses old rows, re-arm only fresh nonterminal->
+  finished; missing rows empty pending/visible.
+- Idle 1: current healthy model plus each independent
+  source/selection/active transfer and draining vs
+  stopped lifecycle. Existing flags and timer baseline
+  stay unchanged.
+
+## Stage 5: Positive and N1–N12 map
+
+Legend P = new test, C = existing test, X = N/A for
+this pure state/path, OPEN = external hardware.
+Per-method categories overlap.
+
+| Artifact | Pos | N1 | N2 | N3 | N4 | N5 | N6 | N7 | N8 | N9 | N10 | N11 | N12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| CLI parse | P | P invalid escapes/remote | P cap±1 | X no network | P batch atomic | X pure | P invalid bytes | P local-only | P UTF8/nonUTF8 | X no async | P no other host | X | P local paths |
+| Consent card | P | P missing round | P multi pending | X UI event only | P dismissal/new revision | P busy transitions | P stale epoch | P notice ownership | X no locale/time | P dismiss | P no stale reveal | X | X |
+| Result queue | P | P invalid initial | P multi queue | X no network | P duplicate/epoch | P transitions | P old phase/epoch | P inbound only | X no locale | P dismiss/reset | P no false result | X | X |
+| Idle safety | P | P absent model | P states | X no socket | P repeated | P parallel work | P stale view | P lock/selection | P fake clock already C | P prevent hide | P no accidental dismissal | X | P active sources |
+
+N11 X: no billing features; do not generalize to repo.
+Real X11/Wayland/MIME and peer flows remain OPEN elsewhere.
+
+## Stage 6: interaction map
+
+CLI URI [local, remote, malformed] × encoding
+[ASCII, UTF8, nonUTF8, NUL] × position [first, late]
+× count [1/255/256/257] × total bytes
+[65535/65536/65537].
+Consent [AwaitingConsent, Finished, Failed] ×
+[2 peers, reversed order] × revision [old/new] ×
+epoch [same/new] × [busy, visible, automatic].
+Results [Inbound/Outbound] ×
+[Queued/Receiving/Finished/Failed] ×
+[old/new epoch] × [duplicate/new/snapshot removed].
+Idle [healthy, draining, locked, active source,
+selection, active transfer, absent view].
+Meaningful testable conditions assigned explicitly.
+
+## Stage 7: estimates
+
+Seven new methods distributed 2/2/2/1 across
+four production files; no fake coverage percentages.
+Scoped category attribution: Positive 7; N1 5;
+N2 6; N3 0 X; N4 7; N5 5;
+N6 6; N7 7; N8 2; N9 5;
+N10 7; N11 0 X; N12 3.
+These are planned overlapping method labels, not
+independent unique test totals or measured branches.
+
+## Stage 8: per-production-file coverage map
+
+- native_desktop/src/cli.rs: `paths` percent
+  decoder/error classes and whole-argv authority
+  contract. Real DesktopClient import and device
+  delivery remain covered separately or OPEN.
+- native_desktop/src/card_policy.rs: `reconcile`,
+  `dismiss` and `manual` bounded state replay.
+  Real desktop rendering/daemon consent via app
+  callbacks is OPEN.
+- native_desktop/src/panel/results.rs:
+  `Results::observe`, `dismiss`, `hide_rows`
+  state machine. Real reveal/portal file authority
+  and app crash/restart remain OPEN.
+- native_desktop/src/panel/idle.rs:
+  `free` state branches, existing `deadline`
+  tests. Real GLib timer/Wayland focus remains OPEN.
+Other production-file branch maps continue under
+global Stage 8 and Stage 12 = NO.
+
+## Stage 10: mutation review plan
+
+Permit foreign authority/scheme, lossy filename
+conversion, percent NUL or late-invalid partial
+result; relax total raw byte/count limit; change
+consent priority/order, replay dismissed notices,
+keep stale `shown` on busy target loss; reveal
+initial historical Finished or outbound completion,
+double queue Finished, leak removed results; hide
+a UI when work is still pending. Each proposed
+mutation has exact assertions. Manual review,
+not claim of executed mutation engine.
+
+## Execution and rollback
+
+1. [x] Stages 1–8 and mutation plan documented BEFORE code.
+2. [ ] Add 7 independent methods; no production changes.
+3. [ ] Run same-source native GTK, Preflight Core/format/frontend/
+   Clippy/Tauri; check **actual logs** and method names.
+4. [ ] Record D1–D5 and observed category matrix; update
+   global inventory/current state.
+5. [ ] Strict final-source full suite 10x and physical
+   OS/device acceptance remain OPEN; all Stage12 NO.
+Rollback only test/docs; do not touch release or master.
