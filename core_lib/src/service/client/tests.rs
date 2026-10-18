@@ -6,6 +6,8 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 use super::*;
+mod visibility_forged;
+
 use crate::service::bus::tests::{Harness, PrivateBus};
 use crate::service::bus::SelectionBus;
 use crate::service::{Coordinator, Limits, ResourceUsage};
