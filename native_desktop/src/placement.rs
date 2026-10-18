@@ -127,6 +127,132 @@ mod tests {
         }
     }
     #[test]
+    fn given_signed_monitor_origins_and_panel_dimensions_when_placed_then_every_margin_stays_within_logical_monitor(
+    ) {
+        // Arrange: each activation coordinate belongs to the selected
+        // monitor in logical pixels. Reconstruct the absolute card rectangle
+        // from its returned edge and margin rather than trusting a label.
+        for (width, height) in [(50, 30), (360, 250), (1920, 1080)] {
+            for (origin_x, origin_y) in [
+                (0, 0),
+                (-1300, 400),
+                (i32::MAX - 2000, i32::MIN + 1000),
+            ] {
+                let monitor = Rect {
+                    x: origin_x,
+                    y: origin_y,
+                    width,
+                    height,
+                };
+                for size in [
+                    (1, 1),
+                    (20, 15),
+                    (width / 2, height / 2),
+                    (width, height),
+                ] {
+                    for x in [0, 1, width / 2, width - 2, width - 1] {
+                        for y in [0, 1, height / 2, height - 2, height - 1] {
+                            let result =
+                                place(monitor, (origin_x + x, origin_y + y), size).unwrap();
+                            let left = if result.horizontal == Edge::Left {
+                                result.horizontal_margin
+                            } else {
+                                width - size.0 - result.horizontal_margin
+                            };
+                            let top = if result.vertical == Edge::Top {
+                                result.vertical_margin
+                            } else {
+                                height - size.1 - result.vertical_margin
+                            };
+                            assert!(
+                                left >= 0
+                                    && top >= 0
+                                    && left + size.0 <= width
+                                    && top + size.1 <= height,
+                                "monitor={monitor:?}, point=({x},{y}), card={size:?}, placement={result:?}"
+                            );
+                            let distances = [
+                                (x, Edge::Left),
+                                (width - 1 - x, Edge::Right),
+                                (y, Edge::Top),
+                                (height - 1 - y, Edge::Bottom),
+                            ];
+                            let nearest =
+                                distances.into_iter().min_by_key(|(distance, _)| *distance).unwrap().1;
+                            match nearest {
+                                Edge::Left => assert_eq!(left, 0),
+                                Edge::Right => assert_eq!(left + size.0, width),
+                                Edge::Top => assert_eq!(top, 0),
+                                Edge::Bottom => assert_eq!(top + size.1, height),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn given_equal_edge_distances_and_signed_coordinate_extremes_when_placed_then_ties_are_stable_and_offscreen_is_rejected(
+    ) {
+        let monitor = Rect {
+            x: -200,
+            y: 300,
+            width: 101,
+            height: 101,
+        };
+        // Arrange/Act/Assert: when distances tie, the documented
+        // [left, right, top, bottom] comparison order is deterministic.
+        for (x, y, pinned) in [
+            (0, 0, Edge::Left),
+            (100, 0, Edge::Right),
+            (0, 100, Edge::Left),
+            (100, 100, Edge::Right),
+            (50, 0, Edge::Top),
+            (50, 100, Edge::Bottom),
+            (1, 1, Edge::Left),
+            (99, 99, Edge::Right),
+        ] {
+            let result = place(monitor, (monitor.x + x, monitor.y + y), (20, 30)).unwrap();
+            let left = if result.horizontal == Edge::Left {
+                result.horizontal_margin
+            } else {
+                101 - 20 - result.horizontal_margin
+            };
+            let top = if result.vertical == Edge::Top {
+                result.vertical_margin
+            } else {
+                101 - 30 - result.vertical_margin
+            };
+            match pinned {
+                Edge::Left => assert_eq!(left, 0, "{x},{y}"),
+                Edge::Right => assert_eq!(left, 81, "{x},{y}"),
+                Edge::Top => assert_eq!(top, 0, "{x},{y}"),
+                Edge::Bottom => assert_eq!(top, 71, "{x},{y}"),
+            }
+        }
+
+        let extreme = Rect {
+            x: i32::MAX - 10,
+            y: i32::MIN,
+            width: 11,
+            height: 11,
+        };
+        let legal = place(extreme, (i32::MAX, i32::MIN + 10), (11, 11)).unwrap();
+        assert_eq!((legal.horizontal_margin, legal.vertical_margin), (0, 0));
+        for point in [
+            (i32::MIN, i32::MIN),
+            (i32::MAX - 11, i32::MIN),
+            (i32::MAX, i32::MAX),
+        ] {
+            assert_eq!(place(extreme, point, (1, 1)), None);
+        }
+        for size in [(0, 1), (1, 0), (-1, 10), (12, 11), (11, 12)] {
+            assert_eq!(place(extreme, (i32::MAX, i32::MIN), size), None);
+        }
+    }
+
+    #[test]
     fn given_invalid_sizes_points_or_extreme_coordinates_when_placed_then_no_overflow_or_guessed_output_is_used(
     ) {
         // Arrange / Act / Assert
