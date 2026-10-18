@@ -31,8 +31,10 @@ rustfmt-only failure is recorded.
 [Preflight 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901)
 Core **740/740 stable** + **4+4**
 integrations, frontend/format/Core
-Clippy SUCCESS; desktop job pending
-at initial inventory checkpoint.
+Clippy SUCCESS. Desktop Tauri Rust
+**10/10 PASS** from its job log;
+the full quick Preflight completed
+**5/5 SUCCESS** on identical test source.
 
 External lost clipboard ownership,
 full GTK-to-daemon send and actual
