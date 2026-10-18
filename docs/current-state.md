@@ -1,5 +1,50 @@
 # Current implementation and continuation state
 
+## MODE B P0 actual GDK async clipboard and stale preparation — 2026-10-18
+
+The existing **real Native GTK widget smoke** in
+`native_desktop/src/panel/outbound.rs` now executes
+two test-only fixture functions. Real GTK4
+`gdk::ContentProvider::for_bytes` serves a
+freedesktop URI-list, GNOME copy/cut,
+Unicode and hostile MIME/URI bytes on the
+isolated test display to the unchanged
+`clipboard_paths` async read/EOF/close flow.
+A second fixture exercises real pending
+`Panel::wait_selection`, `close_input` token
+cancellation, owned GLib task abort,
+new generation identity, stale callback
+rejection and current `None` completion.
+No fabricated `Selection` or domain send.
+
+Documentation-first
+[Stage 1–10, N1–N12, D1–D5](mode-b-p0-native-async-clipboard-2026-10-18.md)
+records exact test-only SHA `1501fa1e`
+and initial red formatting/repair.
+[Native GTK 39128370942](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370942)
+**SUCCESS**, complete job log **57/57** with
+real panel smoke run (no added independent
+Rust test-method count). Same-source
+[Preflight 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901)
+Core **740/740 stable + 4/4 + 4/4**
+verified from logs, Core Clippy, format
+and frontend SUCCESS; desktop Tauri
+job initially pending final check.
+
+Unverified P0 remains **actual**
+Wayland clipboard ownership loss
+mid-read, GTK→daemon→device send with
+authenticated `Some(Selection)`, physical
+Android/Windows/BlueZ, authenticated BWU
+[Issue #8](https://github.com/morozhenko-apps/rquickshare/issues/8),
+mDNS event/cache SDK
+[Issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9),
+full current-source ten-pass and all
+Stage 12 closure requirements.
+Only `#[cfg(test)]` source and docs changed;
+`master` and installed package untouched.
+
+
 ## MODE B P0 Native GTK clipboard URIs and recipient safety — 2026-10-18
 
 Two new original parser methods in
