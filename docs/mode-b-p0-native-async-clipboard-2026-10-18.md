@@ -191,9 +191,9 @@ not executed mutation engine.
 1. [x] Stage 1–8 scanned and documented BEFORE code.
 2. [x] Implement both test-only fixture helpers
    in `outbound.rs` and invoke from actual GTK smoke.
-3. [ ] Exact-source Native GTK and Preflight:
+3. [x] Exact-source Native GTK and Preflight:
    check real failures and assertion names.
-4. [ ] Update D2 actual, mutation review,
+4. [x] Update D2 actual, mutation review,
    current-state and MODE B inventory.
 5. [ ] Final complete 10x Stage 11 and
    global all-method Stage 12 remain
@@ -226,3 +226,89 @@ and documentation; no product change.
   until actual logs show the integrated widget
   method PASS. Global Stage 11 full 10x and
   Stage 12 remain NO.
+
+## D1–D5 actual scoped evidence and limitations
+
+**D1 — exact-source tests.** Code SHA
+`1501fa1eed09bfb349ec48fcab038d15bba7a83f`
+ran in [Native GTK 39128370942](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370942),
+job `117678215874`, **SUCCESS**. Read the
+actual full job log: **57 passed / 0 failed /
+0 ignored / 0 filtered**; the existing
+`given_actual_builder_and_untrusted_details...`
+real GTK smoke executes both new helper fixture
+groups. This test count remains **57**, not 59:
+the two private fixtures are not independent
+Rust test methods. No fake selection or
+domain dispatch was injected. Native lint and
+source formatting also passed.
+
+**D2 — actual overlapping fixture-category coverage.**
+The two test-only fixture functions were run
+inside that real-panel smoke. Counts are fixture
+groups with evidence of their internal rows,
+NOT independent test method counts.
+
+| Category | Fixture groups | Scoped verified behavior |
+|---|---:|---|
+| Positive | 2 | PASS: GDK URI-list and GNOME copy/cut, terminal None handled |
+| N1 validation | 2 | PASS: invalid second URI, unsupported MIME, unsuccessful selection |
+| N2 bounds | 1 | PASS: URI_BYTES+1 delivered by real GDK provider rejected |
+| N3 external input error | 1 | PASS: unsupported clipboard provider |
+| N4 idempotency/retry | 2 | PASS: no partial result; close resets old generation |
+| N5 concurrency | 1 | PASS: async pending task cancelled before stale completion |
+| N6 corrupted data | 1 | PASS: malformed percent escape and late remote URI |
+| N7 security/authority | 2 | PASS: local-only files and stale-generation guard |
+| N8 locale/Unicode | 1 | PASS: UTF-8 filenames through GDK byte stream |
+| N9 interruption | 1 | PASS: actual token cancellation/task abort |
+| N10 privacy | 2 | PASS: no foreign URI or fake prepared content accepted |
+| N11 entitlements | 0 | N/A: no purchase/advertising logic |
+| N12 storage/input | 1 | PASS: bounded local URI bytes, no FS writes |
+
+**D3 — exact code files.** Only
+`native_desktop/src/panel/outbound.rs` within
+the preexisting `#[cfg(test)]` section
+and its `verify` smoke-call site changed;
+`f9551a28` added both test fixture methods
+and `1501fa1e` applied rustfmt without
+weakening assertions. No production
+branch or installed package was modified.
+[Native GTK 39128231753](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128231753)
+was RED at the formatter before executing
+tests and remains historical evidence, not
+counted toward completed runs.
+
+**D4 — testability.** No production seam
+needed for these specific GDK MIME bytes,
+`clipboard_paths`, or GTK completion/task
+abort. Actual loss of Wayland clipboard
+ownership while reading and the
+daemon-side `Some(Selection)` send path
+require additional external event/control
+boundaries and physical platform testing;
+not claimed here. Actual file-descriptor
+close of the `GInputStream` is performed
+by the production method in this suite,
+but not independently observed by a
+stream spy; this remains a mutation gap.
+
+**D5 — assertion-sensitive mutations.**
+Removing the async read, accepting malformed
+URI after valid first item, admitting
+unsupported MIME, lifting the byte limit,
+ignoring task cancellation/generation,
+retaining `input_active`/strip_target,
+or reporting a successful `None` reply
+would fail specific assertions. No executed
+mutation engine or 10 consecutive full
+runs. Global Stage 11 and Stage 12 **NO**.
+
+**General quick CI checkpoint.**
+[Preflight 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901)
+at exact source `1501fa1e`: stable Core,
+Core Clippy, frontend and Rust formatter
+jobs SUCCESS at first inspection.
+The desktop Tauri Clippy/unit job was
+still running then. Do not mark the
+entire quick Preflight 5/5 until its
+actual final result is checked.
