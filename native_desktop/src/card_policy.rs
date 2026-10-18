@@ -444,7 +444,10 @@ mod tests {
             "b-consent",
             Phase::AwaitingConsent,
         );
-        assert_eq!((selected.epoch, selected.round, selected.revision), (17, Some(9), 9));
+        assert_eq!(
+            (selected.epoch, selected.round, selected.revision),
+            (17, Some(9), 9)
+        );
         assert_eq!(policy.records.len(), 3);
         assert!(matches!(policy.reconcile(17, &first, safe()), Effect::None));
 
@@ -454,7 +457,10 @@ mod tests {
             row("z-consent", Phase::AwaitingConsent, Some(9)),
             pending_row("a-outcome", Phase::Finished),
         ];
-        assert!(matches!(policy.reconcile(17, &reversed, safe()), Effect::None));
+        assert!(matches!(
+            policy.reconcile(17, &reversed, safe()),
+            Effect::None
+        ));
         let dismissed = policy.dismiss();
         assert_eq!(dismissed.len(), 3);
         assert!(dismissed.iter().any(|notice| notice == &selected));
@@ -540,7 +546,11 @@ mod tests {
         ));
         assert!(policy.records.is_empty());
         shown(
-            policy.reconcile(5, &[row("current", Phase::AwaitingConsent, Some(2))], safe()),
+            policy.reconcile(
+                5,
+                &[row("current", Phase::AwaitingConsent, Some(2))],
+                safe(),
+            ),
             "current",
             Phase::AwaitingConsent,
         );
