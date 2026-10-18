@@ -332,7 +332,10 @@ async fn given_directory_contents_portal_response_variants_when_received_then_on
             assert!(admitted.try_recv().is_ok());
         }
         if matches!(code, 3 | 92 | 93) && version >= 3 {
-            closed.recv().await.expect("missing owned pending request Close");
+            closed
+                .recv()
+                .await
+                .expect("missing owned pending request Close");
             assert!(closed.try_recv().is_err(), "duplicate portal Close");
         } else {
             assert!(closed.try_recv().is_err(), "unexpected portal Close");
@@ -372,11 +375,17 @@ async fn given_inflight_directory_contents_portal_when_cancelled_then_request_cl
     // Assert: cancellation is terminal, and the exact owned portal
     // request is closed once without exposing a fake success.
     assert_eq!(operation.await, Err(Error::Cancelled));
-    closed.recv().await.expect("cancelled request did not Close");
+    closed
+        .recv()
+        .await
+        .expect("cancelled request did not Close");
     assert!(closed.try_recv().is_err(), "duplicate cancelled Close");
     assert!(admitted.try_recv().is_err(), "duplicate OpenFile admission");
     drop(file);
-    assert!(weak_file.upgrade().is_none(), "file descriptor owner leaked");
+    assert!(
+        weak_file.upgrade().is_none(),
+        "file descriptor owner leaked"
+    );
     server.close().await.unwrap();
 }
 
