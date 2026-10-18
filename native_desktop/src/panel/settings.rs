@@ -1096,6 +1096,91 @@ mod tests {
         }
     }
     #[test]
+    fn given_acknowledgement_gate_cross_product_when_confirmed_then_only_exact_saved_live_state_passes(
+    ) {
+        // Arrange / Act / Assert: all 2^9 independent gate dimensions.
+        for mask in 0u16..512 {
+            let mut view = SettingsView::unavailable(1);
+            view.available = mask & 1 != 0;
+            view.source = if mask & 2 != 0 { 2 } else { 1 };
+            view.revision = if mask & 4 != 0 { 3 } else { 0 };
+            view.visibility_recovered = mask & 8 == 0;
+            view.configured = mask & 16 != 0;
+            view.running = mask & 32 != 0;
+            view.error = if mask & 64 != 0 { 0 } else { 3 };
+            view.applied_live_revision = if mask & 128 != 0 { view.revision } else { 7 };
+            view.restart_required = mask & 256 == 0;
+            view.name_status = 2;
+            assert_eq!(confirmation_applied(&view), mask == 511, "mask={mask}");
+        }
+        let mut valid = SettingsView::unavailable(1);
+        valid.available = true;
+        valid.source = 2;
+        valid.revision = 3;
+        valid.applied_live_revision = 3;
+        valid.configured = true;
+        valid.running = true;
+        for (name_status, expected) in [(0, true), (1, false), (2, true), (3, false), (4, true), (255, true)] {
+            valid.name_status = name_status;
+            assert_eq!(confirmation_applied(&valid), expected, "name={name_status}");
+        }
+    }
+
+    #[test]
+    fn given_conflicting_settings_statuses_when_presented_then_failure_precedence_never_claims_success(
+    ) {
+        // Arrange: a fully applied baseline, then independent precedence violations.
+        let mut valid = SettingsView::unavailable(1);
+        valid.available = true;
+        valid.source = 2;
+        valid.revision = 4;
+        valid.applied_live_revision = 4;
+        valid.configured = true;
+        valid.running = true;
+        assert_eq!(status(&valid), "Saved and applied.");
+        for error in 1u8..=4 {
+            for name_status in [0u8, 1, 2, 3, 4] {
+                let mut broken = valid.clone();
+                broken.error = error;
+                broken.name_status = name_status;
+                assert_ne!(status(&broken), "Saved and applied.");
+                assert!(!confirmation_applied(&broken));
+            }
+        }
+        for source in [0u8, 1] {
+            let mut migrated = valid.clone();
+            migrated.source = source;
+            assert_ne!(status(&migrated), "Saved and applied.");
+            assert!(!confirmation_applied(&migrated));
+        }
+        let mut unavailable = valid.clone();
+        unavailable.available = false;
+        unavailable.error = 4;
+        assert_eq!(status(&unavailable), "Sharing settings are unavailable.");
+        let mut recovered = valid.clone();
+        recovered.visibility_recovered = true;
+        recovered.running = false;
+        assert!(status(&recovered).contains("visibility is invalid"));
+        assert!(!confirmation_applied(&recovered));
+    }
+
+    #[test]
+    fn given_port_format_boundary_matrix_when_parsed_then_only_valid_decimal_u16_survives(
+    ) {
+        // Arrange / Act / Assert: overflow, formatting and Unicode whitespace.
+        for number in [0u16, 1, 9, 10, 255, 256, 1024, 65534, 65535] {
+            let input = format!("  {number:06}  ");
+            assert_eq!(parse_port(&input), Ok(i32::from(number)));
+        }
+        for invalid in ["65536", "9999999999999999999999", "0x10", "+42", "-0", "42.0", "1_000", "4 2", "４２", "²", "NaN", "Infinity"] {
+            assert_eq!(parse_port(invalid), Err(()), "{invalid:?}");
+        }
+        for blank in ["", " ", "\\t", "\\n", "\\u{2003}"] {
+            assert_eq!(parse_port(blank), Ok(-1), "{blank:?}");
+        }
+    }
+
+    #[test]
     fn given_port_input_when_parsed_then_only_automatic_or_u16_values_are_accepted() {
         // Arrange / Act / Assert
         for (input, expected) in [
