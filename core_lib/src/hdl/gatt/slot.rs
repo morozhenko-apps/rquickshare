@@ -184,8 +184,8 @@ mod tests {
     }
 
     #[test]
-    fn given_full_coherent_slot_cache_when_existing_owner_restarts_then_other_peer_leases_survive(
-    ) {
+    fn given_full_coherent_slot_cache_when_existing_owner_restarts_then_other_peer_leases_survive()
+    {
         // Arrange: every lease initially pins the old advertisement.
         let mut slot = SlotValue::new(b"previous".to_vec(), true);
         for index in 0..READ_LIMIT {
@@ -202,7 +202,11 @@ mod tests {
 
         // Assert: all other owners retain the original epoch.
         for index in 0..READ_LIMIT {
-            let expected = if index == 7 { &b"urrent"[..] } else { &b"revious"[..] };
+            let expected = if index == 7 {
+                &b"urrent"[..]
+            } else {
+                &b"revious"[..]
+            };
             assert_eq!(slot.read(peer(index as u8), 1).unwrap(), expected);
         }
         assert_eq!(slot.reads.len(), READ_LIMIT);
