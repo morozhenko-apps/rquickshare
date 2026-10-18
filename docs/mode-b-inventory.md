@@ -30,13 +30,25 @@ or `master` changes. Initial red native
 formatter and consumed `Surface`
 fixture failures were fixed as test-only
 changes without changing expected behavior.
-Latest candidate code `4a29bc02` was
-sent to [Preflight 39132422424](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422424)
-and [Native GTK 39132422435](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422435).
-**Pending actual logs:** do not mark
-a method PASS from the workflow trigger
-or infer a coverage-percentage increase
-from nine method names. Full strict 10x
+Final exact test source `66ddf1fc`:
+[Preflight 39133124486](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124486)
+**5/5 SUCCESS**: Core **744/744 stable**
+and integrations **4+4**, Tauri
+**10/10**, frontend/Clippy/format PASS.
+[Native GTK 39133124223](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124223)
+**SUCCESS, 64/64** (previously 57).
+All **nine** original method names
+individually confirmed `... ok`
+from complete Core and GTK logs.
+Two initial red CardPolicy assertions
+were invalid fixture expectations
+for the documented visible/automatic
+presentation state, corrected in
+test-only code after actual job
+failure. No product changes.
+These are test results, **not**
+a newly instrumented branch/line
+coverage percentage. Full strict 10x
 and complete Stage 12 still NO, as are
 physical Google/BlueZ/Wayland tests
 and Issues #8 and #9.
