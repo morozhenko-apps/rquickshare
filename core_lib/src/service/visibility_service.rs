@@ -102,8 +102,7 @@ mod tests {
                                 let valid_timer = remaining_ms <= 60_000
                                     && (remaining_ms == 0 || (running && mode == 2));
                                 let valid_stopped = running || mode == 1;
-                                let valid_unavailable =
-                                    available || (!running && revision == 0);
+                                let valid_unavailable = available || (!running && revision == 0);
                                 let expected = valid_identity
                                     && valid_mode
                                     && valid_timer
