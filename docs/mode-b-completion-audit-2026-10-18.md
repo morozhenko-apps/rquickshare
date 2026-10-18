@@ -5,6 +5,17 @@
 of actual evidence, NOT a feature, refactor or relaxation of
 coverage criteria.
 
+## Latest additive client/D-Bus evidence (2026-10-18, post-baseline)
+
+This section updates the **current-source status** without rewriting the historical instrumented baseline recorded below. Latest green **test-code** source is `85faca64`; later `dev` commits through `40dc61c2` are documentation-only.
+
+- [Preflight 39174986191](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986191): **5/5 SUCCESS**, Core library **767/767** stable cases, eight separately filtered risk-sensitive probes, Tauri **10/10**, frontend, formatter and both Clippy jobs green.
+- [Native GTK 39174986234](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986234): **SUCCESS**, **80/80**.
+- [Authenticated forged Settings2/Visibility2 full branch/N1–N12 scoped plan](mode-b-p0-settings-client-adversarial-2026-10-18.md): two new original test methods, **18** D-Bus-encodable invalid typed fields crossed with `Read`/`Reload`/`Set` (**54** negative wire calls) plus three NUL-bearing values explicitly invalid under the production validator but impossible inside D-Bus STRING. The complete failed-run/root-cause/resolution audit is in the linked document.
+- The earlier [forged Visibility2 Read/Set suite](mode-b-p0-forged-visibility-dbus-replies-2026-10-18.md) and [local client / daemon owner replacement suite](mode-b-p0-visibility-client-owner-change-2026-10-18.md) passed independently on their documented source revisions.
+- The **strict full-suite ×10 run** and current-source instrumented per-file coverage are **NOT verified at `85faca64`**. The previous all-green release-gate run and coverage percentages below are historical, **not** a present-source completion gate. `.github/workflows/mode-b.yml` is `workflow_call`-only from the controlled release process; do not bypass the release gate merely to improve a testing status. `coverage.yml` and `native-gtk-coverage.yml` have separate manual diagnostic triggers, but no current diagnostic run is claimed.
+- Global Stage 12 still **NO**: hardware BLE/BlueZ/Android/mDNS, exact exhaustive branch mapping across all production files, automated mutation review, current full ×10 and OS/UI acceptance remain open.
+
 ## Binding SSOT and interpretation
 
 The user-supplied `agent.md` (UNIVERSAL FEATURE / REFACTOR /
