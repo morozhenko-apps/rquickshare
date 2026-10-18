@@ -516,14 +516,22 @@ mod tests {
         // Act: a new incoming request must not replace the visible card
         // while busy, and the old removed owner's identity cannot remain.
         assert!(matches!(
-            policy.reconcile(4, &[row("current", Phase::AwaitingConsent, Some(2))], busy()),
+            policy.reconcile(
+                4,
+                &[row("current", Phase::AwaitingConsent, Some(2))],
+                busy()
+            ),
             Effect::Hide
         ));
         assert!(policy.shown.is_none());
         assert!(!policy.records.contains_key("former"));
         assert!(policy.records.contains_key("current"));
         assert!(matches!(
-            policy.reconcile(4, &[row("current", Phase::AwaitingConsent, Some(2))], busy()),
+            policy.reconcile(
+                4,
+                &[row("current", Phase::AwaitingConsent, Some(2))],
+                busy()
+            ),
             Effect::None
         ));
 
