@@ -88,17 +88,27 @@ mod tests {
         }
     }
     #[test]
-    fn given_all_direction_phase_triples_when_compact_card_selected_then_consent_has_absolute_priority() {
+    fn given_all_direction_phase_triples_when_compact_card_selected_then_consent_has_absolute_priority(
+    ) {
         // Arrange: exercise every ordered triple of the public direction/phase states.
         let phases = [
-            Phase::Queued, Phase::Active, Phase::AwaitingConsent,
-            Phase::Receiving, Phase::Sending, Phase::CancelRequested,
-            Phase::Finished, Phase::Rejected, Phase::Cancelled,
-            Phase::Failed, Phase::Disconnected,
+            Phase::Queued,
+            Phase::Active,
+            Phase::AwaitingConsent,
+            Phase::Receiving,
+            Phase::Sending,
+            Phase::CancelRequested,
+            Phase::Finished,
+            Phase::Rejected,
+            Phase::Cancelled,
+            Phase::Failed,
+            Phase::Disconnected,
         ];
         let choices: Vec<_> = phases
             .into_iter()
-            .flat_map(|phase| [Direction::Inbound, Direction::Outbound].map(|direction| (direction, phase)))
+            .flat_map(|phase| {
+                [Direction::Inbound, Direction::Outbound].map(|direction| (direction, phase))
+            })
             .collect();
         assert_eq!(choices.len(), 22);
 
@@ -123,7 +133,8 @@ mod tests {
     }
 
     #[test]
-    fn given_terminal_prefix_and_duplicate_active_transfers_when_later_consent_arrives_then_earliest_consent_wins() {
+    fn given_terminal_prefix_and_duplicate_active_transfers_when_later_consent_arrives_then_earliest_consent_wins(
+    ) {
         // Arrange / Act / Assert: priority must not be lost to early terminal
         // states, repeated active items, or a later duplicate consent entry.
         let finished = (Direction::Inbound, Phase::Finished);
@@ -131,9 +142,18 @@ mod tests {
         let consent = (Direction::Inbound, Phase::AwaitingConsent);
         assert_eq!(compact_index([]), None);
         assert_eq!(compact_index([finished; 128]), None);
-        assert_eq!(compact_index([finished, sending, sending, finished]), Some(1));
-        assert_eq!(compact_index([finished, sending, consent, consent, sending]), Some(2));
-        assert_eq!(compact_index([consent, finished, consent, sending]), Some(0));
+        assert_eq!(
+            compact_index([finished, sending, sending, finished]),
+            Some(1)
+        );
+        assert_eq!(
+            compact_index([finished, sending, consent, consent, sending]),
+            Some(2)
+        );
+        assert_eq!(
+            compact_index([consent, finished, consent, sending]),
+            Some(0)
+        );
         assert_eq!(compact_index([finished, finished, consent]), Some(2));
         assert_eq!(
             compact_index(std::iter::repeat_n(finished, 128).chain([sending, consent])),
@@ -150,13 +170,22 @@ mod tests {
             assert_eq!(Drawer::parse(value), Some(expected));
         }
         for invalid in [
-            "", "Compact", "FULL", " compact", "full ", "full\\n",
-            "compact\\0", "full\\0", "fuller", "compactness",
-            "fúll", "ｆｕｌｌ", "full/compact",
+            "",
+            "Compact",
+            "FULL",
+            " compact",
+            "full ",
+            "full\\n",
+            "compact\\0",
+            "full\\0",
+            "fuller",
+            "compactness",
+            "fúll",
+            "ｆｕｌｌ",
+            "full/compact",
         ] {
             assert_eq!(Drawer::parse(invalid), None, "accepted {invalid:?}");
         }
         assert_eq!(Drawer::parse(&"x".repeat(4096)), None);
     }
-
 }
