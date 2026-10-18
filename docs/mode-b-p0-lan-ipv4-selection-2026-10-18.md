@@ -30,3 +30,11 @@ Known additional policy question: which special non-RFC1918 IPv4 blocks (unspeci
 
 ## Stage 11–12 gate
 After implementation, verify exact-source Core Rust tests, rustfmt, Clippy, Native GTK; keep strict ten consecutive complete runs, current-source coverage instrumentation, live mDNS discovery and all-repository Stage 12 OPEN. Rollback: only three tests and this document. Test-only commits, `dev` branch, no change to production, releases or `master`.
+
+## Implementation and CI checkpoint
+- Stage 1–8 documented first at `bf551826`.
+- Stage 9: three new table-driven tests implemented in `core_lib/src/utils.rs` at `7bb5a4c1`: six RFC1918 candidates; four route-order/fallback combinations plus empty input; nine named tunnel/virtual device prefixes with physical public fallback and a mixed all-ineligible candidate set.
+- Exact checks include selected IPv4 octets, not just presence or non-null status. No OS adapter or live socket is instantiated.
+- First source run found `rustfmt` whitespace-only differences in two vector literals and one iterator mapping; these were corrected at `23f1de8b`, with no changed assertions.
+- Verify exact-source [Preflight 39165451726](https://github.com/morozhenko-apps/rquickshare/actions/runs/39165451726) and [Native GTK 39165451625](https://github.com/morozhenko-apps/rquickshare/actions/runs/39165451625) before marking this package green. Neither is claimed as passed here.
+- Hardware/mDNS discovery integration, special-address policy decision, mutation-engine execution, ten successive full CI runs and repository-wide MODE B Stage 12 remain OPEN.
