@@ -28,9 +28,10 @@ Core log **742/742 stable, 4+4
 integrations**, both new methods
 individually `... ok`; format,
 frontend and Core Clippy SUCCESS.
-Desktop Preflight job at first audit
-checkpoint needed separate final
-confirmation. Independent
+Desktop Tauri Clippy/unit **10/10**
+confirmed in real job log; all five
+same-source Preflight jobs finished
+**5/5 SUCCESS**. Independent
 [Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
 **SUCCESS, 57/57** native tests.
 The initial formatter-only red state
