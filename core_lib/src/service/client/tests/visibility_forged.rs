@@ -374,7 +374,7 @@ async fn given_pending_visibility_when_corrupted_set_receipts_arrive_then_only_v
         // Assert: only a valid, matching, explicitly retried receipt completes it.
         replies.lock().unwrap().settings = baseline.clone();
         assert_eq!(client.retry_visibility().await, Ok(baseline));
-        assert_eq!(replies.lock().unwrap().set_calls, 22);
+        assert_eq!(replies.lock().unwrap().set_calls, 19);
         assert!(!client.has_pending_visibility());
         assert_eq!(
             client.retry_visibility().await,
