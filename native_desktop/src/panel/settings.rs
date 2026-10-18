@@ -1120,7 +1120,14 @@ mod tests {
         valid.applied_live_revision = 3;
         valid.configured = true;
         valid.running = true;
-        for (name_status, expected) in [(0, true), (1, false), (2, true), (3, false), (4, true), (255, true)] {
+        for (name_status, expected) in [
+            (0, true),
+            (1, false),
+            (2, true),
+            (3, false),
+            (4, true),
+            (255, true),
+        ] {
             valid.name_status = name_status;
             assert_eq!(confirmation_applied(&valid), expected, "name={name_status}");
         }
@@ -1165,14 +1172,26 @@ mod tests {
     }
 
     #[test]
-    fn given_port_format_boundary_matrix_when_parsed_then_only_valid_decimal_u16_survives(
-    ) {
+    fn given_port_format_boundary_matrix_when_parsed_then_only_valid_decimal_u16_survives() {
         // Arrange / Act / Assert: overflow, formatting and Unicode whitespace.
         for number in [0u16, 1, 9, 10, 255, 256, 1024, 65534, 65535] {
             let input = format!("  {number:06}  ");
             assert_eq!(parse_port(&input), Ok(i32::from(number)));
         }
-        for invalid in ["65536", "9999999999999999999999", "0x10", "+42", "-0", "42.0", "1_000", "4 2", "４２", "²", "NaN", "Infinity"] {
+        for invalid in [
+            "65536",
+            "9999999999999999999999",
+            "0x10",
+            "+42",
+            "-0",
+            "42.0",
+            "1_000",
+            "4 2",
+            "４２",
+            "²",
+            "NaN",
+            "Infinity",
+        ] {
             assert_eq!(parse_port(invalid), Err(()), "{invalid:?}");
         }
         for blank in ["", " ", "\\t", "\\n", "\\u{2003}"] {
