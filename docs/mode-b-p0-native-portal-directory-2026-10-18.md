@@ -155,7 +155,7 @@ executed mutation framework.
 1. [x] Record scan, risks, full scoped inventory,
    branches, N1–N12, interaction/count/production map
    **before editing any test**.
-2. [ ] Implement all 3 planned methods in the
+2. [x] Implement all 3 planned methods in the
    existing private D-Bus contract tests.
 3. [ ] Check Rust format, native GTK strict job,
    CI exact SHA and actual 3 new method names.
@@ -167,3 +167,20 @@ executed mutation framework.
 
 Rollback only this doc and the test source commit.
 No public APIs, runtime behavior or installation change.
+
+## Stage 9 implementation checkpoint
+
+Three new original Rust test methods committed test-only
+in `ceeefe21e4f2f33e70b4a1fbfe11cdc703fb2bc4`:
+`O_PATH` directory safety vs a true read-only directory,
+actual `OpenFile` through seven v2/v3 status/path/body
+branches, and cancel-after-admission of a private
+D-Bus request, including exact terminal event, single
+Request.Close and FD-owner release. Production source,
+portal code, real system bus and panel UI untouched.
+
+Corresponding CI:
+[Native GTK 39123998214](https://github.com/morozhenko-apps/rquickshare/actions/runs/39123998214)
+and [Preflight 39123998176](https://github.com/morozhenko-apps/rquickshare/actions/runs/39123998176).
+Status must be verified against actual jobs/logs; no
+PASS or D2 actual counts inferred from a pending run.
