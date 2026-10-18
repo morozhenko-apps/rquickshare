@@ -133,14 +133,14 @@ mod tests {
         let next = [0x55, 0x66, 0x77, 0x88];
         for consumed in 1..4 {
             let mut header = FrameHeader::default();
-            let mut interrupted = std::io::Cursor::new(first[..consumed].to_vec()).chain(FailedRead);
+            let mut interrupted =
+                std::io::Cursor::new(first[..consumed].to_vec()).chain(FailedRead);
             assert_eq!(
                 header.read(&mut interrupted).await.unwrap_err().kind(),
                 std::io::ErrorKind::ConnectionReset
             );
-            let mut recovered = std::io::Cursor::new(
-                [first[consumed..].to_vec(), next.to_vec()].concat(),
-            );
+            let mut recovered =
+                std::io::Cursor::new([first[consumed..].to_vec(), next.to_vec()].concat());
             assert_eq!(header.read(&mut recovered).await.unwrap(), first);
             assert_eq!(header.read(&mut recovered).await.unwrap(), next);
         }
