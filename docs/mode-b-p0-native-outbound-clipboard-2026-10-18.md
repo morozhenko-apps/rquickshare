@@ -309,9 +309,29 @@ with **740/740 stable Core**, both existing
 integration binaries **4/4 + 4/4**, no
 failed/ignored cases. Rust formatter,
 frontend and Core Clippy jobs also completed
-SUCCESS. Desktop Tauri still awaited its
-final result at the Core-checkpoint time;
-do not claim quick Preflight 5/5 until
-the overall run completes.
+SUCCESS. Desktop Tauri **10/10** Rust tests and
+Clippy also completed SUCCESS, verified from
+job `117671869993`. The same-source quick
+Preflight **5/5 jobs completed SUCCESS**,
+and separate Native GTK completed SUCCESS.
+This is one quick run, NOT full 10x Mode B.
+`
+## Exact-source final checkpoint
+
+[Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201)
+and [Native GTK 39126241182](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241182)
+both completed **SUCCESS** on
+`c911fc02816b5f1052f5f24d72f68a4397081483`.
+All five Preflight jobs green:
+Core **740/740 stable + 4/4 + 4/4**,
+desktop Tauri **10/10**, frontend,
+Core and desktop Clippy, formatter.
+GTK **57/57**, with the two new methods
+individually `... ok` and the existing
+real-GTK panel smoke passing. The old
+red native format run is retained in
+this ledger as historical, not used as
+pass evidence.
+
 Global Stage 11 final-source ten-pass and
 Stage 12 completion gate remain **OPEN/NO**.
