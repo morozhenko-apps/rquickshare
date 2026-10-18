@@ -35,3 +35,11 @@ Implement every planned variant with `Given_When_Then` names, real private bus a
 
 ## Stages 11–12 execution and completion
 Source-exact Preflight Core Rust + core Clippy + rustfmt + frontend/Tauri, plus native GTK. Ten **complete** consecutive `mode-b.yml` runs, current-source instrumented file coverage, all public branch categories, and physical BLE/mDNS acceptance remain OPEN regardless of scoped success. Rollback = remove these two test methods and this document; no production changes, no merge to `master`.
+
+
+## Stage 9 implementation checkpoint (source SHA `e45b89ee`)
+- Plan committed before tests: `c37075be`.
+- Two named real-private-bus methods in `core_lib/src/service/client/tests.rs` at `7ac3c8db`, followed by a **formatting-only** correction at `e45b89ee`. First method covers 17 local invalid-admission variants, no pending state, unchanged daemon-visible state, empty retry, and redacted intent debug. Second retains one valid intent with the existing pre-wire hook, verifies second-action blocking, replaces the actual D-Bus service owner with epoch 456, checks two refused retries and no mutation at replacement owner.
+- First Preflight's Rust format step flagged one multiline assertion. No product logic was changed; no assertions were relaxed. CI re-run for exact source: [Preflight 39168715549](https://github.com/morozhenko-apps/rquickshare/actions/runs/39168715549) and [Native GTK 39168715424](https://github.com/morozhenko-apps/rquickshare/actions/runs/39168715424). Neither is declared successful at this checkpoint.
+- Mutation candidates: bypass local `valid()`, replace `PendingOperation` guard with last-write-wins, clear `pending_visibility` on `DaemonChanged`, silently send to new owner, and expose private token/request in `Debug`.
+- Coverage note: authenticated but intentionally forged daemon `Read` responses or a forged successful `Set` receipt are **not** tested by this existing honest-bus fixture. They remain separate P0 testability/injection scenarios; this suite must not be labeled exhaustive for that branch. Full MODE B 10x and Stage 12 remain OPEN.
