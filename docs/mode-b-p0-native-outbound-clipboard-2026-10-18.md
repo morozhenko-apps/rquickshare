@@ -164,8 +164,8 @@ mutant-engine execution.
 
 1. [x] Stage 1–8 scan, scoped plan, branch/N/
    interaction/count map committed before tests.
-2. [ ] Add 2 table-driven parser test methods.
-3. [ ] Expand actual `outbound::verify` GUI
+2. [x] Add 2 table-driven parser test methods.
+3. [x] Expand actual `outbound::verify` GUI
    security gate smoke and restore fixture state.
 4. [ ] Run exact-source Native GTK and Preflight;
    inspect 2 new method names and non-ignored
@@ -179,3 +179,25 @@ mutant-engine execution.
 Rollback: revert only test changes and this
 documentation. Production behavior, protocol,
 installed package and `master` unaffected.
+
+## Stage 9 test implementation checkpoint — CI not yet validated
+
+- Source-only test change `44c9fec8`: two original
+  methods for real GIO clipboard URI path order and
+  hostile/late-invalid local-URI batches; exact
+  URI_BYTES boundary and Unicode coverage.
+- Source-only test change `3186526e`: an expansion
+  of existing real GTK `outbound::verify` smoke
+  checking five independent controller flags,
+  five stale/invalid live-view variants, closing,
+  preview and three lock/unknown/closed safety states
+  with a positive unlocked manual-send control.
+  The test restores the prior Model safety and
+  controller snapshot before returning.
+- Exact test source for both changes:
+  [Native GTK 39126097688](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126097688)
+  and [Preflight 39126097726](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126097726).
+  Until actual job results and per-test logs are
+  inspected do not claim these pass.
+- No production changes, no real clipboard/OS
+  user interaction, no Mode A decision.
