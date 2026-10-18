@@ -32,8 +32,9 @@ type correction was verified. Same-source
 [Preflight 39130339110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339110)
 Core **742/742 stable + 4+4**,
 formatter/frontend/Core Clippy PASS;
-desktop Tauri completion was still
-pending at this inventory checkpoint.
+desktop Tauri Clippy/unit **10/10**
+from job log, completing the exact-source
+quick Preflight **5/5 SUCCESS**.
 
 Real Wayland owner loss **mid-read**,
 network-authenticated GTK Selection send,
