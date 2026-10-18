@@ -298,12 +298,7 @@ mod tests {
     ) {
         // Arrange: real native drag-position helper, including near-overflow
         // monitor dimensions. The expected independent bounds use i64.
-        for monitor in [
-            (0, 0),
-            (50, 50),
-            (1920, 1080),
-            (i32::MAX, i32::MAX),
-        ] {
+        for monitor in [(0, 0), (50, 50), (1920, 1080), (i32::MAX, i32::MAX)] {
             for size in [
                 (0, 1),
                 (1, 0),
@@ -323,11 +318,7 @@ mod tests {
                     (i32::MAX, i32::MAX),
                 ] {
                     let result = clamp_position(position, size, monitor);
-                    if size.0 <= 0
-                        || size.1 <= 0
-                        || monitor.0 < size.0
-                        || monitor.1 < size.1
-                    {
+                    if size.0 <= 0 || size.1 <= 0 || monitor.0 < size.0 || monitor.1 < size.1 {
                         assert_eq!(result, None, "monitor={monitor:?}, size={size:?}");
                         continue;
                     }
@@ -351,8 +342,7 @@ mod tests {
         for monitor_height in [i32::MIN, -1, 0, 1, 30, 1080, i32::MAX] {
             for top in [-1, 0, 1, 30, 1079, i32::MAX] {
                 for height in [-1, 0, 1, 30, 1080, i32::MAX] {
-                    let remaining =
-                        i64::from(monitor_height) - i64::from(top) - i64::from(height);
+                    let remaining = i64::from(monitor_height) - i64::from(top) - i64::from(height);
                     let valid = top >= 0 && height > 0 && remaining >= 0;
                     let actual = bottom_margin(top, height, monitor_height);
                     if valid {
