@@ -30,3 +30,10 @@ Coverage map: `core_lib/src/identity.rs` generation state and watcher confirmati
 
 ## Stages 11–12 — execution and completion gates
 Add planned tests in `identity/tests.rs` only. Verify exact-source Core Rust, Clippy, rustfmt and Native GTK jobs; do not declare globally complete. Full 10× strict runs, hardware integration and repository-wide per-production-method coverage remain OPEN. Rollback removes only two tests and this document.
+
+## Stage 9 implementation / first CI checkpoint
+- Planning and branch/category matrix committed first: `adf7570a`.
+- Two deterministic Tokio tests added in `core_lib/src/identity/tests.rs` at `94f602dc`: two consumer acknowledgement orders after three rapid renames, and loss of either previously fully acknowledged consumer before the next rename.
+- The first Preflight observed whitespace-only `rustfmt` differences in two `IdentityPolicy::new` calls. Formatted source was committed without changing assertions at `36d14694`.
+- Exact-source [Preflight 39166597141](https://github.com/morozhenko-apps/rquickshare/actions/runs/39166597141) and [Native GTK 39166597231](https://github.com/morozhenko-apps/rquickshare/actions/runs/39166597231) were started. Do not claim this source green until completed.
+- Stage 10 is a manual mutation-target analysis only. No live BlueZ, mDNS SDK, Android phone or Windows receiver was exercised; current strict Stage 11 10× and repository-wide Stage 12 remain OPEN.
