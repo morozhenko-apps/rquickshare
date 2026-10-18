@@ -288,6 +288,11 @@ plus **4/4 + 4/4** integration binaries;
 eight race-sensitive methods deliberately
 excluded from this quick profile.
 Rust format, frontend and Core Clippy
-jobs SUCCESS. Desktop Tauri job was
-still running at this checkpoint; verify
-it before marking full quick Preflight 5/5.
+jobs SUCCESS. Desktop Tauri Clippy/unit
+completed **SUCCESS**, actual job log
+`117684088022` reports **10/10 Rust
+tests passed, 0 failed, 0 ignored**.
+The complete same-source quick
+Preflight is **SUCCESS, 5/5 jobs**.
+This remains one quick validation,
+not strict final-source 10× Mode B.
