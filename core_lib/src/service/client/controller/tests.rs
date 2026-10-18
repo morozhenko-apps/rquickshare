@@ -582,7 +582,6 @@ async fn given_anonymous_source_when_prepared_over_actual_broker_then_seals_byte
     .await;
 }
 
-
 #[tokio::test]
 async fn given_foreign_prepared_selection_when_other_client_sends_queues_or_batches_then_no_transfer_is_admitted_and_owner_can_send(
 ) {
@@ -671,7 +670,13 @@ async fn given_closed_preparation_owner_when_new_gui_receives_old_selection_then
         else {
             panic!("expected the former owner's genuine selection")
         };
-        assert!(old_updates.borrow().view.as_ref().unwrap().transfers.is_empty());
+        assert!(old_updates
+            .borrow()
+            .view
+            .as_ref()
+            .unwrap()
+            .transfers
+            .is_empty());
         previous.close().await.unwrap();
 
         // Act: the daemon is still available, but a new connection cannot
@@ -694,10 +699,15 @@ async fn given_closed_preparation_owner_when_new_gui_receives_old_selection_then
         let handle = current.handle();
         let mut updates = handle.subscribe();
         ready(&mut updates).await;
-        assert!(updates.borrow().view.as_ref().unwrap().selections.is_empty());
+        assert!(updates
+            .borrow()
+            .view
+            .as_ref()
+            .unwrap()
+            .selections
+            .is_empty());
         let (new_file, fresh) = opened(2);
-        let ActionResult::Selection(selected) =
-            handle.choose(fresh).unwrap().wait().await.unwrap()
+        let ActionResult::Selection(selected) = handle.choose(fresh).unwrap().wait().await.unwrap()
         else {
             panic!("fresh owner could not prepare")
         };
