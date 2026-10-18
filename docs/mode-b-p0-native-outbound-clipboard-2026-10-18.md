@@ -315,7 +315,7 @@ job `117671869993`. The same-source quick
 Preflight **5/5 jobs completed SUCCESS**,
 and separate Native GTK completed SUCCESS.
 This is one quick run, NOT full 10x Mode B.
-`
+
 ## Exact-source final checkpoint
 
 [Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201)
