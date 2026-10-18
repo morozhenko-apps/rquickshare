@@ -28,8 +28,9 @@ Core job **742/742 stable**,
 **4+4 integrations**, both new test
 methods separately `... ok`.
 Format/frontend/Core Clippy PASS;
-desktop completion required a separate
-final checkpoint. Independent
+desktop Tauri **10/10** from job log
+and full quick Preflight **5/5 SUCCESS**.
+Independent
 [Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
 **57/57 PASS**. The original red rustfmt
 check was resolved without
