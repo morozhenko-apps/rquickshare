@@ -189,7 +189,7 @@ not executed mutation engine.
 ## Milestones and rollback
 
 1. [x] Stage 1–8 scanned and documented BEFORE code.
-2. [ ] Implement both test-only fixture helpers
+2. [x] Implement both test-only fixture helpers
    in `outbound.rs` and invoke from actual GTK smoke.
 3. [ ] Exact-source Native GTK and Preflight:
    check real failures and assertion names.
@@ -201,3 +201,28 @@ not executed mutation engine.
 
 Rollback only test module additions
 and documentation; no product change.
+
+## Stage 9 source and CI checkpoint
+
+- Tests-only source commit `f9551a28` embeds two
+  fixture helpers in the existing real GTK panel
+  smoke. They exercise GDK MIME ownership with
+  actual `clipboard_paths`, and actual pending
+  GLib `wait_selection` / `close_input`
+  cancellation, generation and terminal `None`.
+- [Native GTK 39128231753](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128231753)
+  failed its rustfmt gate on one new `for_bytes`
+  multiline call **before executing tests**.
+  That is not evidence of a product failure.
+- Test-only format correction `1501fa1e`
+  changes only the argument layout, not assertions.
+  [Native GTK retry 39128370942](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370942)
+  and [Preflight retry 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901)
+  are the exact-code checks to inspect. The
+  older same-code Preflight might be cancelled
+  by workflow concurrency; never count cancelled
+  attempts as green.
+- Execution D2 and CI completion remain pending
+  until actual logs show the integrated widget
+  method PASS. Global Stage 11 full 10x and
+  Stage 12 remain NO.
