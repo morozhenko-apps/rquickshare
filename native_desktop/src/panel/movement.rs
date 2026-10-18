@@ -294,6 +294,85 @@ mod tests {
         }
     }
     #[test]
+    fn given_signed_drag_offsets_and_small_or_extreme_screen_geometry_when_clamped_then_card_cannot_escape_monitor(
+    ) {
+        // Arrange: real native drag-position helper, including near-overflow
+        // monitor dimensions. The expected independent bounds use i64.
+        for monitor in [
+            (0, 0),
+            (50, 50),
+            (1920, 1080),
+            (i32::MAX, i32::MAX),
+        ] {
+            for size in [
+                (0, 1),
+                (1, 0),
+                (1, 1),
+                (20, 30),
+                (420, 497),
+                (1920, 1080),
+                (i32::MAX, i32::MAX),
+            ] {
+                for position in [
+                    (i32::MIN, i32::MIN),
+                    (-10, -1),
+                    (0, 0),
+                    (1, 1),
+                    (50, 50),
+                    (1920, 1080),
+                    (i32::MAX, i32::MAX),
+                ] {
+                    let result = clamp_position(position, size, monitor);
+                    if size.0 <= 0
+                        || size.1 <= 0
+                        || monitor.0 < size.0
+                        || monitor.1 < size.1
+                    {
+                        assert_eq!(result, None, "monitor={monitor:?}, size={size:?}");
+                        continue;
+                    }
+                    let (x, y) = result.unwrap();
+                    let right = i64::from(monitor.0) - i64::from(size.0);
+                    let bottom = i64::from(monitor.1) - i64::from(size.1);
+                    assert_eq!(i64::from(x), i64::from(position.0).clamp(0, right));
+                    assert_eq!(i64::from(y), i64::from(position.1).clamp(0, bottom));
+                    assert!((0..=right).contains(&i64::from(x)));
+                    assert!((0..=bottom).contains(&i64::from(y)));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn given_negative_and_exact_fit_bottom_geometry_when_anchored_then_checked_margin_preserves_lower_edge(
+    ) {
+        // Arrange: enumerate valid and impossible positions independently
+        // with widened i64 arithmetic so no i32 overflow can mask a bad case.
+        for monitor_height in [i32::MIN, -1, 0, 1, 30, 1080, i32::MAX] {
+            for top in [-1, 0, 1, 30, 1079, i32::MAX] {
+                for height in [-1, 0, 1, 30, 1080, i32::MAX] {
+                    let remaining =
+                        i64::from(monitor_height) - i64::from(top) - i64::from(height);
+                    let valid = top >= 0 && height > 0 && remaining >= 0;
+                    let actual = bottom_margin(top, height, monitor_height);
+                    if valid {
+                        assert_eq!(actual, Some(remaining as i32));
+                        assert_eq!(
+                            i64::from(actual.unwrap()) + i64::from(top) + i64::from(height),
+                            i64::from(monitor_height)
+                        );
+                    } else {
+                        assert_eq!(
+                            actual, None,
+                            "top={top}, height={height}, monitor={monitor_height}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn given_monitor_and_card_boundaries_when_moved_then_every_position_is_clamped_or_rejected() {
         for size in [(420, 120), (420, 500), (1920, 1080)] {
             for position in [
