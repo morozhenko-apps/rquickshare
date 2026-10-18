@@ -211,10 +211,12 @@ Core integration bins **4/4 + 4/4**.
 Each of the two new unique method names appears
 **exactly once** as `... ok`.
 Rust format, frontend and Core Clippy
-jobs finished SUCCESS. Desktop Tauri
-job initially remained in progress,
-so 5/5 overall Preflight requires
-separate final confirmation.
+jobs finished SUCCESS. The desktop Tauri
+Clippy/unit job also completed **SUCCESS**;
+its actual job `117681317266` log has
+**10 passed, 0 failed, 0 ignored**.
+The complete same-source quick Preflight
+finished **5/5 jobs SUCCESS**.
 
 Independent
 [Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
@@ -273,3 +275,27 @@ race-sensitive case, negative N1–N12
 interaction or complete final-source 10×
 has been proven. Full Stage 11 and
 global Stage 12 remain **NO**.
+
+## Final same-source quick CI checkpoint
+
+Both [Preflight 39129396907](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396907)
+and [Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
+completed **SUCCESS** on
+`e573193261863da6c65a6a38983f539c6ae78f16`.
+Preflight jobs **5/5 SUCCESS**;
+Core **742/742 stable** + two **4/4**
+integrations, desktop **10/10**;
+GTK **57/57**. Both new original
+Core methods independently `... ok`.
+The initially red rustfmt run was
+corrected test-only and is retained
+in the audit trail. Later doc commits
+do not modify tested source.
+
+Still **NO** for full final-source
+10 consecutive complete MODE B
+runs, live Linux/Google Android/
+Windows system acceptance,
+BWU alias authentication Issue #8,
+live mDNS lifecycle Issue #9 and
+global Stage 12 completeness.
