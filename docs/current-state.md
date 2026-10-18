@@ -27,8 +27,8 @@ on three test-only line wraps; fixed at `f63c3df1`.
 [Preflight 39124127809](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127809)
 Core Rust log **740/740 stable + 4+4 integration**
 and Core Clippy/frontend/format passed; desktop
-Tauri must be confirmed before declaring entire
-fast Preflight 5/5. No production code changes.
+Tauri unit **10/10**. All five fast Preflight
+jobs **SUCCESS** on exact test SHA. No production code changes.
 
 Physical KDE/Wayland portal, actual file-manager
 launch, Google Quick Share Android/Windows
