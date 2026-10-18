@@ -136,10 +136,8 @@ async fn given_required_consumers_when_acknowledgements_arrive_then_exact_revisi
 async fn given_rapid_renames_when_old_acks_arrive_then_only_latest_generation_is_applied() {
     for mdns_first in [false, true] {
         // Arrange: two real independent identity consumers start fully applied.
-        let owner = IdentityPolicy::new(
-            name("Original"),
-            &[ConsumerKind::Mdns, ConsumerKind::Gatt],
-        );
+        let owner =
+            IdentityPolicy::new(name("Original"), &[ConsumerKind::Mdns, ConsumerKind::Gatt]);
         let mut mdns = owner.subscribe(ConsumerKind::Mdns).unwrap();
         let mut gatt = owner.subscribe(ConsumerKind::Gatt).unwrap();
         assert_eq!(mdns.snapshot().revision, 1);
@@ -194,10 +192,8 @@ async fn given_rapid_renames_when_old_acks_arrive_then_only_latest_generation_is
 async fn given_acknowledged_consumer_loss_when_renamed_then_no_false_applied_result_survives() {
     for drop_mdns in [false, true] {
         // Arrange: a previously fully applied name must not mask a lost service.
-        let owner = IdentityPolicy::new(
-            name("Original"),
-            &[ConsumerKind::Mdns, ConsumerKind::Gatt],
-        );
+        let owner =
+            IdentityPolicy::new(name("Original"), &[ConsumerKind::Mdns, ConsumerKind::Gatt]);
         let mut mdns = Some(owner.subscribe(ConsumerKind::Mdns).unwrap());
         let mut gatt = Some(owner.subscribe(ConsumerKind::Gatt).unwrap());
         mdns.as_mut().unwrap().snapshot();
