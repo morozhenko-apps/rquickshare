@@ -33,3 +33,6 @@ Ordered triples span 22 distinct (direction, phase) states cubed = 10,648 sequen
 Implement three independent tests using an oracle that separately locates inbound consent before locating first nonterminal transfer; assert exact index (not merely Some). No network, sleep, production mock or real clock. Mutation review must reject swapped priority, wrong phase/direction, last-active-wins, and terminal inclusion. CI evidence must be tied to the final commit: Native GTK and Preflight quick workflow; full strict 10x and global Stage 12 remain NO until separately completed.
 
 Status: documentation recorded before implementation. Rollback: remove this plan and new test methods; no runtime changes.
+
+## Implementation checkpoint
+Test-only source commit `2b3103b0` adds three original methods in `native_desktop/src/card_view.rs`: complete 22^3 ordered triple cross-product, long terminal/consent collision sequences, and strict drawer-string boundaries. Exact-source CI must be confirmed before PASS. No production behavior changed.
