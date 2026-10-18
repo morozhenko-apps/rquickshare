@@ -1,5 +1,47 @@
 # Current implementation and continuation state
 
+## MODE B P0 Native GTK clipboard URIs and recipient safety — 2026-10-18
+
+Two new original parser methods in
+`native_desktop/src/panel/outbound.rs` check actual
+GIO local-URI decoding: GNOME copy/cut headers,
+CRLF/comments/ordered Unicode paths, localhost
+case handling, malformed and late-invalid URI
+batch rejection, remote host/userinfo/port
+rejection, exact 256 KiB byte bound and
+zero/empty input. The existing real GTK
+`outbound::verify` smoke also checks 5 busy/pending/
+disconnected flags, 5 stale/invalid StateView
+states and closing/preview/lock/provider
+negatives; no fake controller/domain method
+introduced. Prior healthy state is restored.
+No app production behavior modified.
+
+The [documentation-first scoped Stage 1–10,
+Positive/N1–N12, D1–D5 ledger](mode-b-p0-native-outbound-clipboard-2026-10-18.md)
+records initial failed rustfmt and subsequent
+test-only fixes. Exact source `c911fc02`:
+[Native GTK 39126241182](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241182)
+**SUCCESS**, actual native log
+**57/57 passed**, both new methods
+independently `... ok`. Same-source
+[Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201)
+Core **740/740 stable + 4+4 integrations**,
+format/frontend/Core Clippy successful;
+desktop Tauri status must be independently
+confirmed before declaring the full quick
+Preflight 5/5.
+
+Real Wayland clipboard acquisition and native
+GUI→daemon→Google Android/Windows transfer,
+full-source ten-run MODE B, authenticated
+BWU [Issue #8](https://github.com/morozhenko-apps/rquickshare/issues/8),
+live mDNS [Issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9),
+physical KDE/BlueZ and the global Stage 12
+remain OPEN/NO. `master` and installed
+packages untouched.
+
+
 ## MODE B P0 Native GTK directory portal safety and cancellation — 2026-10-18
 
 Three new **test-only** methods in
