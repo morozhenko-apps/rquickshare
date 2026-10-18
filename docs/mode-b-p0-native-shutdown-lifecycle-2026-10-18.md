@@ -21,3 +21,6 @@ Dimensions: signal future {pending, immediately ready, sender dropped, completed
 Implement only test methods. Mutation review: changing signal-resolution cancellation, removing explicit token cancellation or failing to join the worker must break assertions where observable. No production refactor. CI must verify quick GTK/Preflight at final test SHA; strict 10x and repo-wide Stage 12 stay NO until the separate complete gate. Rollback is test-only changes plus this doc.
 
 Status: scoped plan recorded before tests.
+
+## Implementation checkpoint
+Test-only source commit `1b0fb254` adds four original async methods in `native_desktop/src/lifecycle.rs`, including 64 fresh signal/close race iterations. The original existing method remains untouched. Await the exact-source CI result before counting any PASS or stable 10x acceptance. No production changes.
