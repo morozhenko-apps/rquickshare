@@ -211,7 +211,11 @@ mod tests {
         assert!(results.visible("in"));
         assert!(!results.visible("out"));
         assert_eq!(
-            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            results
+                .pending
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             vec!["in"]
         );
 
@@ -278,7 +282,11 @@ mod tests {
             ],
         );
         assert_eq!(
-            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            results
+                .pending
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             vec!["b", "a"]
         );
         results.hide_rows();
@@ -293,7 +301,11 @@ mod tests {
             &[("a", Direction::Inbound, Phase::Finished)],
         );
         assert_eq!(
-            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            results
+                .pending
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             vec!["a"]
         );
         assert!(!results.visible("b"));
@@ -320,7 +332,11 @@ mod tests {
             &[("a", Direction::Inbound, Phase::Finished)],
         );
         assert_eq!(
-            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            results
+                .pending
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             vec!["a"]
         );
         observe(&mut results, 7, &[]);
