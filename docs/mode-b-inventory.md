@@ -1,5 +1,41 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P0 Native GTK real portal OpenFile admission / cancellation
+
+Three new original methods in
+`native_desktop/src/portal/tests.rs` use real
+`show_directory_contents`, `show_on_mode`
+and `interaction` against the existing private
+external D-Bus portal contract fake.
+One tests Linux `O_PATH` directory rejection
+before IPC; one exercises seven version/response/
+malformed/wrong-path cases for contents-only
+`OpenFile`; one cancels an already admitted
+request and asserts a single owned Close,
+Cancelled terminal result and FD release.
+The [scoped Stage 1–10 plan, Negative N1–N12
+and D1–D5](mode-b-p0-native-portal-directory-2026-10-18.md)
+was documented before editing tests.
+
+Exact source `f63c3df1`;
+[Native GTK CI 39124127819](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127819)
+**SUCCESS** and full job log verified **55/55**
+native GTK tests with all three new methods
+separately `... ok`. Initial red formatting
+at `ceeefe21` was resolved in a test-only commit;
+no assertion weakened.
+[Preflight 39124127809](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127809)
+Core log **740/740 stable + 4/4 + 4/4**,
+Core Clippy/formatter/frontend PASS. Desktop
+Tauri final job result is separately pending
+at initial checkpoint. The native portal test
+does not prove actual KDE/Wayland file manager,
+BlueZ, BWU authentication [#8](https://github.com/morozhenko-apps/rquickshare/issues/8),
+mDNS live SDK [#9](https://github.com/morozhenko-apps/rquickshare/issues/9),
+or latest-source ten-consecutive MODE B.
+Global Stage 12 remains **NO**.
+
+
 
 ## 2026-10-18 P0 mDNS TXT parser and service identity contracts
 
