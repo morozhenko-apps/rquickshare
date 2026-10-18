@@ -449,7 +449,19 @@ mod tests {
             (17, Some(9), 9)
         );
         assert_eq!(policy.records.len(), 3);
-        assert!(matches!(policy.reconcile(17, &first, safe()), Effect::None));
+        // An already-visible automatic surface has no reason to reopen
+        // an unchanged notice. An invisible surface legitimately does.
+        let visible = || {
+            let mut surface = safe();
+            surface.visible = true;
+            surface.automatic = true;
+            surface
+        };
+        assert!(matches!(
+            policy.reconcile(17, &first, visible()),
+            Effect::None
+        ));
+        assert_eq!(policy.shown.as_ref(), Some(&selected));
 
         // Order of rows supplied by the daemon does not change prioritization.
         let reversed = [
@@ -458,7 +470,7 @@ mod tests {
             pending_row("a-outcome", Phase::Finished),
         ];
         assert!(matches!(
-            policy.reconcile(17, &reversed, safe()),
+            policy.reconcile(17, &reversed, visible()),
             Effect::None
         ));
         let dismissed = policy.dismiss();
@@ -532,8 +544,9 @@ mod tests {
                 &[row("current", Phase::AwaitingConsent, Some(2))],
                 busy()
             ),
-            Effect::None
+            Effect::Hide
         ));
+        assert!(policy.shown.is_none(), "busy redraw must keep all peer cards hidden");
 
         // Only an idle/eligible surface may show the new request.
         let fresh = shown(
