@@ -241,7 +241,10 @@ Global 10x and Stage12 **NO**.
 **Same-source general CI checkpoint.**
 [Preflight 39134995892](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995892)
 stable Core, formatter, frontend and Core
-Clippy are SUCCESS; desktop Tauri was
-in progress at this evidence checkpoint
-and needs separate final job-log check
-before claiming the entire 5/5 gate.
+Clippy are SUCCESS. Desktop Tauri completed
+**10/10 PASS**, independently verified from
+job log `117697629563`, 0 failed/ignored.
+The same-source quick Preflight has
+**5/5 jobs SUCCESS** at `00a0a76b`.
+This is NOT the strict ten-consecutive
+full MODE B gate.
