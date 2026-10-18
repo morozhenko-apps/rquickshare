@@ -36,3 +36,9 @@ Implement tests only after this plan, run exact-source Rust format/Core tests/Cl
 - Two scoped unit methods added in `core_lib/src/service/visibility_service.rs` at `6754ab0e`: **480** view-state cross-product evaluations (epoch x available x running x mode x countdown x revision), plus canonical token/request/mode/epoch/base preservation matrices. These call real production validators.
 - Initial `rustfmt` job found one whitespace-only line-wrap change in a matrix predicate. Corrected at `0d4f3ad5`, without relaxing assertions or changing tested production semantics.
 - Exact-source jobs: [Preflight 39167407105](https://github.com/morozhenko-apps/rquickshare/actions/runs/39167407105) and [Native GTK 39167407102](https://github.com/morozhenko-apps/rquickshare/actions/runs/39167407102), **both running at the checkpoint, neither yet a confirmed pass**. As with other scoped suites, current-source full ten-runs and Stage 12 remain OPEN.
+
+## Exact-source CI verification (code SHA `0d4f3ad5`)
+
+- [Native GTK 39167407102](https://github.com/morozhenko-apps/rquickshare/actions/runs/39167407102): **SUCCESS**, 80 passed / 0 failed / 0 ignored.
+- [Preflight 39167407105](https://github.com/morozhenko-apps/rquickshare/actions/runs/39167407105): **Core Rust SUCCESS**, 761 passed / 0 failed / 0 ignored, 8 separately filtered probes (plus two binaries of 4 passing integration tests each); both new `visibility_service::tests` names confirmed `ok` in logs. Rust format, frontend and Core Clippy were also **SUCCESS**. Tauri Clippy/desktop Rust suite was still running at this recorded checkpoint. Only the final completed workflow conclusion can close the Preflight source gate.
+- Strict global full 10x Stage 11, current-source instrumented branch/per-file coverage, mutation execution and Stage 12 remain open.
