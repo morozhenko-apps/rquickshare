@@ -27,8 +27,8 @@ no assertion weakened.
 [Preflight 39124127809](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127809)
 Core log **740/740 stable + 4/4 + 4/4**,
 Core Clippy/formatter/frontend PASS. Desktop
-Tauri final job result is separately pending
-at initial checkpoint. The native portal test
+Tauri Rust **10/10** and Clippy SUCCESS.
+All five fast Preflight jobs **SUCCESS**. The native portal test
 does not prove actual KDE/Wayland file manager,
 BlueZ, BWU authentication [#8](https://github.com/morozhenko-apps/rquickshare/issues/8),
 mDNS live SDK [#9](https://github.com/morozhenko-apps/rquickshare/issues/9),
