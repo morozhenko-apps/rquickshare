@@ -21,9 +21,10 @@ or installed desktop modification.
 methods independently `... ok`. Same-source
 [Preflight 39134995892](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995892)
 Core **744/744 + 4/4 + 4/4**, formatter,
-Core Clippy and frontend SUCCESS; desktop
-Tauri job required independent completion
-check at initial ledger time.
+Core Clippy and frontend SUCCESS.
+Desktop Tauri **10/10 PASS** verified
+from its actual job log; complete
+same-source quick Preflight **5/5 SUCCESS**.
 [Scoped branch/N1–N12/D1–D5 report](mode-b-p1-native-placement-bounds-2026-10-18.md)
 includes interim red rustfmt and exact
 test-only corrections. These 4 methods follow
