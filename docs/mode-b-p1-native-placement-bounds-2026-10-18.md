@@ -115,9 +115,9 @@ review, not executed mutator.
    inventory, branch/negative/interaction/mutation
    and per-file map written before tests.
 2. [x] Add all 4 independent methods.
-3. [ ] Run full Native GTK and quick Preflight
+3. [x] Run full Native GTK and quick Preflight
    on final test SHA, inspect actual method lines.
-4. [ ] Record D1–D5 and global index.
+4. [x] Record D1–D5 and global index.
 5. [ ] Full strict 10x and Stage 12 global remain NO.
 
 Rollback test and docs only.
@@ -172,3 +172,76 @@ A complete Native GTK + Preflight outcome at
 logs before any new four methods are marked
 passing or 68 native methods asserted.
 Global 10× and hardware are unaffected.
+
+## D1–D5 verified execution and residual
+
+**D1 — actual native test verification.** Final test
+source SHA `00a0a76bc53bf22c7d2a4312099de559b06bd362`.
+[Native GTK 39134995889](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995889)
+completed **SUCCESS**. Inspected entire native job
+`117697601520`: `68 passed; 0 failed; 0 ignored;
+0 filtered`, a net **+4 independent test methods**
+compared with preceding verified native baseline
+64. All four original method names occur
+**exactly once** in the actual job log as `... ok`.
+Strict native fmt and Clippy passed.
+Historical red `39134805749` stopped at
+six formatter differences before executing
+new tests; the precise pure-test layout
+fixes `721ebb89` and `00a0a76b`
+did not change assertions.
+
+**D2 — actual overlapping category evidence**
+(four independently named test methods;
+table rows not independent test methods):
+
+| Category | Methods | Verified bounded evidence |
+|---|---:|---|
+| Positive | 4 | PASS: 900 reconstructed placements, 196 clamped drag positions, 252 bottom-margin combinations, explicit ties |
+| N1 invalid geometry | 4 | PASS: nonpositive/oversized rectangles and offscreen positions rejected |
+| N2 boundaries | 4 | PASS: exact panel fit, signed near-i32 origin, ±1 activation and max/min draggable values |
+| N3 external failure | 0 | N/A pure coordinate functions |
+| N4 deterministic repeat | 4 | PASS: stable edge tie comparisons and table-invariant expectations |
+| N5 concurrency | 0 | N/A pure functions; real gestures remain external |
+| N6 overflow | 4 | PASS: i64 independent arithmetic reference and checked inverse |
+| N7 visual containment | 4 | PASS: no card outside monitor and valid bottom anchor |
+| N8 locale/time | 0 | N/A |
+| N9 cancellation | 0 | N/A |
+| N10 UI isolation | 4 | PASS: valid margins within selected logical monitor |
+| N11 billing | 0 | N/A |
+| N12 storage | 0 | N/A |
+
+**D3 — changed source.** Added four new
+`#[test]` methods under existing `#[cfg(test)]`
+in `native_desktop/src/placement.rs` and
+`native_desktop/src/panel/movement.rs`.
+No application behavior/public API/installed
+desktop changes; only test layout and
+documentation commits.
+
+**D4 — testability.** Pure geometry can
+be exhaustively crossed in bounded grids
+without a compositor adapter. Actual
+Wayland monitor enumeration, screen
+scaling, pointer event offsets, hotplug and
+layer-shell anchor application require
+physical operating-system integration and
+are NOT covered by these methods.
+
+**D5 — manual mutation sensitivity.**
+An unchecked signed delta, offscreen
+rectangle, wrong nearest edge on ties,
+non-clamped drag, accepted negative
+card height or missing bottom margin
+subtraction violates explicit assertions.
+This is not a run of a mutation engine,
+nor complete UI public-method coverage.
+Global 10x and Stage12 **NO**.
+
+**Same-source general CI checkpoint.**
+[Preflight 39134995892](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995892)
+stable Core, formatter, frontend and Core
+Clippy are SUCCESS; desktop Tauri was
+in progress at this evidence checkpoint
+and needs separate final job-log check
+before claiming the entire 5/5 gate.
