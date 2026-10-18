@@ -380,6 +380,90 @@ pub(super) fn verify(panel: &Rc<Panel>) {
     panel.model.borrow_mut().state.pending = true;
     assert!(!panel.input_allowed(123, Some(&target), None));
     panel.model.borrow_mut().state = saved;
+    // The actual GTK panel must remain unable to initiate a new send if any
+    // independent controller or view precondition goes stale. This extends
+    // the existing real-widget smoke, not a pure duplicate of input_allowed.
+    let healthy = panel.model.borrow().state.clone();
+    for branch in 0..5 {
+        let mut altered = healthy.clone();
+        match branch {
+            0 => altered.busy = true,
+            1 => altered.pending = true,
+            2 => altered.text_pending = true,
+            3 => altered.settings_pending = true,
+            4 => altered.disconnected = true,
+            _ => unreachable!(),
+        }
+        panel.model.borrow_mut().state = altered;
+        assert!(
+            !panel.input_allowed(123, Some(&target), None),
+            "controller flag {branch} incorrectly allowed an outbound action"
+        );
+    }
+
+    for branch in 0..5 {
+        let mut altered = healthy.clone();
+        let view = Arc::make_mut(altered.view.as_mut().unwrap());
+        match branch {
+            0 => view.epoch = 124,
+            1 => view.synchronized = false,
+            2 => view.lifecycle = Lifecycle::Draining,
+            3 => view.lifecycle = Lifecycle::Stopped,
+            4 => view.endpoints.clear(),
+            _ => unreachable!(),
+        }
+        panel.model.borrow_mut().state = altered;
+        assert!(
+            !panel.input_allowed(123, Some(&target), None),
+            "stale view branch {branch} incorrectly permitted sending"
+        );
+    }
+    panel.model.borrow_mut().state = healthy;
+
+    let (original_closing, original_preview, original_safety) = {
+        let model = panel.model.borrow();
+        (model.closing, model.preview, model.safety)
+    };
+    panel.model.borrow_mut().closing = true;
+    assert!(!panel.input_allowed(123, Some(&target), None));
+    panel.model.borrow_mut().closing = original_closing;
+    panel.model.borrow_mut().preview = true;
+    assert!(!panel.input_allowed(123, Some(&target), None));
+    panel.model.borrow_mut().preview = original_preview;
+
+    panel.model.borrow_mut().safety_active = true;
+    for safety in [
+        crate::desktop_guard::SafetyState::default(),
+        crate::desktop_guard::SafetyState {
+            locked: Some(true),
+            ..Default::default()
+        },
+        crate::desktop_guard::SafetyState {
+            locked: Some(false),
+            closed: true,
+            ..Default::default()
+        },
+    ] {
+        panel.model.borrow_mut().safety = safety;
+        assert!(
+            !panel.input_allowed(123, Some(&target), None),
+            "unsafe desktop observation allowed outbound action: {safety:?}"
+        );
+    }
+    panel.model.borrow_mut().safety = crate::desktop_guard::SafetyState {
+        locked: Some(false),
+        inhibited: Some(true),
+        closed: false,
+    };
+    assert!(
+        panel.input_allowed(123, Some(&target), None),
+        "manual sending must remain available when unlocked but inhibited"
+    );
+    {
+        let mut model = panel.model.borrow_mut();
+        model.safety_active = saved_safety;
+        model.safety = original_safety;
+    }
     panel.set_drawer(Drawer::Open);
     panel.send_to("device");
     fn revealer(root: &gtk::Widget) -> Option<gtk::Revealer> {
