@@ -25,8 +25,9 @@ each new method independently `... ok`.
 [Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201):
 **740/740 stable Core + 4/4+4/4**,
 frontend/formatter/Core Clippy PASS;
-desktop Tauri required separate final
-check at first source verification.
+desktop Tauri **10/10** verified from
+its actual job log. Complete quick
+Preflight **5/5 SUCCESS**.
 First native test run failed at formatting,
 fixed by test-only commits with no
 weakened conditions or production changes.
