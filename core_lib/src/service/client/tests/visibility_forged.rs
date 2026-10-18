@@ -234,12 +234,9 @@ fn corrupted_settings(base: &SettingsView) -> Vec<(&'static str, SettingsView)> 
         "port-below",
         "port-above",
         "card-mode-over",
-        "device-name-nul",
-        "resolved-name-nul",
         "name-status-over",
         "name-status-no-name",
         "directory-over",
-        "directory-nul",
         "error-over",
         "applied-revision-over",
         "token-nonhex",
@@ -258,12 +255,9 @@ fn corrupted_settings(base: &SettingsView) -> Vec<(&'static str, SettingsView)> 
             "port-below" => view.port = -2,
             "port-above" => view.port = 65_536,
             "card-mode-over" => view.card_mode = 2,
-            "device-name-nul" => view.device_name = "a\0b".to_owned(),
-            "resolved-name-nul" => view.resolved_name = "a\0b".to_owned(),
             "name-status-over" => view.name_status = 4,
             "name-status-no-name" => view.name_status = 1,
             "directory-over" => view.directory_display = "x".repeat(12_289),
-            "directory-nul" => view.directory_display = "folder\0file".to_owned(),
             "error-over" => view.error = 5,
             "applied-revision-over" => view.applied_live_revision = view.revision + 1,
             "token-nonhex" => view.token = "g".repeat(64),
@@ -280,7 +274,21 @@ fn corrupted_settings(base: &SettingsView) -> Vec<(&'static str, SettingsView)> 
         assert!(!view.valid(EPOCH), "fixture must be truly invalid: {case}");
         cases.push((case, view));
     }
-    assert_eq!(cases.len(), 21);
+    assert_eq!(cases.len(), 18);
+
+    // D-Bus STRING cannot carry NUL. These are genuine validator boundary
+    // conditions, but injecting them on the wire makes the transport fail
+    // before a typed SettingsView can reach checked_settings().
+    for case in ["device-name-nul", "resolved-name-nul", "directory-nul"] {
+        let mut view = base.clone();
+        match case {
+            "device-name-nul" => view.device_name = "a\0b".to_owned(),
+            "resolved-name-nul" => view.resolved_name = "a\0b".to_owned(),
+            "directory-nul" => view.directory_display = "folder\0file".to_owned(),
+            _ => unreachable!(),
+        }
+        assert!(!view.valid(EPOCH), "NUL field must be refused: {case}");
+    }
     cases
 }
 
