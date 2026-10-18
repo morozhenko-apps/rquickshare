@@ -488,6 +488,8 @@ pub(super) fn verify(panel: &Rc<Panel>) {
     panel.model.borrow_mut().safety_active = saved_safety;
     tests::verify_real_gdk_clipboard_stream(panel);
     tests::verify_pending_preparation_cancel_and_stale_reply(panel);
+    tests::given_clipboard_owner_loss_before_async_read_when_source_is_replaced_then_old_paths_never_reappear(panel);
+    tests::given_preparation_completion_queued_before_user_cancels_when_mainloop_runs_then_old_callback_never_changes_notice(panel);
 }
 
 #[cfg(test)]
@@ -612,6 +614,129 @@ mod tests {
         assert!(panel.input_task.borrow().is_none());
 
         panel.model.borrow_mut().notice = previous_notice;
+        panel.render();
+    }
+
+    pub(super) fn given_clipboard_owner_loss_before_async_read_when_source_is_replaced_then_old_paths_never_reappear(
+        panel: &Rc<Panel>,
+    ) {
+        // Arrange: all clipboard providers belong to this isolated GTK
+        // display. The production GDK async reader is never replaced.
+        let clipboard = gtk::prelude::WidgetExt::display(&panel.window).clipboard();
+        let original = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/former-owner\n"),
+        );
+        clipboard.set_content(Some(&original)).unwrap();
+        assert_eq!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .unwrap(),
+            vec![PathBuf::from("/tmp/former-owner")]
+        );
+
+        // Act: revoke ownership BEFORE a subsequent read begins. It must
+        // not replay the former owner's already-decoded file list.
+        clipboard.set_content(None).unwrap();
+        assert!(!clipboard.formats().contain_mime_type("text/uri-list"));
+        assert!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .is_err(),
+            "lost clipboard ownership still admitted the former paths"
+        );
+
+        // A new owner's MIME bytes must replace, rather than append to,
+        // the old source. The new path is deliberately distinct.
+        let replacement = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/new-owner\nfile:///tmp/current-only\n"),
+        );
+        clipboard.set_content(Some(&replacement)).unwrap();
+        assert_eq!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .unwrap(),
+            vec![
+                PathBuf::from("/tmp/new-owner"),
+                PathBuf::from("/tmp/current-only"),
+            ]
+        );
+
+        // A remote URI after owner replacement must reject the *whole*
+        // new offer, not retain either earlier valid source.
+        let remote = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/valid\nfile://remote.invalid/tmp/foreign\n"),
+        );
+        clipboard.set_content(Some(&remote)).unwrap();
+        assert!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .is_err(),
+            "new remote owner leaked a previously admitted local path"
+        );
+
+        let recovered = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/clean-recovery\n"),
+        );
+        clipboard.set_content(Some(&recovered)).unwrap();
+        assert_eq!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .unwrap(),
+            vec![PathBuf::from("/tmp/clean-recovery")]
+        );
+
+        // Restore a harmless MIME type, not any content from a real user.
+        clipboard.set_text("clipboard reset after owner transition verification");
+    }
+
+    pub(super) fn given_preparation_completion_queued_before_user_cancels_when_mainloop_runs_then_old_callback_never_changes_notice(
+        panel: &Rc<Panel>,
+    ) {
+        // Arrange: complete a real selection oneshot synchronously, but
+        // do not run the GLib main context until *after* user cancellation.
+        // No Selection capability is forged and no domain send is invoked.
+        let previous_notice = panel.model.borrow().notice;
+        let old_generation = panel.input_generation.borrow().clone();
+        let cancel = CancellationToken::new();
+        panel.input_cancel.replace(Some(cancel.clone()));
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Option<Selection>>();
+        let target = Target {
+            epoch: 123,
+            endpoint: "device".into(),
+        };
+        panel.wait_selection(receiver, 123, Some(target.clone()), old_generation.clone());
+        panel.model.borrow_mut().strip_target = Some("device".into());
+        assert!(panel.model.borrow().input_active);
+        assert!(panel.input_task.borrow().is_some());
+
+        // Act: a failed preparation reply is already available by the time
+        // the user explicitly closes the action. The close must win.
+        sender.send(None).unwrap();
+        panel.close_input();
+        let after_first_close = panel.input_generation.borrow().clone();
+        assert!(cancel.is_cancelled());
+        assert!(!Rc::ptr_eq(&old_generation, &after_first_close));
+
+        // A repeated cancellation is harmless and cannot revive the token.
+        panel.close_input();
+        assert!(!Rc::ptr_eq(
+            &after_first_close,
+            &panel.input_generation.borrow()
+        ));
+        glib::MainContext::default().iteration(false);
+
+        // Assert: late completion cannot set a stale failure notice, open
+        // the outgoing picker or restore an already dismissed target.
+        panel.finish_prepared(123, Some(target), old_generation, None);
+        assert_eq!(panel.model.borrow().notice, previous_notice);
+        assert!(!panel.model.borrow().input_active);
+        assert!(panel.model.borrow().strip_target.is_none());
+        assert!(panel.input_task.borrow().is_none());
+        assert!(panel.input_cancel.borrow().is_none());
         panel.render();
     }
 
