@@ -23,14 +23,26 @@ Intermediate CI discovered rustfmt-only
 differences and a test-fixture E0382
 reused moved `Surface`; both were
 diagnosed and corrected without weakening
-assertions. The final code candidate at this
-checkpoint is `4a29bc02`, with
-[Preflight 39132422424](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422424)
-and [Native GTK 39132422435](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422435)
-requiring final job-log verification.
-Do NOT claim nine passing tests until all
-actual methods pass and final source SHA
-matches the completed workflow.
+assertions. The final verified test source
+`66ddf1fc` passed
+[Preflight 39133124486](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124486)
+**5/5 SUCCESS**: **744/744 stable Core**
+plus **4+4 integrations**, desktop
+Tauri **10/10**, frontend/format/Clippy
+PASS. Independent
+[Native GTK 39133124223](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124223)
+**SUCCESS, 64/64 native methods**
+(formerly 57), and all **nine**
+new original method names separately
+verified `... ok` across actual logs.
+A two-test initially red CardPolicy
+fixture incorrectly assumed an invisible
+surface would not ask to Show and
+a busy automatic surface could not
+repeat Hide; the tests were corrected
+to the real presentation contract,
+with no production change or
+weakening of stale-UI safety.
 The release-tag-gated complete 10×,
 live KDE/Wayland/Google device acceptance,
 Issue #8 BWU and Issue #9 mDNS remain OPEN.
