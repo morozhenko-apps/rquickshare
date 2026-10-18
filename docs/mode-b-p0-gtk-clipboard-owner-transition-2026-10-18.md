@@ -184,3 +184,21 @@ The initial same-source runs are:
 and [Preflight 39130166917](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130166917).
 These links are not proof of passing tests until each
 job completes; do not infer a 10× or Stage 12 closure.
+
+## First Native GTK CI compilation diagnosis (before correction)
+
+Exact test source `9306ae91`,
+[Native GTK 39130166873](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130166873)
+job `117683531239` failed **before any Rust test methods executed**,
+not because a domain invariant was violated. The complete job
+log shows Rust `E0283` at the new fixture
+`clipboard.set_content(None)`:
+`set_content` accepts `Option<&impl IsA<ContentProvider>>`,
+so a bare `None` has no concrete generic type.
+Correct exactly this **test-only** invocation to
+`None::<&gtk::gdk::ContentProvider>`. This preserves
+the intended GDK ownership relinquishment, all assertions
+and production behavior. No callback, security or
+clipboard contract was changed. Re-run full Native GTK
+and same-source Preflight; prior compile-red run
+must not be counted PASS.
