@@ -38,3 +38,9 @@ After implementation, verify exact-source Core Rust tests, rustfmt, Clippy, Nati
 - First source run found `rustfmt` whitespace-only differences in two vector literals and one iterator mapping; these were corrected at `23f1de8b`, with no changed assertions.
 - Verify exact-source [Preflight 39165451726](https://github.com/morozhenko-apps/rquickshare/actions/runs/39165451726) and [Native GTK 39165451625](https://github.com/morozhenko-apps/rquickshare/actions/runs/39165451625) before marking this package green. Neither is claimed as passed here.
 - Hardware/mDNS discovery integration, special-address policy decision, mutation-engine execution, ten successive full CI runs and repository-wide MODE B Stage 12 remain OPEN.
+
+## Verified execution evidence and open defect
+- Exact test-source `23f1de8b` [Core Rust job 117787382343](https://github.com/morozhenko-apps/rquickshare/actions/runs/39165451726) finished **SUCCESS**: 757 library tests passed, 0 failed, 0 ignored, 8 separately grouped tests filtered; the three new LAN test names are each explicitly listed as `ok` in its logs. Two integration suites each had 4 PASS.
+- On the same source, Native GTK run [39165451625](https://github.com/morozhenko-apps/rquickshare/actions/runs/39165451625) **SUCCESS**; rustfmt, frontend and Core Clippy jobs **SUCCESS**. Tauri Clippy / desktop unit job was still in progress at this checkpoint. Do not count full Preflight until that job succeeds.
+- Created [P0 source-level fallback address policy issue #11](https://github.com/morozhenko-apps/rquickshare/issues/11) for unspecified/multicast/broadcast IPv4 and unrecognized VPN adapters. Three MODE A options recorded there; no policy change or failing diagnostic test in MODE B.
+- The separate [mDNS discovery event testability issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9) already tracks unresolved browse/cache/reachability test isolation. Do not duplicate it.
