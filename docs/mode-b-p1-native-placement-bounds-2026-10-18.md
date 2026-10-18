@@ -114,10 +114,41 @@ review, not executed mutator.
 1. [x] Repository scan, risk, exhaustive bounded
    inventory, branch/negative/interaction/mutation
    and per-file map written before tests.
-2. [ ] Add all 4 independent methods.
+2. [x] Add all 4 independent methods.
 3. [ ] Run full Native GTK and quick Preflight
    on final test SHA, inspect actual method lines.
 4. [ ] Record D1–D5 and global index.
 5. [ ] Full strict 10x and Stage 12 global remain NO.
 
 Rollback test and docs only.
+
+## Source checkpoint
+
+Four original `#[test]` methods added in
+`native_desktop/src/placement.rs` (test-only
+commit `f936aab3`) and
+`native_desktop/src/panel/movement.rs`
+(`5a3056bf`). The first two assert
+reconstructed card margins inside three
+monitor dimension sets × three signed
+monitor origins × four card sizes ×
+25 activation locations (900 cases), plus
+eight explicit nearest-edge tie cases,
+i32 extreme origin and rejection cases.
+The drag test checks 4 monitor dimension
+sets × 7 panel sizes × 7 signed drag
+offsets (196 cases), comparing with
+independent i64 widened bounds. The
+bottom-anchor test runs 7 monitor heights
+× 6 top margins × 6 card heights (252
+cases), comparing an independent i64
+inversion and invalid geometry.
+
+Counts are *table rows*, not new Rust
+methods; 4 independently named methods
+are planned. Real GTK/Wayland monitor
+hotplug remains OPEN. Tests compile
+and execute only after actual CI
+evidence on source `5a3056bf`
+(or a later format-only SHA).
+No production changes.
