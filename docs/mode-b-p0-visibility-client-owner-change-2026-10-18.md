@@ -43,3 +43,12 @@ Source-exact Preflight Core Rust + core Clippy + rustfmt + frontend/Tauri, plus 
 - First Preflight's Rust format step flagged one multiline assertion. No product logic was changed; no assertions were relaxed. CI re-run for exact source: [Preflight 39168715549](https://github.com/morozhenko-apps/rquickshare/actions/runs/39168715549) and [Native GTK 39168715424](https://github.com/morozhenko-apps/rquickshare/actions/runs/39168715424). Neither is declared successful at this checkpoint.
 - Mutation candidates: bypass local `valid()`, replace `PendingOperation` guard with last-write-wins, clear `pending_visibility` on `DaemonChanged`, silently send to new owner, and expose private token/request in `Debug`.
 - Coverage note: authenticated but intentionally forged daemon `Read` responses or a forged successful `Set` receipt are **not** tested by this existing honest-bus fixture. They remain separate P0 testability/injection scenarios; this suite must not be labeled exhaustive for that branch. Full MODE B 10x and Stage 12 remain OPEN.
+
+
+## Stage 11 exact-source evidence (source SHA `e45b89ee`)
+
+- [Core Rust tests, Preflight 39168715549](https://github.com/morozhenko-apps/rquickshare/actions/runs/39168715549): **SUCCESS**, 763 passed / 0 failed / 0 ignored / 8 separately filtered race tests, plus two integration binaries with 4 passes each. Both new `service::client::tests` names explicitly printed `ok`.
+- Same source: **Rust format, frontend and core_lib Clippy SUCCESS**.
+- [Native GTK 39168715424](https://github.com/morozhenko-apps/rquickshare/actions/runs/39168715424): **SUCCESS**, 80 passed / 0 failed.
+- Tauri Clippy and desktop tests had not yet finished at the evidence checkpoint. Preflight overall conclusion must be verified separately before claiming green.
+- Strict 10× complete-suite test, instrumented coverage per current production file, forged daemon-response injection, mutation-engine scores and hardware acceptance are still OPEN, so global Stage 12 is NO.
