@@ -49,3 +49,10 @@ Exact-source Core Rust, rustfmt, Clippy, Native GTK, Tauri and frontend jobs req
 - Exact test-source [Native GTK 39172628563](https://github.com/morozhenko-apps/rquickshare/actions/runs/39172628563) **SUCCESS: 80 passed / 0 failed**.
 - Tauri desktop unit job was still running at this checkpoint; do not mark complete Preflight green until job conclusion is verified. Stage 10 mutation hypotheses were reviewed against asserted failures but mutant execution/score was not measured.
 - Global Stage 11 strict 10x **complete-suite** CI, exact-current-source line/branch coverage audit and Stage 12 hardware acceptance remain OPEN. This is a scoped positive gate only.
+
+
+## Final scoped CI conclusion
+- [Preflight 39172628608](https://github.com/morozhenko-apps/rquickshare/actions/runs/39172628608) **COMPLETED: SUCCESS** at exact test SHA `4b814f6a`, all five jobs passed. Core Rust 765/0; Tauri desktop 10/0; frontend, Rust format, both Clippy jobs green.
+- [Native GTK 39172628563](https://github.com/morozhenko-apps/rquickshare/actions/runs/39172628563) **COMPLETED: SUCCESS**, 80/0.
+- Scoped forged-visibility response regressions: **PASS**. Routine dev Preflight executes its documented stable/race-sensitive split; it does **not** substitute for ten repetitions of every test in the separate Mode B full-suite workflow.
+- Stage 11 strict full 10× and Stage 12 overall: **OPEN**.
