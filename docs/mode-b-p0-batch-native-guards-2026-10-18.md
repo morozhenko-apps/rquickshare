@@ -182,7 +182,7 @@ not claim of executed mutation engine.
 ## Execution and rollback
 
 1. [x] Stages 1–8 and mutation plan documented BEFORE code.
-2. [ ] Add 7 independent methods; no production changes.
+2. [x] Add 7 independent methods; no production changes.
 3. [ ] Run same-source native GTK, Preflight Core/format/frontend/
    Clippy/Tauri; check **actual logs** and method names.
 4. [ ] Record D1–D5 and observed category matrix; update
@@ -190,3 +190,42 @@ not claim of executed mutation engine.
 5. [ ] Strict final-source full suite 10x and physical
    OS/device acceptance remain OPEN; all Stage12 NO.
 Rollback only test/docs; do not touch release or master.
+
+## Stage 9 implementation checkpoint (not execution proof)
+
+The seven planned test-only methods were implemented
+across four production-file test modules:
+
+- `native_desktop/src/cli.rs`, commit `5939949e`:
+  2 new independently named Rust tests. Malformed,
+  remote, non-UTF8 and percent-decoded Unix filenames;
+  mixed late-invalid argv, exact 256-entry and
+  combined 64-KiB byte boundary.
+- `native_desktop/src/card_policy.rs`, commit
+  `85075542`: 2 new independent tests for
+  deterministic consent priority over terminal
+  outcomes, dismissal/new revision/epoch behavior,
+  and stale automatic presentation during busy
+  peer replacement.
+- `native_desktop/src/panel/results.rs`, commit
+  `da387197`: 2 new independent tests for
+  live Finished-vs-historical/current direction,
+  one-shot no-replay, FIFO and snapshot pruning.
+- `native_desktop/src/panel/idle.rs`, commit
+  `30a220f3`: 1 independently named test for
+  active safety-provider observations (18
+  combinations) and Running/Draining/Stopped.
+  The test-only fixture's independently constructed
+  UI model was corrected in `3de97ce0`
+  because Model is `Default` but not `Clone`.
+  No runtime code/production fixture changed.
+
+The first CI attempt on exact source `3de97ce0`:
+[Native GTK 39131803149](https://github.com/morozhenko-apps/rquickshare/actions/runs/39131803149)
+and [Preflight 39131803168](https://github.com/morozhenko-apps/rquickshare/actions/runs/39131803168).
+Earlier in-flight runs on intermediate test commits
+were cancelled by the repository's per-branch
+concurrency; they are not passing receipts.
+Do not count any new tests as passed until
+exact-source job logs confirm the method names.
+Full 10× and physical system gate stay NO.
