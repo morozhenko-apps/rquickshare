@@ -97,6 +97,158 @@ fn member(kind: OperationKind) -> &'static str {
 }
 
 #[tokio::test]
+async fn given_invalid_visibility_intents_when_submitted_then_client_rejects_locally_without_pending_or_mutation(
+) {
+    scenario(async {
+        // Arrange: authenticated real private bus, but no configured visibility owner.
+        let (_private, host, mut client) = fixture().await;
+        let initial = client.read_visibility().await.unwrap();
+        assert!(!initial.available);
+        assert!(!initial.running);
+        assert_eq!(initial.mode, 1);
+        assert_eq!(
+            client.retry_visibility().await,
+            Err(ClientError::InvalidInput)
+        );
+        let canonical = visibility::VisibilityIntent {
+            epoch: format!("{:032x}", client.epoch),
+            revision: 0,
+            token: "a".repeat(64),
+            request: "b".repeat(32),
+            mode: 2,
+        };
+        assert!(canonical.valid(client.epoch));
+
+        // Act: every malformed input must fail BEFORE the client retains it.
+        let cases = [
+            "wrong-epoch",
+            "empty-epoch",
+            "uppercase-epoch",
+            "mode-3",
+            "mode-max",
+            "token-empty",
+            "token-short",
+            "token-long",
+            "token-uppercase",
+            "token-invalid-char",
+            "token-unicode",
+            "request-empty",
+            "request-short",
+            "request-long",
+            "request-uppercase",
+            "request-invalid-char",
+            "request-unicode",
+        ];
+        for case in cases {
+            let mut intent = canonical.clone();
+            match case {
+                "wrong-epoch" => intent.epoch = format!("{:032x}", client.epoch + 1),
+                "empty-epoch" => intent.epoch.clear(),
+                "uppercase-epoch" => intent.epoch = "A".repeat(32),
+                "mode-3" => intent.mode = 3,
+                "mode-max" => intent.mode = u8::MAX,
+                "token-empty" => intent.token.clear(),
+                "token-short" => intent.token = "a".repeat(63),
+                "token-long" => intent.token = "a".repeat(65),
+                "token-uppercase" => intent.token = "A".repeat(64),
+                "token-invalid-char" => intent.token = "g".repeat(64),
+                "token-unicode" => intent.token = "é".repeat(32),
+                "request-empty" => intent.request.clear(),
+                "request-short" => intent.request = "b".repeat(31),
+                "request-long" => intent.request = "b".repeat(33),
+                "request-uppercase" => intent.request = "B".repeat(32),
+                "request-invalid-char" => intent.request = "g".repeat(32),
+                "request-unicode" => intent.request = "é".repeat(16),
+                _ => unreachable!(),
+            }
+            assert!(!intent.valid(client.epoch), "{case}");
+
+            // Assert: neither an outbound mutation nor a pending retry is made.
+            assert_eq!(
+                client.set_visibility(intent).await,
+                Err(ClientError::InvalidInput),
+                "{case}"
+            );
+            assert!(!client.has_pending_visibility(), "{case}");
+            assert!(!client.has_pending_settings(), "{case}");
+            assert_eq!(client.read_visibility().await.unwrap(), initial, "{case}");
+        }
+        assert_eq!(client.retry_visibility().await, Err(ClientError::InvalidInput));
+        assert_eq!(client.operation_state().await.unwrap(), (0, 0));
+        assert!(!format!("{canonical:?}").contains(&canonical.token));
+        assert!(!format!("{canonical:?}").contains(&canonical.request));
+        client.close().await.unwrap();
+        let (coordinator, result) = host.finish().await;
+        assert_eq!(result, Ok(()));
+        assert!(coordinator.transfers.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn given_pending_visibility_before_wire_when_daemon_restarts_then_exact_intent_is_not_replayed_to_new_owner(
+) {
+    scenario(async {
+        // Arrange: a real client retains a valid command but cannot send it yet.
+        let (private, host, mut client) = fixture().await;
+        let original = visibility::VisibilityIntent {
+            epoch: format!("{:032x}", client.epoch),
+            revision: 0,
+            token: "a".repeat(64),
+            request: "b".repeat(32),
+            mode: 2,
+        };
+        assert!(original.valid(client.epoch));
+        let reached = hook(&mut client, "Set", false);
+        interrupted(client.set_visibility(original.clone()), reached).await;
+        assert!(client.has_pending_visibility());
+        assert_eq!(client.pending_visibility.as_ref(), Some(&original));
+
+        // Act: a second user command cannot overwrite the pending intent.
+        let mut second = original.clone();
+        second.request = "c".repeat(32);
+        assert_eq!(
+            client.set_visibility(second).await,
+            Err(ClientError::PendingOperation)
+        );
+        assert_eq!(client.pending_visibility.as_ref(), Some(&original));
+
+        // Replace the actual service owner and epoch before any wire Set happened.
+        let (previous, stopped) = host.finish().await;
+        assert_eq!(stopped, Ok(()));
+        assert!(previous.transfers.is_empty());
+        let replacement = Harness::with_coordinator(
+            SelectionBus::connect(private.socket().await).await.unwrap(),
+            Coordinator::new(456, Limits::default()).unwrap(),
+        );
+
+        // Assert: explicit retries refuse the new daemon and retain exactly
+        // the original pending command; no hidden replay or visibility change.
+        for _ in 0..2 {
+            assert_eq!(
+                client.retry_visibility().await,
+                Err(ClientError::DaemonChanged)
+            );
+            assert_eq!(client.pending_visibility.as_ref(), Some(&original));
+        }
+        let mut other = NativeClient::connect(private.socket().await).await.unwrap();
+        assert_eq!(other.epoch, 456);
+        let view = other.read_visibility().await.unwrap();
+        assert!(!view.available);
+        assert!(!view.running);
+        assert_eq!(view.mode, 1);
+        assert_eq!(view.revision, 0);
+        assert_eq!(other.operation_state().await.unwrap(), (0, 0));
+        other.close().await.unwrap();
+        client.close().await.unwrap();
+        let (next, result) = replacement.finish().await;
+        assert_eq!(result, Ok(()));
+        assert!(next.transfers.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn given_dedicated_client_when_connected_then_epoch_empty_ledger_and_redacted_errors_are_validated(
 ) {
     scenario(async {
