@@ -462,7 +462,10 @@ mod tests {
             overrun,
             Err(tokio::sync::broadcast::error::RecvError::Lagged(3))
         ));
-        assert_eq!(receiver_refresh_action(overrun), ReceiverRefreshAction::Resend);
+        assert_eq!(
+            receiver_refresh_action(overrun),
+            ReceiverRefreshAction::Resend
+        );
         for _ in 0..2 {
             assert_eq!(
                 receiver_refresh_action(receiver.recv().await),
@@ -506,10 +509,7 @@ mod tests {
             ("é".repeat(128), "é".repeat(127)),
             ("🧩".repeat(63), "🧩".repeat(63)),
             ("🧩".repeat(64), "🧩".repeat(63)),
-            (
-                format!("{}éZ", "x".repeat(254)),
-                "x".repeat(254),
-            ),
+            (format!("{}éZ", "x".repeat(254)), "x".repeat(254)),
         ];
 
         for (input, expected) in cases {
