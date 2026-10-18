@@ -87,9 +87,9 @@ not an executed mutator.
 1. [x] Source/risk/inventory/branch/negative/
    interactions/counts/production map written first.
 2. [x] Add two tests, no production code.
-3. [ ] Verify exact CI test names, Core Rust,
+3. [x] Verify exact CI test names, Core Rust,
    Native GTK and all quick Preflight jobs.
-4. [ ] Update D1–D5, inventory/current-state.
+4. [x] Update D1–D5, inventory/current-state.
 5. [ ] Full complete 10× and global Stage12 still NO.
 Rollback only tests/doc. No master/package/release.
 
@@ -119,3 +119,69 @@ and [Native GTK 39132196774](https://github.com/morozhenko-apps/rquickshare/acti
 Only actual job logs may certify D2 pass and
 overall Stage 11. The strict ten-consecutive
 full-source and global Stage 12 remain OPEN.
+
+## Actual scoped D1–D5 final source checkpoint
+
+**D1 — test execution.** Final combined
+test code SHA `66ddf1fc24f906e74c9246c31ebc1ad967b0e8d2`
+runs both original `core_lib/src/service/client/desktop/tests.rs`
+methods. [Preflight 39133124486](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124486)
+Core job `117692233730` reports
+**744 stable Rust PASS, 0 failed, 0 ignored**,
+with two independent integration binaries
+**4/4 and 4/4**; eight predefined
+race-sensitive methods are outside
+this fast profile. Both new method
+names are verified independently
+`... ok` in complete Core CI logs
+(the same two had previously passed
+the intermediate `913fac10` Core
+source as well). This is one final
+same-source quick validation, not
+the release-only full ten-pass gate.
+
+**D2 — category evidence** (two original
+Rust methods, overlapping attributions):
+
+| Category | Methods | Execution/result |
+|---|---:|---|
+| Positive | 2 | PASS: gate releases after sole owner drops and watch is idle |
+| N1 malformed | 0 | N/A typed gate interface |
+| N2 cardinality | 2 | PASS: sixteen contenders, one permit, repeated attempts |
+| N3 network | 0 | N/A no network |
+| N4 retry/duplicates | 2 | PASS: reacquire after Drop, always reject after close |
+| N5 concurrency | 2 | PASS: actual threads and synchronization barriers |
+| N6 stale state | 1 | PASS: closing while prior permit held never reopens |
+| N7 authority | 2 | PASS: exclusive grant and permanent shutdown |
+| N8 clock/locale | 0 | N/A no timing/locale logic |
+| N9 interruption | 2 | PASS: owner release and shutdown during active permit |
+| N10 cross-actor | 2 | PASS: no overlapping source-owner permits |
+| N11 monetization | 0 | N/A |
+| N12 filesystem | 0 | N/A pure capability ownership |
+
+**D3 — test-only files.** Only
+`core_lib/src/service/client/desktop/tests.rs`
+and docs modified; no gate runtime, network
+wire, SDK or installed application changed.
+
+**D4 — refactor requirement.**
+The real `Arc<Mutex<...>>` gate can
+be tested with deterministic barriers,
+so no production test seam/refactor
+is required. Actual multi-process
+D-Bus ownership and Linux app
+shutdown remain separate system
+tests; existing integration suite
+already covers portions.
+
+**D5 — mutation review.**
+Remove exclusive ownership,
+allow two permits, reset closed
+flag in destructor, retain busy
+after drop or allow repeated
+acquire after close: each breaks
+strong exact assertions. Manual
+review only, no executed mutation
+engine. Final full 10x Stage 11
+and repository-wide Stage 12
+remain NO. No production changes.
