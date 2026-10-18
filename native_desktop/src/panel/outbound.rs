@@ -558,18 +558,12 @@ mod tests {
             (
                 "cut\nfile:///tmp/Caf%C3%A9\nfile:///tmp/Caf%C3%A9\n",
                 true,
-                vec![
-                    PathBuf::from("/tmp/Café"),
-                    PathBuf::from("/tmp/Café"),
-                ],
+                vec![PathBuf::from("/tmp/Café"), PathBuf::from("/tmp/Café")],
             ),
             (
                 "# a file list\n\n  file:///tmp/one%20two  \r\nfile:///tmp/three\n",
                 false,
-                vec![
-                    PathBuf::from("/tmp/one two"),
-                    PathBuf::from("/tmp/three"),
-                ],
+                vec![PathBuf::from("/tmp/one two"), PathBuf::from("/tmp/three")],
             ),
             (
                 "file://LOCALHOST/tmp/only",
@@ -625,7 +619,10 @@ mod tests {
         let bounded = format!("{prefix}{}", "x".repeat(URI_BYTES - prefix.len()));
         let paths_at_limit = paths(bounded.as_bytes(), false).unwrap();
         assert_eq!(paths_at_limit.len(), 1);
-        assert_eq!(paths_at_limit[0].as_os_str().len(), URI_BYTES - "file://".len());
+        assert_eq!(
+            paths_at_limit[0].as_os_str().len(),
+            URI_BYTES - "file://".len()
+        );
         let oversized = format!("{bounded}x");
         assert_eq!(oversized.len(), URI_BYTES + 1);
         assert!(paths(oversized.as_bytes(), false).is_err());
