@@ -73,6 +73,80 @@ async fn interrupted(future: impl Future<Output = Result<(), DesktopError>>, rea
     }
 }
 
+#[test]
+fn given_simultaneous_preparation_contenders_when_gate_is_open_then_exactly_one_permit_exists_until_drop(
+) {
+    use std::sync::Barrier;
+
+    // Arrange: every contender starts at one synchronization barrier,
+    // and holds any acquired permit until *every* contender tried.
+    // A wall-clock sleep would make this race result nondeterministic.
+    let gate = PreparationGate::new();
+    assert!(!*gate.subscribe().borrow());
+    let start = Arc::new(Barrier::new(17));
+    let attempted = Arc::new(Barrier::new(17));
+    let mut workers = Vec::new();
+    for _ in 0..16 {
+        let gate = gate.clone();
+        let start = start.clone();
+        let attempted = attempted.clone();
+        workers.push(std::thread::spawn(move || {
+            start.wait();
+            let permit = gate.try_acquire();
+            let winner = permit.is_some();
+            attempted.wait();
+            drop(permit);
+            winner
+        }));
+    }
+    // Act: synchronize all attempts, so no winner may release early.
+    start.wait();
+    attempted.wait();
+
+    // Assert: only one preparation can enter the file authority scope;
+    // all other 15 contenders observe a held gate.
+    let winners = workers
+        .into_iter()
+        .map(|thread| thread.join().unwrap())
+        .filter(|winner| *winner)
+        .count();
+    assert_eq!(winners, 1);
+    assert!(!*gate.subscribe().borrow());
+    let renewed = gate.try_acquire().expect("released gate must reopen");
+    assert!(*gate.subscribe().borrow());
+    assert!(gate.try_acquire().is_none());
+    drop(renewed);
+    assert!(!*gate.subscribe().borrow());
+}
+
+#[test]
+fn given_gate_closes_during_held_preparation_when_permit_drops_then_busy_clears_but_permission_never_reopens(
+) {
+    // Arrange: a real held permit publishes the busy state.
+    let gate = PreparationGate::new();
+    let busy = gate.subscribe();
+    assert!(!*busy.borrow());
+    let permit = gate.try_acquire().expect("first permit");
+    assert!(*busy.borrow());
+    assert!(gate.try_acquire().is_none());
+
+    // Act: shutdown races with a still-live owner on a different thread.
+    // The close flag must not be undone by the later destructor.
+    let closer = gate.clone();
+    std::thread::spawn(move || closer.close()).join().unwrap();
+    assert!(*busy.borrow());
+    assert!(gate.try_acquire().is_none());
+    drop(permit);
+
+    // Assert: publishing idle does NOT reopen authority after shutdown.
+    assert!(!*busy.borrow());
+    for _ in 0..3 {
+        assert!(gate.try_acquire().is_none());
+        gate.close();
+        assert!(!*busy.borrow());
+    }
+}
+
 #[tokio::test]
 async fn given_native_manifest_limits_when_choosing_then_unsupported_sources_never_enter_sdk() {
     scenario(async {
