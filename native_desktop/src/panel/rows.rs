@@ -947,8 +947,7 @@ mod device_contract_tests {
                         } else {
                             None
                         };
-                        let expected_visible =
-                            !phase.is_terminal() && expected_bound.is_none();
+                        let expected_visible = !phase.is_terminal() && expected_bound.is_none();
 
                         // Assert: exact identity and complete visibility decision.
                         assert_eq!(
@@ -967,8 +966,7 @@ mod device_contract_tests {
     }
 
     #[test]
-    fn given_all_progress_extremes_when_projected_then_fraction_is_exact_finite_and_monotonic(
-    ) {
+    fn given_all_progress_extremes_when_projected_then_fraction_is_exact_finite_and_monotonic() {
         // Arrange / Act / Assert: independently compute the saturated ratio.
         let boundaries = [0, 1, 2, 3, 254, 255, 65_535, u64::MAX];
         for total in boundaries {
