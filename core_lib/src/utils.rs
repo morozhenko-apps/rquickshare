@@ -584,25 +584,20 @@ mod tests {
                 [10, 1, 2, 3],
             ),
             (
-                vec![
-                    ("eth0", "203.0.113.10"),
-                    ("eth1", "198.51.100.20"),
-                ],
+                vec![("eth0", "203.0.113.10"), ("eth1", "198.51.100.20")],
                 [203, 0, 113, 10],
             ),
             (
-                vec![
-                    ("eth1", "198.51.100.20"),
-                    ("eth0", "203.0.113.10"),
-                ],
+                vec![("eth1", "198.51.100.20"), ("eth0", "203.0.113.10")],
                 [198, 51, 100, 20],
             ),
         ];
 
         for (interfaces, expected) in cases {
-            let selected = select_lan_ipv4(interfaces.iter().map(|(name, ip)| {
-                ((*name).to_owned(), ip.parse::<std::net::IpAddr>().unwrap())
-            }));
+            let selected =
+                select_lan_ipv4(interfaces.iter().map(|(name, ip)| {
+                    ((*name).to_owned(), ip.parse::<std::net::IpAddr>().unwrap())
+                }));
             assert_eq!(selected, Some(expected), "interfaces={interfaces:?}");
         }
         assert_eq!(select_lan_ipv4(Vec::new()), None);
