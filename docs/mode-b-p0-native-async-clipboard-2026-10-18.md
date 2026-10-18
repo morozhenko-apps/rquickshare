@@ -308,7 +308,40 @@ runs. Global Stage 11 and Stage 12 **NO**.
 at exact source `1501fa1e`: stable Core,
 Core Clippy, frontend and Rust formatter
 jobs SUCCESS at first inspection.
-The desktop Tauri Clippy/unit job was
-still running then. Do not mark the
-entire quick Preflight 5/5 until its
-actual final result is checked.
+The desktop Tauri Clippy/unit job
+subsequently completed SUCCESS and its
+job log `117678271520` proves
+**10/10 desktop Rust tests**, zero failures
+or ignored. The complete quick Preflight
+**finished SUCCESS, 5/5 jobs**, on the
+same test source.
+
+## Final same-source quick CI gate (not full Mode B)
+
+Both workflows completed **SUCCESS** at
+`1501fa1eed09bfb349ec48fcab038d15bba7a83f`:
+
+- [Native GTK 39128370942](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370942),
+  job `117678215874`, real actual-widget suite
+  **57/57 passed**. This remains 57 because
+  two test-only fixture functions were called
+  inside the already-existing smoke method.
+- [Preflight 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901),
+  **all 5/5 jobs SUCCESS**. Core job
+  `117678271834` actual log: stable
+  **740/740**, two integration binaries
+  **4/4 + 4/4**; desktop Tauri job
+  `117678271520` **10/10**. Formatter,
+  frontend, Core Clippy and desktop
+  Clippy passed.
+- Original rustfmt-only red CI is retained
+  in the ledger and not counted toward
+  success. No assertions were weakened.
+
+**Limitations:** no standalone executable
+mutation run; no ten consecutive full
+post-change repository passes; no real
+Wayland/Google peer acceptance; no proof
+of independently observed GInputStream
+closure. Stage 11 global / Stage 12 global
+remain **NO**.
