@@ -1,5 +1,54 @@
 # Current implementation and continuation state
 
+## MODE B P0 cross-connection Selection authority and lifetime — 2026-10-18
+
+Two new original test-only Rust methods in
+`core_lib/src/service/client/controller/tests.rs`
+exercise **actual** `PanelController`,
+`NativeClient`, `SelectionBus` and
+daemon coordinator on a private D-Bus broker.
+A legitimate `Selection` is created through
+real `handle.choose`, never fabricated.
+A second client may not send it as single,
+queued or batched transfer; rejection occurs
+before any pending operation or transfer
+and leaves the original owner able to
+dispatch once. Once the original GUI client
+closes without sending, its old handle
+may not be replayed by a fresh client,
+which can still prepare and send its own
+new `Selection`.
+
+Documentation-first
+[scoped Mode B risk, Positive/N1–N12,
+branch map and D1–D5](mode-b-p0-selection-lifetime-2026-10-18.md).
+Exact test SHA `e5731932`:
+[Preflight 39129396907](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396907)
+Core log **742/742 stable, 4+4
+integrations**, both new methods
+individually `... ok`; format,
+frontend and Core Clippy SUCCESS.
+Desktop Preflight job at first audit
+checkpoint needed separate final
+confirmation. Independent
+[Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
+**SUCCESS, 57/57** native tests.
+The initial formatter-only red state
+was corrected in a test-only commit.
+
+Unverified: actual connected GTK
+`finish_prepared(Some(Selection))`,
+Wayland clipboard-owner loss,
+Google peer delivery, BlueZ, BWU
+authentication [#8](https://github.com/morozhenko-apps/rquickshare/issues/8),
+live mDNS SDK events [#9](https://github.com/morozhenko-apps/rquickshare/issues/9),
+post-change complete ten-consecutive
+Mode B, hardware acceptance and
+global Stage 12. Production code,
+`master` and installed packages
+untouched. **Stage 12 NO.**
+
+
 ## MODE B P0 actual GDK async clipboard and stale preparation — 2026-10-18
 
 The existing **real Native GTK widget smoke** in
