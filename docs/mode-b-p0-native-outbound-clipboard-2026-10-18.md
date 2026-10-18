@@ -201,3 +201,23 @@ installed package and `master` unaffected.
   inspected do not claim these pass.
 - No production changes, no real clipboard/OS
   user interaction, no Mode A decision.
+
+## Red native formatting CI and exact-source retry
+
+[Native GTK 39126097688](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126097688)
+at `3186526e` failed the native rustfmt gate **before
+executing the new tests**. The log showed
+two vec! layouts, one assert_eq! wrap and two
+extra empty lines near the test module end,
+all inside the new `outbound.rs` test section.
+Pure test formatting commits `11f4e875`
+and `c911fc02` addressed these exact differences,
+with assertion contents and production code
+unchanged. The intermediate CI run on
+`11f4e875` was cancelled by the second
+format correction; it cannot count as PASS.
+Latest same-source CI:
+[Native GTK 39126241182](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241182),
+[Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201).
+Report actual test results only when the
+completed job logs prove all new methods pass.
