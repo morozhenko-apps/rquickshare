@@ -1,5 +1,44 @@
 # Current implementation and continuation state
 
+## MODE B P0 Native GTK directory portal safety and cancellation — 2026-10-18
+
+Three new **test-only** methods in
+`native_desktop/src/portal/tests.rs` exercise the existing
+private D-Bus portal contract against actual production
+`show_directory_contents` / `show_on_mode`:
+Linux `O_PATH` directory FD is rejected before
+system bus admission, supported v3 OpenFile
+returns success only for code 0 (with seven
+v2/v3 response/path/body cases), and cancellation
+after request admission issues one owned Close,
+returns Cancelled, and releases the FD owner.
+The external portal is emulated at its public D-Bus
+boundary; app logic, portal FD checks, request
+validation and lifetime are **not mocked**.
+
+The [scoped plan, Positive/N1–N12, branch map and
+D1–D5 ledger](mode-b-p0-native-portal-directory-2026-10-18.md)
+was committed before tests. Exact test-source
+`f63c3df1` [Native GTK run 39124127819](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127819)
+**SUCCESS**, actual logs **55/55 native GTK**
+and all three new methods individually `... ok`.
+The initial new-source run failed native rustfmt
+on three test-only line wraps; fixed at `f63c3df1`.
+[Preflight 39124127809](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127809)
+Core Rust log **740/740 stable + 4+4 integration**
+and Core Clippy/frontend/format passed; desktop
+Tauri must be confirmed before declaring entire
+fast Preflight 5/5. No production code changes.
+
+Physical KDE/Wayland portal, actual file-manager
+launch, Google Quick Share Android/Windows
+compatibility, [BWU identity security #8](https://github.com/morozhenko-apps/rquickshare/issues/8),
+[mDNS discovery SDK testability #9](https://github.com/morozhenko-apps/rquickshare/issues/9),
+current-source full 10× and complete MODE B
+Stage 12 are **OPEN/NO**. `master`, packages
+and user desktop/services were not changed.
+
+
 ## MODE B P0 mDNS TXT admission and stable service owner — 2026-10-18
 
 Four new **test-only** Rust methods in
