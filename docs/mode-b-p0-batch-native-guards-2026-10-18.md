@@ -441,6 +441,12 @@ at source `66ddf1fc` has Core Rust
 integration binaries), Rust format,
 frontend and Core Clippy **SUCCESS**
 at this evidence checkpoint. Desktop
-Tauri job was still running then;
-do not mark full Preflight 5/5
-until that job completes.
+Tauri job subsequently completed
+**SUCCESS**, actual desktop job log
+`117692233854` confirms **10/10 Rust
+unit tests, 0 failed/ignored**.
+The full exact-source quick Preflight
+**completed SUCCESS, 5/5 jobs**.
+The separate native GTK workflow
+also completed SUCCESS, 64/64.
+This is not full Mode B 10×.
