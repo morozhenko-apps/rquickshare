@@ -156,11 +156,11 @@ Manual mutation review only; no mutation engine.
 1. [x] Stage 1–8 repository scan, risk, inventory,
    branch/category/interaction/count and
    per-production-file map written first.
-2. [ ] Add both original controller/broker tests.
-3. [ ] Run exact-source Core Rust, Core Clippy,
+2. [x] Add both original controller/broker tests.
+3. [x] Run exact-source Core Rust, Core Clippy,
    formatter, Preflight and native GTK and
    inspect actual test-by-name logs.
-4. [ ] Update D2 actual and red-state triage,
+4. [x] Update D2 actual and red-state triage,
    mutation review, Current State and global inventory.
 5. [ ] Global ten consecutive *complete* Mode B
    and Stage 12 all-production-branch proof OPEN.
@@ -188,3 +188,88 @@ unchanged: three wrong-owner admission
 methods must reject before pending or queue,
 and a new owner must work after old owner
 close. No architecture/security decision.
+
+## Scoped D1–D5 results and verified CI
+
+**D1 — execution.** The two test-only methods
+were added to `core_lib/src/service/client/controller/tests.rs`
+at SHA `11ae9bd7`; its first CI formatter job
+reported four layout differences in the
+new methods and is historical RED evidence.
+A test-only rustfmt correction `e5731932`
+applied the exact expected layouts, with
+all business assertions unchanged.
+
+The actual Core job `117681317085` in
+[Preflight 39129396907](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396907)
+at SHA `e573193261863da6c65a6a38983f539c6ae78f16`
+completed **SUCCESS**. Full job log inspected:
+stable Core **742/742 passed, 0 failed,
+0 ignored** (8 race-sensitive tests filtered by
+the existing quick profile); existing
+Core integration bins **4/4 + 4/4**.
+Each of the two new unique method names appears
+**exactly once** as `... ok`.
+Rust format, frontend and Core Clippy
+jobs finished SUCCESS. Desktop Tauri
+job initially remained in progress,
+so 5/5 overall Preflight requires
+separate final confirmation.
+
+Independent
+[Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
+**SUCCESS** on identical test SHA. Its full
+job log `117681299538` shows native
+**57/57 passed, 0 failed/ignored**, including
+previously covered GDK/GTK fixtures unchanged.
+
+**D2 — executed category assignment** (two
+new original Rust test methods, overlapping
+category assignments; not coverage percentages):
+
+| Category | New methods | Actual scoped result |
+|---|---:|---|
+| Positive | 2 | PASS: intact original and replacement owner's explicit send |
+| N1 invalid token | 2 | PASS: foreign/closed-owner Selection denied |
+| N2 batch boundary | 1 | PASS: single/queue/batch entry points deny foreign |
+| N3 external failure | 1 | PASS: owner connection closes while daemon remains |
+| N4 duplicate/replay | 2 | PASS: no pending operation/transfer after rejected attempt |
+| N5 concurrency | 2 | PASS: two real clients and successive owner identities |
+| N6 corrupt data | 0 | N/A: Selection is daemon-minted immutable typed handle |
+| N7 authority/security | 2 | PASS: exact per-connection authorization |
+| N8 locale/time | 0 | N/A: no time/locale |
+| N9 interruption | 2 | PASS: sender/controller exit before transfer |
+| N10 privacy/cross-client | 2 | PASS: old/foreign source not enqueued |
+| N11 monetization | 0 | N/A: no billing |
+| N12 storage/FD | 2 | PASS: original local paths remain, no leaked foreign queue |
+
+**D3 — files modified.**
+Only `#[cfg(test)]` `controller/tests.rs`
+and this documentation ledger/global indexes.
+No production behavior, API, protocol or
+installed software changes.
+
+**D4 — testability.** Existing real private
+D-Bus broker and real SDK/client/controller
+already support strict lifecycle tests
+without a new injected production seam.
+Actual GTK connected `Panel`, Wayland
+clipboard ownership loss, D-Bus to
+external Quick Share peer, BLE→TCP
+identity authentication and Windows
+hardware remain separate P0 gaps.
+
+**D5 — mutation review and residual risk.**
+Replacing `owned` identity rejection with
+canonical-id-only acceptance, marking
+foreign rejects pending, accidentally
+enqueuing a rejected foreign send, retaining
+an abandoned Selection after controller
+close, or blocking fresh correct sending
+would contradict explicit assertions.
+This is manual sensitivity review
+only. Not every daemon authorization branch,
+race-sensitive case, negative N1–N12
+interaction or complete final-source 10×
+has been proven. Full Stage 11 and
+global Stage 12 remain **NO**.
