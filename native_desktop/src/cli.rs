@@ -268,13 +268,16 @@ mod tests {
             "http://localhost/tmp/a",
             "ftp:///tmp/a",
         ] {
-            assert!(paths(["--", invalid].map(OsString::from)).is_err(), "{invalid}");
+            assert!(
+                paths(["--", invalid].map(OsString::from)).is_err(),
+                "{invalid}"
+            );
         }
     }
 
     #[test]
-    fn given_cli_batch_with_invalid_late_source_when_parsed_then_entire_selection_fails_atomically(
-    ) {
+    fn given_cli_batch_with_invalid_late_source_when_parsed_then_entire_selection_fails_atomically()
+    {
         // Arrange: any malformed second/third argument rejects the whole
         // incoming batch. No prefix list must be exposed as a successful send.
         for final_arg in [
@@ -284,11 +287,12 @@ mod tests {
             "https://example.invalid/other",
             "",
         ] {
-            let result = paths(
-                ["--", "file:///tmp/first", "/tmp/second", final_arg]
-                    .map(OsString::from),
+            let result =
+                paths(["--", "file:///tmp/first", "/tmp/second", final_arg].map(OsString::from));
+            assert!(
+                result.is_err(),
+                "admitted a partial batch ending {final_arg:?}"
             );
-            assert!(result.is_err(), "admitted a partial batch ending {final_arg:?}");
         }
         let source = OsString::from_vec(vec![b'/', b't', b'm', b'p', b'/', 0]);
         assert!(paths([OsString::from("--"), OsString::from("/tmp/first"), source]).is_err());
@@ -296,12 +300,15 @@ mod tests {
         // Count is global, not per input encoding. Valid repeats are not
         // silently deduplicated or reordered.
         for count in [1_usize, 255, 256, 257] {
-            let result = paths(
-                std::iter::once(OsString::from("--"))
-                    .chain((0..count).map(|index| {
-                        OsString::from(if index % 2 == 0 { "/tmp/a" } else { "file:///tmp/b" })
-                    })),
-            );
+            let result = paths(std::iter::once(OsString::from("--")).chain((0..count).map(
+                |index| {
+                    OsString::from(if index % 2 == 0 {
+                        "/tmp/a"
+                    } else {
+                        "file:///tmp/b"
+                    })
+                },
+            )));
             assert_eq!(result.is_ok(), count <= 256, "count={count}");
             if count == 256 {
                 let output = result.unwrap();
@@ -314,10 +321,7 @@ mod tests {
         // may be exactly reached, but one extra byte must reject all paths.
         for limit in [ARGUMENT_BYTES - 1, ARGUMENT_BYTES, ARGUMENT_BYTES + 1] {
             let prefix = "/tmp/";
-            let single = OsString::from(format!(
-                "{prefix}{}",
-                "a".repeat(limit - prefix.len())
-            ));
+            let single = OsString::from(format!("{prefix}{}", "a".repeat(limit - prefix.len())));
             assert_eq!(
                 paths([OsString::from("--"), single]).is_ok(),
                 limit <= ARGUMENT_BYTES,
