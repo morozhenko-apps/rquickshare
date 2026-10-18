@@ -183,9 +183,9 @@ not claim of executed mutation engine.
 
 1. [x] Stages 1–8 and mutation plan documented BEFORE code.
 2. [x] Add 7 independent methods; no production changes.
-3. [ ] Run same-source native GTK, Preflight Core/format/frontend/
+3. [x] Run same-source native GTK, Preflight Core/format/frontend/
    Clippy/Tauri; check **actual logs** and method names.
-4. [ ] Record D1–D5 and observed category matrix; update
+4. [x] Record D1–D5 and observed category matrix; update
    global inventory/current state.
 5. [ ] Strict final-source full suite 10x and physical
    OS/device acceptance remain OPEN; all Stage12 NO.
@@ -342,3 +342,105 @@ and [Preflight 39133124486](https://github.com/morozhenko-apps/rquickshare/actio
 are the final-code follow-up runs.
 Neither stale failed CI nor an intermediate
 cancelled run counts as Stage 11 evidence.
+
+## D1–D5 verified native test source (after full red-state triage)
+
+**D1 — source/runner and actual logs.**
+Final test code SHA `66ddf1fc24f906e74c9246c31ebc1ad967b0e8d2`.
+[Native GTK 39133124223](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124223)
+**completed SUCCESS**, actual job `117692170743`
+verified end-to-end: **64 passed, 0 failed,
+0 ignored, 0 filtered**. All SEVEN original
+new method names appear exactly **once
+each as `... ok`**, together with
+57 earlier native methods. Native formatter,
+Clippy and widget suite passed.
+The earlier native `62 passed, 2 failed`
+at `913fac10` resulted from incorrect
+new CardPolicy fixture surface assumptions,
+not an established production defect.
+The contract correction maintains
+strict priority/no-stale owner assertions:
+unchanged visible+automatic notice =>
+None (no redraw), invisible may Show,
+and repeated busy/automatic visible
+with no owned shown notice => Hide.
+No suppression/skip or domain code change.
+Intermediate rustfmt-only failures
+and compile-time consumed Surface
+errors remain recorded above.
+
+**D2 — actual overlapping method category
+assignment** (SEVEN unique native Rust
+methods, one-to-many; NOT seven tests
+in each category and not a coverage
+percentage):
+
+| Category | New native methods | Verified bounded outcome |
+|---|---:|---|
+| Positive | 7 | PASS: legal local byte arguments, prioritized consent, live reveal, allowed idle |
+| N1 validation | 5 | PASS: foreign/malformed CLI, absent/stale notice and phase |
+| N2 limits | 6 | PASS: 255/256/257 argv, 64 KiB−1/exact/+1, multiple rows |
+| N3 network error | 0 | N/A these direct helpers do not perform network I/O |
+| N4 replay/idempotency | 7 | PASS: repeated card, dismissal, Finished and idle states |
+| N5 state interactions | 5 | PASS: busy card, epoch/owner transitions and draining |
+| N6 stale/corrupted | 6 | PASS: Unicode/nonUTF8 byte bounds, stale owner/snapshot state |
+| N7 authority/security | 7 | PASS: strictly local URI, live consent priority, inbound results |
+| N8 Unicode/time | 2 | PASS: Unix byte-exact URI, safety/time guard baseline |
+| N9 interruption | 5 | PASS: dismiss, reset, removed peer, interrupted result or drain |
+| N10 privacy/data isolation | 7 | PASS: no foreign URI/old peer/false revealed result |
+| N11 entitlement | 0 | N/A no subscriptions or billing |
+| N12 local path/storage | 3 | PASS: byte-preserving local paths and no background disappearance |
+
+**D3 — implementation.** All seven
+`#[test]` methods added in existing
+production-file *test modules only*:
+`native_desktop/src/cli.rs`,
+`native_desktop/src/card_policy.rs`,
+`native_desktop/src/panel/results.rs`,
+`native_desktop/src/panel/idle.rs`.
+No runtime source, public method,
+protocol, installed UI, master or
+release modification. Exact-format
+fixes were made without weakening
+meaningful assertions.
+
+**D4 — refactor/testability.** No refactor
+needed to test these pure rules.
+Live backend consent decisions,
+physical KDE/Wayland/Android/Windows
+and delayed GUI/daemon callbacks
+are not covered by these table-driven
+methods. Do not infer release-ready
+status from the strong native fast
+suite.
+
+**D5 — reviewed mutation sensitivity.**
+Remote file:// authority, loss of
+raw nonUTF8 filename, percent-NUL
+admission, per-item instead of
+batch raw byte caps, reversed
+consent priority, dismissed-notice
+replay, busy stale notice show,
+initial/outbound completion
+reveal, repeated Finished enqueue,
+queue not pruned after removal,
+or idle dismissal under lock/drain:
+each breaks a specified assertion.
+Only manual mutation sensitivity
+is claimed; no mutation engine run.
+The complete current-source 10
+consecutive *full* test suites,
+instrumented new-source branch map
+and global Stage 12 remain **OPEN/NO**.
+
+**Same-code general Preflight.**
+[Preflight 39133124486](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124486)
+at source `66ddf1fc` has Core Rust
+**744/744 stable** (plus **4/4+4/4**
+integration binaries), Rust format,
+frontend and Core Clippy **SUCCESS**
+at this evidence checkpoint. Desktop
+Tauri job was still running then;
+do not mark full Preflight 5/5
+until that job completes.
