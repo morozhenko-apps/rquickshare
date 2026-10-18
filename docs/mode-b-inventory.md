@@ -1,5 +1,51 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P0 actual GDK async clipboard and preparation cancellation
+
+The existing actual Native GTK widget smoke
+now invokes two private test-only fixture
+functions in `native_desktop/src/panel/outbound.rs`.
+The GDK provider supplies real clipboard
+MIME streams to unchanged
+`clipboard_paths`: valid freedesktop
+URI lists, GNOME copy/cut with Unicode
+filenames, invalid second local URI,
+remote host, unsupported MIME and
+oversized byte stream. The other
+fixture verifies pending `wait_selection`,
+`close_input` task/token cancellation,
+generation replacement, old callback
+suppression, failed-current completion
+and cleared UI busy state.
+
+A [documented scoped Stage 1–10,
+Positive/N1–N12, interaction and D1–D5](mode-b-p0-native-async-clipboard-2026-10-18.md)
+preceded implementation. At source
+`1501fa1e`:
+[Native GTK 39128370942](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370942)
+**SUCCESS**, **57/57 GTK** — this is an
+**expanded existing smoke, 0 new
+independent Rust test methods**, not
+two new test-runner entries. Earlier
+rustfmt-only failure is recorded.
+[Preflight 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901)
+Core **740/740 stable** + **4+4**
+integrations, frontend/format/Core
+Clippy SUCCESS; desktop job pending
+at initial inventory checkpoint.
+
+External lost clipboard ownership,
+full GTK-to-daemon send and actual
+Google peers remain P0 OPEN, as do
+BWU authentication [#8](https://github.com/morozhenko-apps/rquickshare/issues/8)
+and mDNS event testability
+[#9](https://github.com/morozhenko-apps/rquickshare/issues/9).
+This remains a **single** green GTK
+suite on exact code, not mandatory
+full ten-consecutive final-source
+Mode B or global Stage 12.
+
+
 ## 2026-10-18 P0 Native GTK outbound clipboard URI and session action guard
 
 Two new original `native_desktop/src/panel/outbound.rs`
