@@ -37,3 +37,9 @@ Add planned tests in `identity/tests.rs` only. Verify exact-source Core Rust, Cl
 - The first Preflight observed whitespace-only `rustfmt` differences in two `IdentityPolicy::new` calls. Formatted source was committed without changing assertions at `36d14694`.
 - Exact-source [Preflight 39166597141](https://github.com/morozhenko-apps/rquickshare/actions/runs/39166597141) and [Native GTK 39166597231](https://github.com/morozhenko-apps/rquickshare/actions/runs/39166597231) were started. Do not claim this source green until completed.
 - Stage 10 is a manual mutation-target analysis only. No live BlueZ, mDNS SDK, Android phone or Windows receiver was exercised; current strict Stage 11 10× and repository-wide Stage 12 remain OPEN.
+
+
+## Strict lint correction and exact-source retry
+- The second Preflight (`36d14694`) passed `rustfmt` and frontend but revealed exactly two `clippy::bool_assert_comparison` errors in the new test-only assertions (`is_ok() == false`), not a compiler error in the production module. Changed both to `assert!(...is_err())` at `b4aee9ec`, preserving fail-closed semantics.
+- Exact-source retry: [Preflight 39166779455](https://github.com/morozhenko-apps/rquickshare/actions/runs/39166779455), [Native GTK 39166779483](https://github.com/morozhenko-apps/rquickshare/actions/runs/39166779483). Results must be verified independently after execution. The previous GTK run `39166597231` passed on its own older source, but does not substitute for this final SHA.
+- All changes remain docs and tests only. Production behavior, visibility policy, Android/BlueZ and `master` are unchanged.
