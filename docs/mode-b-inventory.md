@@ -14,8 +14,9 @@ Final test SHA `00a0a76b`:
 [Preflight 39134995892](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995892)
 Core **744 stable + 8 integration** PASS;
 formatter/frontend/Core Clippy PASS.
-Desktop Tauri required a final outcome
-check at inventory timestamp. No production
+Desktop Tauri **10/10 PASS** from job
+logs; quick Preflight **5/5 SUCCESS**
+on exact geometry test code. No production
 change. [Bounded Stage1–10 and D1–D5 report](mode-b-p1-native-placement-bounds-2026-10-18.md)
 documents all positive/negative/interaction
 rows and initial red formatter repair.
