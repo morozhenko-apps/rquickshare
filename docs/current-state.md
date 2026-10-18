@@ -1,5 +1,51 @@
 # Current implementation and continuation state
 
+## MODE B P0 GTK clipboard owner transition and queued cancellation — 2026-10-18
+
+Two new **test-only fixture groups** in
+`native_desktop/src/panel/outbound.rs` are called by the
+existing actual GTK widget smoke (so **0 new
+independent test methods**). Real GTK4
+`gdk::ContentProvider` ownership is revoked **before**
+a new `clipboard_paths` async read: stale
+local URIs must be rejected; fresh local owner
+B is admitted exactly; later remote URI owner
+is rejected; fresh owner D is admitted.
+The second fixture delivers a real oneshot
+`None` before polling the GLib callback,
+then cancels twice through actual
+`close_input`, checks generation/token/task
+state and ensures no stale notice or
+target is restored. No domain controller
+or typed Selection is faked.
+
+The [scoped Stage 1–10, N1–N12 and
+D1–D5 evidence](mode-b-p0-gtk-clipboard-owner-transition-2026-10-18.md)
+was written before testing. Exact source
+`70a6abb0`: [Native GTK 39130339036](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339036)
+**SUCCESS, 57/57**, real log, zero
+failed/ignored; initial test-only E0283
+`None` generic type compilation failure
+was fixed with an explicit `ContentProvider`
+type without changing production logic.
+Same-source [Preflight 39130339110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339110)
+Core **742/742 stable + 4/4 + 4/4**,
+format, frontend and Core Clippy SUCCESS;
+desktop Tauri completion requires a
+final independent verdict before quick
+Preflight 5/5 is claimed.
+
+Still unverified: GInputStream owner loss
+**during** a blocked async read, full
+connected GTK `finish_prepared(Some(Selection))`,
+real Wayland/Android/Windows/BlueZ,
+BWU identity [Issue #8](https://github.com/morozhenko-apps/rquickshare/issues/8),
+mDNS event SDK [Issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9)
+and final full ten-consecutive Mode B/
+all-method Stage 12. Production behavior,
+`master` and installed software untouched.
+
+
 ## MODE B P0 cross-connection Selection authority and lifetime — 2026-10-18
 
 Two new original test-only Rust methods in
