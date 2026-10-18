@@ -197,6 +197,73 @@ mod tests {
         );
     }
     #[test]
+    fn given_desktop_safety_and_draining_daemon_when_idle_is_checked_then_only_unlocked_running_snapshot_can_dismiss(
+    ) {
+        use rqs_lib::service::client::state::StateView;
+
+        // Arrange: use the actual UI model and immutable daemon projection,
+        // not a reimplementation of free() or a fabricated Selection token.
+        let baseline = Model {
+            state: PanelState {
+                view: Some(Arc::new(StateView {
+                    epoch: 8,
+                    revision: 1,
+                    lifecycle: Lifecycle::Running,
+                    synchronized: true,
+                    resources: Default::default(),
+                    sources: vec![],
+                    selections: vec![],
+                    endpoints: vec![],
+                    transfers: vec![],
+                    warnings: vec![],
+                    notices: vec![],
+                })),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(free(&baseline));
+
+        // Act/Assert: unknown/locked/closed screen observations block
+        // dismissal whenever desktop safety enforcement is active.
+        // Notification inhibition may block automatic presentation but
+        // does NOT itself prevent a manual UI action or safe idle.
+        for locked in [None, Some(false), Some(true)] {
+            for inhibited in [None, Some(false), Some(true)] {
+                for closed in [false, true] {
+                    let mut model = baseline.clone();
+                    model.safety_active = true;
+                    model.safety = crate::desktop_guard::SafetyState {
+                        locked,
+                        inhibited,
+                        closed,
+                    };
+                    assert_eq!(
+                        free(&model),
+                        !closed && locked == Some(false),
+                        "locked={locked:?}, inhibited={inhibited:?}, closed={closed}"
+                    );
+                }
+            }
+        }
+
+        // A service shutdown cannot look like a completed idle state,
+        // even if the desktop is otherwise clear and synchronized.
+        for (state, allowed) in [
+            (Lifecycle::Running, true),
+            (Lifecycle::Draining, false),
+            (Lifecycle::Stopped, false),
+        ] {
+            let mut model = baseline.clone();
+            Arc::make_mut(model.state.view.as_mut().unwrap()).lifecycle = state;
+            assert_eq!(free(&model), allowed, "lifecycle={state:?}");
+        }
+        let mut stale = baseline;
+        Arc::make_mut(stale.state.view.as_mut().unwrap()).synchronized = false;
+        assert!(!free(&stale));
+    }
+
+    #[test]
     fn given_unfinished_or_unhealthy_ui_when_idle_is_checked_then_it_is_never_free() {
         use rqs_lib::service::client::state::StateView;
         // Arrange: healthy, synchronized empty model.
