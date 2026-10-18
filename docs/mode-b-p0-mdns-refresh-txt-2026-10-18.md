@@ -28,3 +28,13 @@ Planned 2 named methods, plus existing 6 methods in `mdns.rs`. Coverage map: `co
 
 ## Stage 11–12 completion criteria
 Use exact-SHA Rust formatting, Core tests, Clippy, GTK via current quick CI. Global full 10-run suite, current-source instrumentation, live BlueZ/Android/mDNS interactions, and entire MODE B Stage 12 remain OPEN. Code modifications restricted to tests and documentation, rollback only these files.
+
+
+## Stage 9 implementation and first execution checkpoint
+
+- Plan completed before code: `479f3413`.
+- Two methods implemented in `core_lib/src/hdl/mdns.rs` at `42ff7948`: one uses an actual bounded broadcast receiver overrun and closes its only sender, another uses real `ServiceInfo` to verify 254/255/256-byte and 2-/4-byte Unicode TXT boundaries across repeated mDNS renames.
+- First CI at `42ff7948` exposed exactly two `rustfmt` differences (line wrap of an assertion and one tuple). No production errors were diagnosed from that job. Corrected formatting only in `05cb7d86`.
+- Latest exact-code verification started: [Preflight 39163217193](https://github.com/morozhenko-apps/rquickshare/actions/runs/39163217193), [Native GTK 39163217166](https://github.com/morozhenko-apps/rquickshare/actions/runs/39163217166). Neither is labeled PASS until completion.
+- No changes were made to `mdns_discovery.rs`; its observed/removed TCP-reachable peer cache and listener cancellation remain unverified. A deterministic event source/transport seam would be a production testability refactor requiring a separate MODE A decision. A hardware/real LAN acceptance pass cannot be inferred from these two unit/contract tests.
+- Mutation review remains a manual candidate analysis, not measured kills; current strict ten-run Stage 11 and repository-wide Stage 12 are **NO/OPEN**.
