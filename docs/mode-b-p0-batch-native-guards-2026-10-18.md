@@ -265,3 +265,20 @@ closure producing an independent busy Surface
 for each invocation. All negative assertions
 are preserved. The test did **not** execute
 and the run is NOT a passing receipt.
+
+## Second combined Native GTK CI and exact formatting correction
+
+At source `4a29bc02`,
+[Native GTK 39132422435](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132422435)
+failed only the native rustfmt gate before running
+the new test executable: two wrapped
+`policy.reconcile(..., busy())` calls in
+the new card-policy test. The local
+`Surface`-factory correction had removed
+the earlier E0382 move error.
+Applied exactly the CI-requested
+formatting at source commit `913fac10`,
+without modifying any assertion or
+production implementation. This red
+run is retained, not counted as success.
+Final source jobs must be verified afresh.
