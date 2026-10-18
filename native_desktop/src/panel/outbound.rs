@@ -637,7 +637,9 @@ mod tests {
 
         // Act: revoke ownership BEFORE a subsequent read begins. It must
         // not replay the former owner's already-decoded file list.
-        clipboard.set_content(None).unwrap();
+        clipboard
+            .set_content(None::<&gtk::gdk::ContentProvider>)
+            .unwrap();
         assert!(!clipboard.formats().contain_mime_type("text/uri-list"));
         assert!(
             glib::MainContext::default()
