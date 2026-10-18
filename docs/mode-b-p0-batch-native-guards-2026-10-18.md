@@ -325,3 +325,20 @@ suppress failures, remove negative branches
 or relax no-stale-notice ownership checks.
 Both failed tests must be rerun and pass
 on exact source before a success claim.
+
+## Final assertion layout correction after contract fixture repair
+
+At corrected semantic test SHA `96957ca1`,
+[Native GTK 39132953233](https://github.com/morozhenko-apps/rquickshare/actions/runs/39132953233)
+failed only native rustfmt on the one new
+`assert!(policy.shown.is_none(), ...)`
+message layout, before test execution.
+Exact format-only commit `66ddf1fc`
+adopts the formatter's multiline assertion;
+the checked boolean, message and
+strong no-stale-UI invariants are identical.
+[Native GTK 39133124223](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124223)
+and [Preflight 39133124486](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124486)
+are the final-code follow-up runs.
+Neither stale failed CI nor an intermediate
+cancelled run counts as Stage 11 evidence.
