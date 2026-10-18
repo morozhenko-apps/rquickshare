@@ -203,7 +203,7 @@ mod tests {
 
         // Arrange: use the actual UI model and immutable daemon projection,
         // not a reimplementation of free() or a fabricated Selection token.
-        let baseline = Model {
+        let baseline = || Model {
             state: PanelState {
                 view: Some(Arc::new(StateView {
                     epoch: 8,
@@ -222,7 +222,7 @@ mod tests {
             },
             ..Default::default()
         };
-        assert!(free(&baseline));
+        assert!(free(&baseline()));
 
         // Act/Assert: unknown/locked/closed screen observations block
         // dismissal whenever desktop safety enforcement is active.
@@ -231,7 +231,7 @@ mod tests {
         for locked in [None, Some(false), Some(true)] {
             for inhibited in [None, Some(false), Some(true)] {
                 for closed in [false, true] {
-                    let mut model = baseline.clone();
+                    let mut model = baseline();
                     model.safety_active = true;
                     model.safety = crate::desktop_guard::SafetyState {
                         locked,
@@ -254,11 +254,11 @@ mod tests {
             (Lifecycle::Draining, false),
             (Lifecycle::Stopped, false),
         ] {
-            let mut model = baseline.clone();
+            let mut model = baseline();
             Arc::make_mut(model.state.view.as_mut().unwrap()).lifecycle = state;
             assert_eq!(free(&model), allowed, "lifecycle={state:?}");
         }
-        let mut stale = baseline;
+        let mut stale = baseline();
         Arc::make_mut(stale.state.view.as_mut().unwrap()).synchronized = false;
         assert!(!free(&stale));
     }
