@@ -1,5 +1,52 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P0 real GTK clipboard ownership transition and queued cancellation
+
+Two additional fixture functions in
+`native_desktop/src/panel/outbound.rs`
+extend the **existing** real GTK widget
+smoke: GTK4 ContentProvider A→owner
+loss→new provider B→hostile remote
+provider C→new local D. The actual
+`clipboard_paths` async read rejects
+missing content and foreign URI without
+replaying prior owner data. A real
+oneshot `None` delivered just before
+GLib callback polling plus twice-called
+`close_input` must preserve the old
+notice and clear pending task/token/
+strip, with stale generation inert.
+**0 new standalone Rust test methods**,
+2 test-only fixture groups.
+
+The [documentation-first branch/N1–N12,
+interaction/coverage and D1–D5 report](mode-b-p0-gtk-clipboard-owner-transition-2026-10-18.md)
+records test-only source SHA `70a6abb0`.
+[Native GTK 39130339036](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339036)
+**SUCCESS, real 57/57** with no
+failed/ignored methods. A preceding
+new test source failed to compile from
+the bare generic `set_content(None)`;
+the explicit `ContentProvider` test
+type correction was verified. Same-source
+[Preflight 39130339110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339110)
+Core **742/742 stable + 4+4**,
+formatter/frontend/Core Clippy PASS;
+desktop Tauri completion was still
+pending at this inventory checkpoint.
+
+Real Wayland owner loss **mid-read**,
+network-authenticated GTK Selection send,
+BlueZ/Android/Windows, issues
+[#8](https://github.com/morozhenko-apps/rquickshare/issues/8)
+and [#9](https://github.com/morozhenko-apps/rquickshare/issues/9)
+and the final complete repository
+10x/full all-production-branch Stage 12
+remain **OPEN/NO**. Do not mistake
+a single successful GTK smoke for
+10 clean full-source runs.
+
+
 ## 2026-10-18 P0 real broker Selection cross-owner and reconnect replay
 
 Two new original tests in
