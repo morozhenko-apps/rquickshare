@@ -229,3 +229,22 @@ concurrency; they are not passing receipts.
 Do not count any new tests as passed until
 exact-source job logs confirm the method names.
 Full 10× and physical system gate stay NO.
+
+## Formatter-only red trial during concurrent test additions
+
+Intermediate [Native GTK 39131803149](https://github.com/morozhenko-apps/rquickshare/actions/runs/39131803149),
+source `3de97ce0`, reported **rustfmt diff only**
+in newly written `card_policy.rs`, `cli.rs`
+and `panel/results.rs`; the full native
+test executable had not run in that attempt.
+Its exact diff was retrieved and scoped to
+assertion wrapping, function layout and
+iterator formatting. No production code,
+test assertion or scenario is implicated.
+Later separate preparation gate tests
+at `4015ad70` were added while that
+intermediate run was still executing,
+therefore intermediate cancelled CI cannot
+be counted as final. Correct the strictly
+formatting diffs on final source before
+claiming any PASS. No weakening allowed.
