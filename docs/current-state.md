@@ -28,8 +28,10 @@ Rust test-method count). Same-source
 [Preflight 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901)
 Core **740/740 stable + 4/4 + 4/4**
 verified from logs, Core Clippy, format
-and frontend SUCCESS; desktop Tauri
-job initially pending final check.
+and frontend SUCCESS; desktop Tauri job **10/10 PASS**
+verified from its actual Rust log. All
+five quick Preflight jobs **5/5 SUCCESS**
+on exact test source.
 
 Unverified P0 remains **actual**
 Wayland clipboard ownership loss
