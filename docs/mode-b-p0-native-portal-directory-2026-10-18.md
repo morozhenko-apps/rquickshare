@@ -184,3 +184,18 @@ Corresponding CI:
 and [Preflight 39123998176](https://github.com/morozhenko-apps/rquickshare/actions/runs/39123998176).
 Status must be verified against actual jobs/logs; no
 PASS or D2 actual counts inferred from a pending run.
+
+## Red formatting triage and retry
+
+At `ceeefe21`,
+[Native GTK 39123998214](https://github.com/morozhenko-apps/rquickshare/actions/runs/39123998214)
+failed its native rustfmt step on three line-wrapping
+differences in the **new tests**. It did not execute the
+new Rust methods; there was no observed production
+failure. Exact formatter suggestions were applied in
+the test-only commit `f63c3df1`, preserving all checks.
+[Native GTK 39124127819](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127819)
+and [Preflight 39124127809](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127809)
+are the follow-up exact-code runs. Until they complete
+and the per-method logs are inspected, no claim of
+passed methods, counts or scoped closure is authorized.
