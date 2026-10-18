@@ -546,7 +546,10 @@ mod tests {
             ),
             Effect::Hide
         ));
-        assert!(policy.shown.is_none(), "busy redraw must keep all peer cards hidden");
+        assert!(
+            policy.shown.is_none(),
+            "busy redraw must keep all peer cards hidden"
+        );
 
         // Only an idle/eligible surface may show the new request.
         let fresh = shown(
