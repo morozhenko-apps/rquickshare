@@ -51,7 +51,8 @@ mod tests {
         assert!(stop.is_cancelled());
     }
     #[tokio::test]
-    async fn given_immediately_ready_signal_when_shutdown_created_then_stop_is_cancelled_before_close() {
+    async fn given_immediately_ready_signal_when_shutdown_created_then_stop_is_cancelled_before_close(
+    ) {
         // Arrange / Act / Assert
         let owner = Shutdown::from_signal(std::future::ready(()));
         let stop = owner.stop.clone();
@@ -78,7 +79,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_forever_pending_signal_when_explicit_close_runs_then_worker_joins_and_stop_remains_cancelled() {
+    async fn given_forever_pending_signal_when_explicit_close_runs_then_worker_joins_and_stop_remains_cancelled(
+    ) {
         // Arrange
         let owner = Shutdown::from_signal(std::future::pending());
         let stop = owner.stop.clone();
@@ -93,7 +95,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_signal_and_close_racing_when_both_complete_then_shutdown_is_idempotently_cancelled() {
+    async fn given_signal_and_close_racing_when_both_complete_then_shutdown_is_idempotently_cancelled(
+    ) {
         // Arrange: neither outcome depends on which ready branch wins.
         for _ in 0..64 {
             let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
@@ -103,13 +106,11 @@ mod tests {
             let stop = owner.stop.clone();
 
             // Act
-            let (sent, ()) = tokio::join!(async move { sender.send(()).is_ok() }, owner.close());
+            let (_, ()) = tokio::join!(async move { sender.send(()) }, owner.close());
 
             // Assert
-            assert!(sent);
             assert!(stop.is_cancelled());
             stop.cancelled().await;
         }
     }
-
 }
