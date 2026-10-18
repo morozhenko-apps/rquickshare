@@ -1,5 +1,46 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P0 Native GTK outbound clipboard URI and session action guard
+
+Two new original `native_desktop/src/panel/outbound.rs`
+test methods cover actual GIO GNOME/freedesktop
+URI parsing: file authority, escaped Unicode,
+CRLF/comment handling, ordered paths,
+atomic no-partial import, malformed percent,
+NUL/UTF-8, remote hosts/userinfo/port,
+empty lists and exact URI_BYTES boundary.
+Existing actual GTK panel smoke was
+expanded with five controller flags,
+five stale view/endpoint cases and UI
+closing/preview/locked/provider negatives
+plus a positive manual-send control.
+
+The [scoped documented branch map, N1–N12,
+interaction inventory and D1–D5](mode-b-p0-native-outbound-clipboard-2026-10-18.md)
+preceded implementation. Exact test-source
+`c911fc02` verified from
+[Native GTK 39126241182](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241182):
+**57/57 native GTK PASS** (formerly 55),
+each new method independently `... ok`.
+[Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201):
+**740/740 stable Core + 4/4+4/4**,
+frontend/formatter/Core Clippy PASS;
+desktop Tauri required separate final
+check at first source verification.
+First native test run failed at formatting,
+fixed by test-only commits with no
+weakened conditions or production changes.
+
+Real clipboard stream/close, actual
+daemon send, installed KDE/Wayland,
+physical Android/Windows, full post-change
+ten-consecutive Mode B, security
+[Issue #8](https://github.com/morozhenko-apps/rquickshare/issues/8)
+and mDNS
+[Issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9)
+remain OPEN. Global Stage 12 = NO.
+
+
 ## 2026-10-18 P0 Native GTK real portal OpenFile admission / cancellation
 
 Three new original methods in
