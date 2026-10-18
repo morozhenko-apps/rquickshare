@@ -458,4 +458,94 @@ mod tests {
             vec![PathBuf::from("/tmp/a b")]
         );
     }
+    #[test]
+    fn given_local_gnome_and_uri_clipboard_lists_when_decoded_then_paths_keep_order_and_utf8() {
+        // Arrange: the real GIO URI decoder receives GNOME and freedesktop
+        // clipboard formats, including CRLF, comments and escaped Unicode.
+        for (body, gnome, expected) in [
+            (
+                "copy\r\n# ignored\r\nfile:///tmp/first%20file\r\nfile://localhost/tmp/second\r\n",
+                true,
+                vec![
+                    PathBuf::from("/tmp/first file"),
+                    PathBuf::from("/tmp/second"),
+                ],
+            ),
+            (
+                "cut\nfile:///tmp/Caf%C3%A9\nfile:///tmp/Caf%C3%A9\n",
+                true,
+                vec![
+                    PathBuf::from("/tmp/Café"),
+                    PathBuf::from("/tmp/Café"),
+                ],
+            ),
+            (
+                "# a file list\n\n  file:///tmp/one%20two  \r\nfile:///tmp/three\n",
+                false,
+                vec![
+                    PathBuf::from("/tmp/one two"),
+                    PathBuf::from("/tmp/three"),
+                ],
+            ),
+            (
+                "file://LOCALHOST/tmp/only",
+                false,
+                vec![PathBuf::from("/tmp/only")],
+            ),
+        ] {
+            // Act: no duplicate removal, reordering, remote fallback or
+            // unintended interpretation of the GNOME command as a filename.
+            let decoded = paths(body.as_bytes(), gnome).unwrap();
+            assert_eq!(decoded, expected, "wrong clipboard path order: {body:?}");
+            assert!(decoded.iter().all(|path| path.is_absolute()));
+        }
+    }
+
+    #[test]
+    fn given_clipboard_uri_list_with_late_invalid_inputs_when_parsed_then_entire_import_is_rejected(
+    ) {
+        // Arrange: each bad second item must invalidate the entire batch;
+        // a valid first item may never be returned as a partial success.
+        for (body, gnome) in [
+            ("copy\nfile:///tmp/a", false),
+            ("paste\nfile:///tmp/a", true),
+            ("file:///tmp/a\nfile://remote.invalid/tmp/b", false),
+            ("file:///tmp/a\nfile://user@localhost/tmp/b", false),
+            ("file:///tmp/a\nfile://localhost:7/tmp/b", false),
+            ("file:///tmp/a\nfile:///tmp/%", false),
+            ("file:///tmp/a\nfile:///tmp/%a", false),
+            ("file:///tmp/a\nfile:///tmp/%GG", false),
+            ("file:///tmp/a\nhttps://example.invalid/file", false),
+            ("# comments and no local path\n", false),
+            ("copy\n# only a comment\n", true),
+        ] {
+            assert!(
+                paths(body.as_bytes(), gnome).is_err(),
+                "admitted a partial or foreign clipboard selection: {body:?}"
+            );
+        }
+
+        for malformed in [
+            b"file:///tmp/a\nfile:///tmp/b\0".as_slice(),
+            b"file:///tmp/a\nfile:///tmp/\xff".as_slice(),
+        ] {
+            assert!(
+                paths(malformed, false).is_err(),
+                "accepted invalid clipboard bytes after a valid URI"
+            );
+        }
+
+        // Exactly 256 KiB of otherwise valid local-URI text is permitted;
+        // one extra byte must fail, without returning a partial list.
+        let prefix = "file:///tmp/";
+        let bounded = format!("{prefix}{}", "x".repeat(URI_BYTES - prefix.len()));
+        let paths_at_limit = paths(bounded.as_bytes(), false).unwrap();
+        assert_eq!(paths_at_limit.len(), 1);
+        assert_eq!(paths_at_limit[0].as_os_str().len(), URI_BYTES - "file://".len());
+        let oversized = format!("{bounded}x");
+        assert_eq!(oversized.len(), URI_BYTES + 1);
+        assert!(paths(oversized.as_bytes(), false).is_err());
+    }
+
+
 }
