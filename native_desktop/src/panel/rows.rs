@@ -916,6 +916,80 @@ mod device_contract_tests {
     }
 
     #[test]
+    fn given_all_peer_direction_phase_memberships_when_projected_then_only_authoritative_live_rows_are_hidden(
+    ) {
+        // Arrange: distinct current and stale endpoint identities.
+        let phases = [
+            Phase::Queued,
+            Phase::Active,
+            Phase::AwaitingConsent,
+            Phase::Receiving,
+            Phase::Sending,
+            Phase::CancelRequested,
+            Phase::Finished,
+            Phase::Rejected,
+            Phase::Cancelled,
+            Phase::Failed,
+            Phase::Disconnected,
+        ];
+        let memberships: [BTreeSet<&str>; 3] = [
+            BTreeSet::new(),
+            ["current"].into_iter().collect(),
+            ["stale"].into_iter().collect(),
+        ];
+        for discovered in &memberships {
+            for association in [None, Some("current"), Some("stale")] {
+                for direction in [Direction::Inbound, Direction::Outbound] {
+                    for phase in phases {
+                        // Act: use the independently defined ownership contract.
+                        let expected_bound = if direction == Direction::Outbound {
+                            association.filter(|id| discovered.contains(id))
+                        } else {
+                            None
+                        };
+                        let expected_visible =
+                            !phase.is_terminal() && expected_bound.is_none();
+
+                        // Assert: exact identity and complete visibility decision.
+                        assert_eq!(
+                            bound_current_endpoint(direction, association, discovered),
+                            expected_bound
+                        );
+                        assert_eq!(
+                            card_transfer_visible(direction, phase, association, discovered),
+                            expected_visible,
+                            "{direction:?} {phase:?} {association:?} {discovered:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn given_all_progress_extremes_when_projected_then_fraction_is_exact_finite_and_monotonic(
+    ) {
+        // Arrange / Act / Assert: independently compute the saturated ratio.
+        let boundaries = [0, 1, 2, 3, 254, 255, 65_535, u64::MAX];
+        for total in boundaries {
+            let mut previous = 0.0;
+            for done in boundaries {
+                let expected = if total == 0 {
+                    0.0
+                } else {
+                    (done.min(total) as f64) / (total as f64)
+                };
+                let actual = progress_fraction(done, total);
+                assert_eq!(actual, expected, "done={done} total={total}");
+                assert!(actual.is_finite());
+                assert!((0.0..=1.0).contains(&actual));
+                assert!(actual >= previous, "progress decreased for total={total}");
+                previous = actual;
+            }
+        }
+    }
+
+    #[test]
     fn given_byte_progress_when_unknown_or_overrun_then_bar_stays_finite_and_bounded() {
         for (done, total, expected) in [
             (0, 0, 0.0),
