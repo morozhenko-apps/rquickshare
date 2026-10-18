@@ -627,6 +627,4 @@ mod tests {
         assert_eq!(oversized.len(), URI_BYTES + 1);
         assert!(paths(oversized.as_bytes(), false).is_err());
     }
-
-
 }
