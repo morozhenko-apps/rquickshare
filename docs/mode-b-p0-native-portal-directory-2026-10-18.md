@@ -157,9 +157,9 @@ executed mutation framework.
    **before editing any test**.
 2. [x] Implement all 3 planned methods in the
    existing private D-Bus contract tests.
-3. [ ] Check Rust format, native GTK strict job,
+3. [x] Check Rust format, native GTK strict job,
    CI exact SHA and actual 3 new method names.
-4. [ ] Record actual category matrix, failures,
+4. [x] Record actual category matrix, failures,
    manual mutation review; update Current State and
    global inventory D1–D5.
 5. [ ] Full 10× latest-source Stage 11 and all-branch
@@ -199,3 +199,67 @@ and [Preflight 39124127809](https://github.com/morozhenko-apps/rquickshare/actio
 are the follow-up exact-code runs. Until they complete
 and the per-method logs are inspected, no claim of
 passed methods, counts or scoped closure is authorized.
+
+## D1–D5 scoped verified outcome (2026-10-18)
+
+**D1 — execution environment.** The native GTK container
+uses the repository's GTK4/Xvfb/private D-Bus harness.
+[Native GTK run 39124127819](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127819)
+ran on exact test SHA
+`f63c3df1cece64de08de57cadf52683875acd088`.
+Actual job log `117665583696`: **55 passed,
+0 failed, 0 ignored**, versus 52 in the previous
+confirmed native suite. All **three** newly authored
+method names appeared exactly **once** with `... ok`.
+Native formatter/lint and isolated suite both succeeded.
+This is one native quick run, not ten consecutive runs.
+
+**D2 — category attribution (overlapping, not independent test totals).**
+
+| Category | New unique methods | Verified scoped evidence |
+|---|---:|---|
+| Positive | 2 | PASS: supported OpenFile result and valid FD baseline |
+| N1 malformed response/descriptor | 2 | PASS: unsupported descriptor and malformed portal message |
+| N2 numeric bounds | 2 | PASS: portal 2/3, response 0/1/2/3/92/93, O_PATH |
+| N3 network/portal failure | 2 | PASS: rejected/no response and cancellation |
+| N4 retry/idempotency | 3 | PASS: exact single request lifecycle and safe rejection |
+| N5 concurrency | 2 | PASS: early portal signal, cancel while admitted |
+| N6 corrupt reply | 2 | PASS: wrong returned path and response body |
+| N7 security/permissions | 3 | PASS: FD kind/flags, owner and request Close |
+| N8 locale/time | 0 | N/A: no local clock/locale data in portal contract |
+| N9 interruption | 2 | PASS: user cancellation and portal cancellation code |
+| N10 privacy/file authority | 3 | PASS: directory-only FD, no false success or leak |
+| N11 monetization | 0 | N/A: no payment/entitlement flow |
+| N12 storage/FD failure | 1 | PASS: unsafe O_PATH descriptor blocked before system bus |
+
+Three methods with seven portal status rows plus
+the FD and cancellation cases. These counts
+do not imply complete coverage across all native
+GTK application functions.
+
+**D3 — commits.** `ceeefe21` added tests in
+`native_desktop/src/portal/tests.rs` only;
+`f63c3df1` applied three exact native rustfmt
+line wraps without modifying assertions.
+The earlier [Native GTK 39123998214](https://github.com/morozhenko-apps/rquickshare/actions/runs/39123998214)
+failed the formatter before test execution and
+is retained as a red historical run, not counted.
+
+**D4 — testability.** No production refactor required
+for these specific portal calls: the existing
+private D-Bus external contract fake represents
+the SDK boundary while actual show/reply/cancel
+logic runs unmocked. Live KDE/Wayland,
+portal activation and file-manager rendering
+are out-of-process physical acceptance gates.
+
+**D5 — assertion mutation review.** Mutating the
+O_PATH reject, bypassing OpenFile for contents,
+admitting portal version 2, treating nonzero codes
+as success, accepting wrong object path/malformed
+reply, suppressing Request.Close on cancellation,
+or retaining the FD would fail explicit
+new assertions. This was a manual review;
+no mutation engine or global 10× was executed.
+Complete Stage 11 on final source and full
+Stage 12 still **NO**.
