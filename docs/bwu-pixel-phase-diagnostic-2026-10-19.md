@@ -77,4 +77,9 @@ GitHub Actions initially observed at post-code SHA `9c8c6577`:
 
 Previous intermediate source pushes triggered runs that were cancelled due to the existing concurrency policy. Do not interpret them as failures or passes for the final source. The last verified green source prior to instrumentation was `4f5705f4` and does not verify these calls.
 
+2026-10-19 exact source CI findings:
+- [Preflight 39326407110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39326407110) on `9c8c6577`: **FAILURE solely in Rust format**. GitHub job `118313729923` showed rustfmt requested only a single-line rewrite of `BwuPriorSafeToClose` trace call in `core_lib/src/hdl/inbound.rs`. Other 4 Preflight jobs, including Core Rust tests, strict Core Clippy, Tauri Clippy and Frontend, were **SUCCESS**. This is a real red CI for that SHA, not a green gate.
+- Formatting-only source commit `c4bd463b` corrects exactly that expression; no trace semantics, domain routing, BLE/TCP, protocol bytes, tests or dependencies changed. **Exact corrected-SHA CI outcome not yet verified** at this documentation update. Do not mark whole Preflight PASS based on previous source or a local build.
+- User-provided Ubuntu 26.04 KDE build transcript: missing GTK/Graphene dev dependencies installed; `python3 scripts/native_deb.py build --profile dev` reports `Native Debian package verified: .../rquickshare-native_1.0.0-1.debug_amd64.deb`. This is a successfully staged/verified **local uninstalled** artifact; it was built before source formatting commit `c4bd463b`, so its exact commit provenance must be recorded before hardware acceptance. No proof of installed version, running daemon, Pixel BWU, peer identity, authentication or actual transfer is inferred from the build alone.
+
 No Python/Rust locally executed, no new app installed, no user daemon/environment change, no ADB access or physical Pixel proof. **Option A cryptographic proof NOT FOUND; P0 #8 still OPEN.**
