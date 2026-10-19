@@ -2369,9 +2369,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                     .await?;
                 }
                 Some(EventType::SafeToClosePriorChannel) => {
-                    crate::receiver_trace::event(
-                        crate::receiver_trace::Event::BwuPriorSafeToClose,
-                    );
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuPriorSafeToClose);
                     debug!(
                         "BWU timing: peer marked prior channel safe to close after {} ms drain ({} ms total)",
                         drain_started.elapsed().as_millis(),
