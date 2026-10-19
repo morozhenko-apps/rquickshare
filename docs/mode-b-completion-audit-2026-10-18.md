@@ -16,6 +16,14 @@ This section updates the **current-source status** without rewriting the histori
 - The **strict full-suite ×10 run** and current-source instrumented per-file coverage are **NOT verified at `85faca64`**. The previous all-green release-gate run and coverage percentages below are historical, **not** a present-source completion gate. `.github/workflows/mode-b.yml` is `workflow_call`-only from the controlled release process; do not bypass the release gate merely to improve a testing status. `coverage.yml` and `native-gtk-coverage.yml` have separate manual diagnostic triggers, but no current diagnostic run is claimed.
 - Global Stage 12 still **NO**: hardware BLE/BlueZ/Android/mDNS, exact exhaustive branch mapping across all production files, automated mutation review, current full ×10 and OS/UI acceptance remain open.
 
+## 2026-10-19 additive P0: authenticated wrong-signature and unrequested-FD replies
+
+Latest scoped code source `4d9da957` (later doc-only commits): [Preflight 39208447151](https://github.com/morozhenko-apps/rquickshare/actions/runs/39208447151) **5/5 SUCCESS**, Core Rust **769 passed**, Tauri desktop **10 passed**; [Native GTK 39208447106](https://github.com/morozhenko-apps/rquickshare/actions/runs/39208447106) **SUCCESS, 80 passed**. The two original test methods in `core_lib/src/service/client/tests/visibility_forged.rs` both appear `ok` in the exact-source Core logs.
+
+[Scoped MODE B Stage 1–12 inventory and D1–D5 for D-Bus signature/FD replies](mode-b-p0-dbus-reply-signature-fd-2026-10-19.md): tests two authenticated same-owner faulty response forms on `Visibility2.Read`, `Visibility2.Set`, `Settings2.Read`, `Settings2.Reload`. **10 actual malformed reply rejections** across 2 independent tests, plus exact retained pending request and second-command refusal after corrupted `Set`. An unexpected FD is returned alongside a valid typed payload value, but raw reply signature remains changed by its extra FD field; no false claim of an isolated raw-message FD-header mutation test. A redundant test-only import triggered the initial strict Clippy failure and was corrected with unchanged assertions.
+
+This evidence expands test inventory, **not** global coverage closure. `mode-b.yml` is a release-controlled `workflow_call` entrypoint; the final full ×10 suite is **NOT** confirmed on `4d9da957`. `coverage.yml` / `native-gtk-coverage.yml` can be manually dispatched for diagnostics, but **no** current-source diagnostic has been run or measured in this update. Hardware BlueZ/mDNS/Android, KDE session behaviors, per-method branch maps, mutation engine and overall Stage 12 remain **NO**.
+
 ## Binding SSOT and interpretation
 
 The user-supplied `agent.md` (UNIVERSAL FEATURE / REFACTOR /
