@@ -14,3 +14,13 @@ Target production method `native_desktop/src/panel/rows.rs::payload_label`. Test
 
 ## Stages 11–12: verification and remaining gates
 Run Native GTK UI verification at exact test SHA (and applicable Preflight if triggered). Source-matched line coverage baseline is **BEFORE** these tests, so do not claim improved numeric coverage without rerunning llvm-cov. `panel/reveal.rs` (10.87%), `preview.rs` (23.33%) and hardware BlueZ/mDNS remain separate real UI/OS integration gaps. Strict full 10× suite, global per-file branch analysis, hardware acceptance and Mode B Stage 12 remain OPEN.
+
+
+## Stage 9–10 test implementation and execution checkpoint
+- Documentation-first contract at `ac0eb8ca`.
+- Exactly 2 new tests appended as `#[cfg(test)] mod untrusted_payload_label_tests` to existing `native_desktop/src/panel/rows.rs` at code SHA `86e2bb41`, then **formatting-only** long assertion change at `291b7733`. No executable production logic modified.
+- Test one contains 20 singleton filenames spanning uppercase/lowercase, dotted/multiple extensions, 12-vs-13-byte cutoff, missing/empty extension, Unicode/non-ASCII, control, injected markup and paths. Asserts exact ASCII alphanumeric label without leaking raw path.
+- Test two covers 8 manifest/kind combinations including zero, one, two and three files, Text and Url; asserts exact count or constant label and no untrusted raw path.
+- Initial Native GTK workflow [39251948742](https://github.com/morozhenko-apps/rquickshare/actions/runs/39251948742) failed **nightly rustfmt** on one multiline assertion only; fixed at `291b7733` with unchanged expectations.
+- Exact-code retry: [Native GTK 39252238328](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238328), [Preflight 39252238333](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238333). Do not mark green before completing. Core/GTK instrumentation percentages remain as [previous measured source](mode-b-coverage-baseline-2026-10-19.md), not recomputed from tests.
+- Manual mutation targets include changing `<= 12` to `<= 13`, bypassing ASCII alphabet filter or returning the untrusted basename, and treating multiple files as one. Mutants not run.
