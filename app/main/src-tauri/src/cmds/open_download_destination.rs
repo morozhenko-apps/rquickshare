@@ -198,10 +198,7 @@ mod tests {
         maximum_segments.push("c".to_owned());
         let maximum = maximum_segments.join("/");
         assert_eq!(maximum.len(), 4096);
-        assert_eq!(
-            validate_received_relative_path(&maximum).unwrap().len(),
-            17
-        );
+        assert_eq!(validate_received_relative_path(&maximum).unwrap().len(), 17);
         let too_long = format!("{maximum}c");
         assert_eq!(too_long.len(), 4097);
         assert_eq!(
@@ -282,7 +279,11 @@ mod tests {
         symlink(&outside_file, destination.join("outside-file.txt")).unwrap();
         symlink(&outside, destination.join("outside-folder")).unwrap();
         symlink(&inside_file, destination.join("inside-file-link.txt")).unwrap();
-        symlink(destination.join("inside"), destination.join("inside-folder")).unwrap();
+        symlink(
+            destination.join("inside"),
+            destination.join("inside-folder"),
+        )
+        .unwrap();
         symlink(root.join("not-present"), destination.join("broken-link")).unwrap();
         let canonical = destination.canonicalize().unwrap();
 
