@@ -481,8 +481,6 @@ async fn malformed_reply_fixture(
     NativeClient,
     std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) {
-    use std::os::fd::AsFd;
-
     let private = PrivateBus::new();
     let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let builder = bus::connection_builder(private.socket().await)
