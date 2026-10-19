@@ -39,3 +39,12 @@ Implement separate tiny `#[zbus::interface]` test-only faulty services with `Rea
 
 ## Stages 11–12: execution / completion gate
 Run existing Preflight & Native GTK on identical test SHA; inspect named Core test logs, counts, Clippy, formatting and Tauri. Do not alter `master`, production semantics, application packaging, or the release-only `workflow_call` strict 10x guard. A validated final-source 10× entire suite, current-source detailed line/branch coverage, Android/BlueZ/mDNS hardware acceptance, and complete repo-wide Stage 12 remain OPEN. Rollback: remove the two test methods and test-only service implementations plus docs.
+
+
+## Stage 9 implementation checkpoint
+
+- Documentation-first plan at `c2b14f54`.
+- Implemented **two** new named Tokio tests and four test-only `#[zbus::interface]` services in `core_lib/src/service/client/tests/visibility_forged.rs` at `a0d02b67`. The test-only services return a wrong STRING signature or a correct typed view plus an extra Unix FD on all four paths. The regular private D-Bus service owner and production client authenticate naturally. The tests assert the exact `ClientError::Protocol`, one retained pending intent, blocking of a second request, and exactly two explicitly initiated `Set` attempts.
+- [Initial Preflight 39208235091](https://github.com/morozhenko-apps/rquickshare/actions/runs/39208235091) reported a **Core Clippy failure** from a redundant unused local `AsFd` import inside the test fixture (`-D warnings`). Rust formatting and frontend succeeded. That import was removed without changing the cases at `4d9da957`; no product code changed.
+- Exact-source retry [Preflight 39208447151](https://github.com/morozhenko-apps/rquickshare/actions/runs/39208447151) and [Native GTK 39208447106](https://github.com/morozhenko-apps/rquickshare/actions/runs/39208447106) started. Mark them successful only after the jobs actually complete.
+- The FD test intentionally returns a valid typed data *value* plus an FD argument, so it verifies an unrequested-FD rejection but does not claim a valid standalone typed body signature with a mismatched UnixFD metadata count. Hardware acceptance and full strict 10x gate are separate.
