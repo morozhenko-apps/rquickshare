@@ -103,6 +103,23 @@ impl Portal {
                 )
                 .await
                 .unwrap();
+        } else if self.code == 94 {
+            // A genuinely attached Unix FD from the authenticated portal
+            // must never be accepted as an unrequested response capability.
+            connection
+                .emit_signal(
+                    Some(sender),
+                    path.as_str(),
+                    REQUEST,
+                    "Response",
+                    &(
+                        0u32,
+                        HashMap::<String, OwnedValue>::new(),
+                        Fd::from(fd.as_fd()),
+                    ),
+                )
+                .await
+                .unwrap();
         } else if self.code != 99 && self.code != 92 {
             connection
                 .emit_signal(
@@ -408,4 +425,50 @@ async fn given_checked_directory_when_contents_are_requested_then_portal_receive
     );
     assert!(admitted.try_recv().is_ok());
     server.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn given_authenticated_portal_response_with_unrequested_fd_then_both_reveal_modes_reject_and_close_once(
+) {
+    // Arrange: the same real private broker and authenticated request owner
+    // service both OpenDirectory and OpenFile calls with one unexpected FD
+    // on an otherwise successful Response code. No desktop portal is used.
+    for contents in [false, true] {
+        let broker = Broker::new();
+        let (server, mut admitted, mut closed) = server(&broker, 3, 94).await;
+        let (_source, file) = file();
+        let directory = tempfile::tempdir().unwrap();
+        let directory_fd = Arc::new(File::open(directory.path()).unwrap());
+        let selected = if contents { directory_fd } else { file };
+
+        // Act: the real client validates the authenticated signal and
+        // retains ownership of the request to issue a terminal Close.
+        let result = show_on_mode(
+            broker.connection().await,
+            selected,
+            CancellationToken::new(),
+            contents,
+        )
+        .await;
+
+        // Assert: a valid success code never authorizes an extra FD.
+        assert_eq!(result, Err(Error::Protocol), "contents={contents}");
+        assert!(
+            admitted.try_recv().is_ok(),
+            "portal did not admit the requested mode: contents={contents}"
+        );
+        closed
+            .recv()
+            .await
+            .expect("unexpected-FD response must close owned request");
+        assert!(
+            closed.try_recv().is_err(),
+            "duplicate request Close: contents={contents}"
+        );
+        assert!(
+            admitted.try_recv().is_err(),
+            "duplicate request admission: contents={contents}"
+        );
+        server.close().await.unwrap();
+    }
 }
