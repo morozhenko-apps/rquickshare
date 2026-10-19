@@ -31,3 +31,10 @@ Test-only `portal/tests.rs`: extend existing `Portal::open_directory` fake-serve
 
 ## Stages 11–12: verification gate
 Run exact-source Native GTK strict format/Clippy/isolated tests; Preflight as triggered. Scope is successful only with named test `ok` and all required jobs green. Recompute llvm-cov only on a new manual instrumented run, not from test counts. Global Stage 11 full-suite 10× and Stage 12 on-device, current-source branch instrumentation, KDE/Android/BlueZ/mDNS acceptance remain OPEN. Rollback solely the test-only additions and this document.
+
+
+## Stage 9 implementation checkpoint
+- Documentation-first plan committed at `b4d7ff33`.
+- Code SHA `ea47d49d`: one new async test `given_authenticated_portal_response_with_unrequested_fd_then_both_reveal_modes_reject_and_close_once` and one reserved `code == 94` behavior in **test-only** `Portal` interface; source limited to `native_desktop/src/portal/tests.rs`. Test uses broker-authenticated same-owner Response with success code `0` and one borrowed Unix FD, and checks exact `Error::Protocol`, request admission and single owned `Close` for both OpenDirectory and OpenFile.
+- Exact-source CI: [Native GTK 39282270300](https://github.com/morozhenko-apps/rquickshare/actions/runs/39282270300), [Preflight 39282270240](https://github.com/morozhenko-apps/rquickshare/actions/runs/39282270240). At this checkpoint queued; do not claim passed. If rustfmt/Clippy/runtime finds fixture issues, diagnose the exact logs and repair test-only code with unchanged production semantics.
+- Completion gate: source-matched named test must pass on isolated GTK; Core/Frontend/Tauri may also execute but cannot imply actual KDE portal acceptance. 10× entire-suite and on-hardware checks remain OPEN.
