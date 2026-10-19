@@ -41,7 +41,8 @@ mod lifecycle_tests {
     use super::*;
 
     #[test]
-    fn given_published_endpoints_when_generation_retires_then_tombstones_precede_fresh_discoveries() {
+    fn given_published_endpoints_when_generation_retires_then_tombstones_precede_fresh_discoveries()
+    {
         let (sender, mut reader) = broadcast::channel(8);
         let mut cache = HashMap::from([
             (
