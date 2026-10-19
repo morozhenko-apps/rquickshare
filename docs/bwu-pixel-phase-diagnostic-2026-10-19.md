@@ -33,8 +33,8 @@ Instrumentation MUST be observational and synchronous, with no new sleeps, retri
 ## Plan, safety and rollback
 
 1. [x] D0 scan agent SSOT, native unit, existing trace logger, TCP classifier, BWU handshake and legacy tools. Commit this plan **separately from code**.
-2. [ ] D1 extend existing trace `Event` and its output-shape test; instrument route classifier and current inbound BWU phase transitions, keeping sensitive fields out.
-3. [ ] D2 final static inspection, test execution on exact source if available, independently record CI status, then document evidence in a separate docs-only commit.
+2. [x] D1 extended the existing trace `Event` and output-shape test; instrumented route classifier and inbound BWU phase transitions in source commits `e2531eda`, `69547f93`, `9c8c6577`. No authenticated-admission behavior changed.
+3. [ ] D2 static event/call-site audit performed (11 fixed variants and 11 call sites) with GitHub read-back; final exact-source CI is PENDING. Document PASS/FAIL only after a completed run. No local Rust toolchain or attached repo checkout is available in this execution environment.
 4. [ ] D3 **physical** Ubuntu native build/version check, clean single Pixel send, owner confirmation, trace collection, and evaluate protocol proof gate. A source-only green build never completes D3.
 
 Rollback: revert additive `receiver_trace` variants/call sites only. The event names are diagnostic, not a product wire contract. Never execute host service restart, installation, Bluetooth changes or ADB commands through a remote GitHub tool.
@@ -64,4 +64,17 @@ The trace distinguishes actual phases and unintended stalls, but **cannot establ
 
 ## Evidence
 
-Planning/scan only at initial creation; execution evidence added only after CI or hardware actually runs.
+Documentation plan committed as `aa3db04d` before code. Source commits:
+- `e2531eda` extended `receiver_trace.rs` with 11 fixed phase names and the table-driven output-shape fixture.
+- `69547f93` added 3 trace calls at TCP recognition/routing decision in `manager.rs`.
+- `9c8c6577` added 8 trace calls at BLE→TCP receiver upgrade phases in `inbound.rs`.
+
+After source changes, the live GitHub connector fetched all three exact `dev` file blobs and confirmed 11 names, 11 test enum cases and 11 instrumentation sites. This is **static source inspection, not compiler/test execution**.
+
+GitHub Actions initially observed at post-code SHA `9c8c6577`:
+- [Preflight 39326407110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39326407110): **PENDING** at observation; no pass/fail claim.
+- [Native GTK 39326407154](https://github.com/morozhenko-apps/rquickshare/actions/runs/39326407154): **IN PROGRESS** at observation; no pass/fail claim.
+
+Previous intermediate source pushes triggered runs that were cancelled due to the existing concurrency policy. Do not interpret them as failures or passes for the final source. The last verified green source prior to instrumentation was `4f5705f4` and does not verify these calls.
+
+No Python/Rust locally executed, no new app installed, no user daemon/environment change, no ADB access or physical Pixel proof. **Option A cryptographic proof NOT FOUND; P0 #8 still OPEN.**
