@@ -1,5 +1,16 @@
 # Current implementation and continuation state
 
+## 2026-10-19 — MODE A discovery generation restart (user chose Option B)
+
+The user explicitly approved **Option B** for discovery lifecycle: cancel and join the previous worker + mDNS SDK shutdown before publishing a new discovery generation. See [documented decision, branch map, rollback and regression strategy](mode-b-p0-discovery-lifecycle-2026-10-19.md) and [P0 issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12). This is an authorized bounded production behavior change, not MODE B test-only work.
+
+Core `RQS` now owns the discovery task handle and cancellation token. The async `RQS::discovery` coordinates serial cancel→join→new worker admission; Tauri `start_discovery` and `stop_discovery`, native `NativeRuntime::start` and CLI `core_bin` were adapted to that API. `RQS::stop_discovery_and_wait` is idempotent and provides the owned worker's completion barrier; `RQS::stop` joins discovery before other lifetime shutdown. mDNS discovery SDK shutdown is explicitly awaited and TCP reachability checks are cancellation-aware. Cached endpoints are withdrawn before the next generation publishes.
+
+Changes are on **`dev` only**, with docs/code separate commits. New real-owner Tokio tests verify the completion fence, failed shutdown admission, and stop/restart, and a cache-retirement unit test verifies tombstone-before-fresh broadcast ordering. Latest source implementation at `9d2e062e`, CI runs [Preflight 39315261021](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315261021) and [Native GTK 39315260978](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315260978) began; **final result not yet confirmed at this checkpoint**. The earlier `a1d18272` / `540b1cee` intermediate CI runs exposed missing async call-site updates and formatting, and were corrected without test assertion relaxation.
+
+**Remaining:** exact-source final stable and separately tracked flaky CI evidence; actual overlapping Tauri UI commands on installed KDE/Wayland; real mDNS / Android discovery SDK validation (issue #9); other ongoing P0 transport/BWU issues. No `main` merge, release, installed-app update or hardware claim. The current uploaded AGENT SSOT no longer requires 10 consecutive entire-suite passes as a generic Mode B gate; only specifically required release tests apply.
+
+
 ## MODE B P1 signed monitor geometry placement — 2026-10-18
 
 Added **four independently named Native GTK Rust
