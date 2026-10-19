@@ -5,6 +5,12 @@
 of actual evidence, NOT a feature, refactor or relaxation of
 coverage criteria.
 
+## 2026-10-19 additional GUI-safe filename projection evidence
+
+After the measured `99c26335` baseline, two Native GTK P0/P1 tests were introduced in `native_desktop/src/panel/rows.rs` (code SHA `291b7733`) with [documentation-first matrix](mode-b-p0-gtk-untrusted-file-labels-2026-10-19.md). [Native GTK 39252238328](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238328) **SUCCESS: 82/82** (both new methods named `ok`). [Preflight 39252238333](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238333) Core Rust **769/769**, formatter, frontend, and Core Clippy **SUCCESS**. At the recorded checkpoint, the Tauri desktop job remained in progress; full Preflight requires independent final-success observation.
+
+Do not mutate coverage metrics for the new source: instrumented Native GTK **70.75% lines** measures the preceding commit `99c26335`. The strict whole-suite 10×, live KDE/Android/BlueZ acceptance, MDNS discovery test seam and Stage 12 continue to be **OPEN**.
+
 ## 2026-10-19 current-source instrumented measurement and GTK follow-up
 
 Manual coverage experiments **both completed SUCCESS** at `dev` commit `99c26335`: [Coverage measurement 39209606436](https://github.com/morozhenko-apps/rquickshare/actions/runs/39209606436) and [Native GTK instrumented coverage 39209632695](https://github.com/morozhenko-apps/rquickshare/actions/runs/39209632695). The complete file-by-file Rust output and methodology are preserved in [the source-matched MODE B coverage baseline](mode-b-coverage-baseline-2026-10-19.md).
