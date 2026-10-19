@@ -22,6 +22,88 @@ pub struct EndpointInfo {
     pub present: Option<bool>,
 }
 
+// Emit one removal per previously advertised peer. Draining the cache is
+// essential: a later generation may rediscover the same peer identity.
+fn withdraw_cached_endpoints(
+    cache: &mut HashMap<String, EndpointInfo>,
+    sender: &broadcast::Sender<EndpointInfo>,
+) {
+    for (_fullname, endpoint) in cache.drain() {
+        let _ = sender.send(EndpointInfo {
+            id: endpoint.id,
+            ..Default::default()
+        });
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn given_published_endpoints_when_generation_retires_then_tombstones_precede_fresh_discoveries() {
+        let (sender, mut reader) = broadcast::channel(8);
+        let mut cache = HashMap::from([
+            (
+                "old-a.local.".to_owned(),
+                EndpointInfo {
+                    id: "192.0.2.1:1024".to_owned(),
+                    name: Some("old-a".to_owned()),
+                    present: Some(true),
+                    ..Default::default()
+                },
+            ),
+            (
+                "old-b.local.".to_owned(),
+                EndpointInfo {
+                    id: "192.0.2.2:2048".to_owned(),
+                    name: Some("old-b".to_owned()),
+                    present: Some(true),
+                    ..Default::default()
+                },
+            ),
+        ]);
+
+        // Act: complete an old generation before a fresh one can publish.
+        withdraw_cached_endpoints(&mut cache, &sender);
+        assert!(cache.is_empty());
+        sender
+            .send(EndpointInfo {
+                id: "192.0.2.3:3072".to_owned(),
+                name: Some("fresh".to_owned()),
+                present: Some(true),
+                ..Default::default()
+            })
+            .unwrap();
+
+        // Assert: first two queued events are pure removal notifications,
+        // regardless of randomized HashMap traversal order.
+        let mut removed = Vec::new();
+        for _ in 0..2 {
+            let event = reader.try_recv().unwrap();
+            assert_eq!(event.present, None);
+            assert_eq!(event.name, None);
+            assert_eq!(event.ip, None);
+            assert_eq!(event.port, None);
+            removed.push(event.id);
+        }
+        removed.sort();
+        assert_eq!(
+            removed,
+            ["192.0.2.1:1024".to_owned(), "192.0.2.2:2048".to_owned()]
+        );
+        let fresh = reader.try_recv().unwrap();
+        assert_eq!(fresh.id, "192.0.2.3:3072");
+        assert_eq!(fresh.present, Some(true));
+        assert_eq!(fresh.name.as_deref(), Some("fresh"));
+        assert!(reader.try_recv().is_err());
+
+        // A second stop must not duplicate removals.
+        withdraw_cached_endpoints(&mut cache, &sender);
+        assert!(reader.try_recv().is_err());
+    }
+}
+
 pub struct MDnsDiscovery {
     daemon: ServiceDaemon,
     sender: broadcast::Sender<EndpointInfo>,
@@ -39,12 +121,7 @@ impl MDnsDiscovery {
         let outcome = self.run_inner(ctk, &mut cache).await;
 
         // Withdraw endpoints before another generation can advertise them.
-        for endpoint in cache.values() {
-            let _ = self.sender.send(EndpointInfo {
-                id: endpoint.id.clone(),
-                ..Default::default()
-            });
-        }
+        withdraw_cached_endpoints(&mut cache, &self.sender);
 
         // Joining this worker must also join the mDNS SDK's own daemon.
         let shutdown = async {
