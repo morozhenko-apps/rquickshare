@@ -153,7 +153,7 @@ async fn given_core_not_started_when_discovery_requested_then_no_browser_or_toke
     // Act / Assert: even repeated requests must fail before spawning a
     // discovery daemon or changing the owner's state.
     for _ in 0..2 {
-        let error = core.discovery(sender.clone()).unwrap_err();
+        let error = core.discovery(sender.clone()).await.unwrap_err();
         assert_eq!(error.to_string(), "The service wasn't first started");
         assert!(core.tracker.is_none());
         assert!(core.ctoken.is_none());
