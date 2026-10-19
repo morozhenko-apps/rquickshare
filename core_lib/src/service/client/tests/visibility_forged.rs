@@ -1,4 +1,5 @@
 //! Adversarial, correctly owned Visibility2 service on a private D-Bus.
+use std::os::fd::AsFd;
 use std::sync::{Arc, Mutex};
 
 use super::*;
@@ -383,5 +384,203 @@ async fn given_pending_visibility_when_corrupted_set_receipts_arrive_then_only_v
         client.close().await.unwrap();
         server.close().await.unwrap();
     })
+    .await;
+}
+
+#[derive(Clone, Copy)]
+enum BrokenReplyKind {
+    WrongSignature,
+    UnexpectedFd,
+}
+
+// These two deliberately wrong interface definitions still own the correct
+// unique D-Bus service name. They return a STRING instead of the typed view.
+struct WrongSignatureVisibility(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+#[zbus::interface(name = "io.github.morozhenko_apps.RQuickShare.Visibility2")]
+impl WrongSignatureVisibility {
+    fn read(&self) -> (String,) {
+        ("not-a-visibility-view".to_owned(),)
+    }
+
+    fn set(&self, _intent: VisibilityIntent) -> (String,) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        ("not-a-settings-receipt".to_owned(),)
+    }
+}
+
+struct WrongSignatureSettings;
+
+#[zbus::interface(name = "io.github.morozhenko_apps.RQuickShare.Settings2")]
+impl WrongSignatureSettings {
+    fn read(&self) -> (String,) {
+        ("not-a-settings-view".to_owned(),)
+    }
+
+    fn reload(&self) -> (String,) {
+        ("not-a-reloaded-settings-view".to_owned(),)
+    }
+}
+
+// These return a *semantically valid* typed view together with one extra
+// Unix descriptor. The client must reject the descriptor before decoding.
+struct UnexpectedFdVisibility {
+    fd: std::sync::Arc<std::fs::File>,
+    calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[zbus::interface(name = "io.github.morozhenko_apps.RQuickShare.Visibility2")]
+impl UnexpectedFdVisibility {
+    fn read(&self) -> (VisibilityView, zbus::zvariant::Fd<'_>) {
+        (
+            VisibilityView {
+                epoch: format!("{EPOCH:032x}"),
+                available: true,
+                revision: 1,
+                running: true,
+                mode: 2,
+                remaining_ms: 500,
+            },
+            zbus::zvariant::Fd::from(self.fd.as_fd()),
+        )
+    }
+
+    fn set(&self, _intent: VisibilityIntent) -> (SettingsView, zbus::zvariant::Fd<'_>) {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        (
+            SettingsView::unavailable(EPOCH),
+            zbus::zvariant::Fd::from(self.fd.as_fd()),
+        )
+    }
+}
+
+struct UnexpectedFdSettings(std::sync::Arc<std::fs::File>);
+
+#[zbus::interface(name = "io.github.morozhenko_apps.RQuickShare.Settings2")]
+impl UnexpectedFdSettings {
+    fn read(&self) -> (SettingsView, zbus::zvariant::Fd<'_>) {
+        (
+            SettingsView::unavailable(EPOCH),
+            zbus::zvariant::Fd::from(self.0.as_fd()),
+        )
+    }
+
+    fn reload(&self) -> (SettingsView, zbus::zvariant::Fd<'_>) {
+        (
+            SettingsView::unavailable(EPOCH),
+            zbus::zvariant::Fd::from(self.0.as_fd()),
+        )
+    }
+}
+
+async fn malformed_reply_fixture(
+    kind: BrokenReplyKind,
+) -> (
+    PrivateBus,
+    Connection,
+    NativeClient,
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) {
+    use std::os::fd::AsFd;
+
+    let private = PrivateBus::new();
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let builder = bus::connection_builder(private.socket().await)
+        .serve_at(PATH, ForgedManager)
+        .unwrap()
+        .serve_at(PATH, ForgedOperations)
+        .unwrap();
+    let builder = match kind {
+        BrokenReplyKind::WrongSignature => builder
+            .serve_at(PATH, WrongSignatureVisibility(calls.clone()))
+            .unwrap()
+            .serve_at(PATH, WrongSignatureSettings)
+            .unwrap(),
+        BrokenReplyKind::UnexpectedFd => {
+            let file = std::sync::Arc::new(std::fs::File::open("/dev/null").unwrap());
+            builder
+                .serve_at(
+                    PATH,
+                    UnexpectedFdVisibility {
+                        fd: file.clone(),
+                        calls: calls.clone(),
+                    },
+                )
+                .unwrap()
+                .serve_at(PATH, UnexpectedFdSettings(file))
+                .unwrap()
+        }
+    };
+    let server = builder.build().await.unwrap();
+    server.request_name(SERVICE).await.unwrap();
+    let client = NativeClient::connect(private.socket().await).await.unwrap();
+    assert_eq!(client.epoch, EPOCH);
+    (private, server, client, calls)
+}
+
+async fn exercise_authenticated_broken_reply(kind: BrokenReplyKind) {
+    use std::sync::atomic::Ordering;
+
+    let (_private, server, mut client, calls) = malformed_reply_fixture(kind).await;
+    // Both readonly APIs receive a reply from the *correct* authenticated
+    // owner. Neither is allowed to trust a wrong signature or a surprise FD.
+    assert_eq!(client.read_visibility().await, Err(ClientError::Protocol));
+    assert_eq!(client.read_settings().await, Err(ClientError::Protocol));
+    assert_eq!(client.reload_settings().await, Err(ClientError::Protocol));
+    assert!(!client.has_pending_visibility());
+    assert!(!client.has_pending_settings());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    let intent = VisibilityIntent {
+        epoch: format!("{EPOCH:032x}"),
+        revision: 0,
+        token: "a".repeat(64),
+        request: "b".repeat(32),
+        mode: 2,
+    };
+    assert!(intent.valid(EPOCH));
+    assert_eq!(
+        client.set_visibility(intent.clone()).await,
+        Err(ClientError::Protocol)
+    );
+    assert_eq!(client.pending_visibility.as_ref(), Some(&intent));
+    assert!(client.has_pending_visibility());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    // Locally refuse a different user request while preserving the original.
+    let mut conflicting = intent.clone();
+    conflicting.request = "c".repeat(32);
+    assert_eq!(
+        client.set_visibility(conflicting).await,
+        Err(ClientError::PendingOperation)
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(client.pending_visibility.as_ref(), Some(&intent));
+
+    // Only an explicit retry can re-send; the malformed reply must not clear it.
+    assert_eq!(client.retry_visibility().await, Err(ClientError::Protocol));
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(client.pending_visibility.as_ref(), Some(&intent));
+    assert!(!client.has_pending_settings());
+
+    client.close().await.unwrap();
+    server.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn given_authenticated_wrong_dbus_body_signature_when_read_or_set_then_client_rejects_and_keeps_pending(
+) {
+    scenario(exercise_authenticated_broken_reply(
+        BrokenReplyKind::WrongSignature,
+    ))
+    .await;
+}
+
+#[tokio::test]
+async fn given_authenticated_unrequested_dbus_fd_when_read_or_set_then_no_file_authority_is_accepted(
+) {
+    scenario(exercise_authenticated_broken_reply(
+        BrokenReplyKind::UnexpectedFd,
+    ))
     .await;
 }
