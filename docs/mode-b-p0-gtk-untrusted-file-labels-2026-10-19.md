@@ -24,3 +24,9 @@ Run Native GTK UI verification at exact test SHA (and applicable Preflight if tr
 - Initial Native GTK workflow [39251948742](https://github.com/morozhenko-apps/rquickshare/actions/runs/39251948742) failed **nightly rustfmt** on one multiline assertion only; fixed at `291b7733` with unchanged expectations.
 - Exact-code retry: [Native GTK 39252238328](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238328), [Preflight 39252238333](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238333). Do not mark green before completing. Core/GTK instrumentation percentages remain as [previous measured source](mode-b-coverage-baseline-2026-10-19.md), not recomputed from tests.
 - Manual mutation targets include changing `<= 12` to `<= 13`, bypassing ASCII alphabet filter or returning the untrusted basename, and treating multiple files as one. Mutants not run.
+
+
+## Exact-source verification checkpoint (test code `291b7733`)
+- [Native GTK 39252238328](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238328) **COMPLETED SUCCESS**: **82 passed / 0 failed / 0 ignored**; both `untrusted_payload_label_tests` test methods explicitly logged `ok`. GTK formatting and strict Clippy are included in the job.
+- [Preflight 39252238333](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238333): **Core 769 passed / 0 failed / 0 ignored (8 separately filtered)**, Rust format, frontend and Core Clippy jobs **SUCCESS**. Tauri desktop Rust tests were still running at this checkpoint, so do not label all Preflight green until the job finishes.
+- Current instrumented [Native GTK baseline 70.75%](mode-b-coverage-baseline-2026-10-19.md) predates the two new tests. No fabricated post-test percentage, automated mutation score or hardware claim.
