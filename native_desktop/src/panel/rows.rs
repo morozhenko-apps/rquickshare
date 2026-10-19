@@ -1053,7 +1053,10 @@ mod untrusted_payload_label_tests {
         ] {
             let actual = summary(PayloadKind::Files, &[filename]);
             assert_eq!(actual, expected, "filename={filename:?}");
-            assert!(actual.is_ascii(), "remote extension must not escape as Unicode");
+            assert!(
+                actual.is_ascii(),
+                "remote extension must not escape as Unicode"
+            );
             assert!(actual.bytes().all(|byte| byte.is_ascii_alphanumeric()));
             assert!(!actual.contains('/') && !actual.contains('<') && !actual.contains('>'));
         }
