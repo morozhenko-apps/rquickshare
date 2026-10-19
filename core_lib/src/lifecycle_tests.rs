@@ -1,3 +1,136 @@
+#[tokio::test]
+async fn given_active_discovery_when_replaced_then_old_worker_is_joined_before_new_generation_starts()
+{
+    scenario(async {
+        // Arrange: genuine Core ownership and tracker, with external SDK
+        // work represented by an event-controlled future.
+        let mut core = RQS::new(Visibility::Invisible, None, None);
+        let (tracker, lifetime, guard) = core.begin_startup().unwrap();
+        guard.disarm();
+        let (old_started, old_ready) = tokio::sync::oneshot::channel();
+        let (old_finished, finish_old) = tokio::sync::oneshot::channel();
+        core.replace_discovery_with(|token| {
+            Ok(async move {
+                old_started.send(()).unwrap();
+                token.cancelled().await;
+                finish_old.await.unwrap();
+                Ok(())
+            })
+        })
+        .await
+        .unwrap();
+        old_ready.await.unwrap();
+        let first_token = core.discovery_ctk.as_ref().unwrap().clone();
+
+        let (new_started, new_ready) = tokio::sync::oneshot::channel();
+        let mut replace = Box::pin(core.replace_discovery_with(|token| {
+            Ok(async move {
+                new_started.send(()).unwrap();
+                token.cancelled().await;
+                Ok(())
+            })
+        }));
+        // Act: polling replacement cancels the old worker, then must await
+        // its *actual completion*, not merely observe token cancellation.
+        assert!(futures::poll!(replace.as_mut()).is_pending());
+        assert!(first_token.is_cancelled());
+        assert!(!old_finished.is_closed());
+        assert!(!new_ready.is_closed());
+        old_finished.send(()).unwrap();
+        replace.await.unwrap();
+        new_ready.await.unwrap();
+
+        // Assert: exactly the new generation is owned; shutdown joins it.
+        assert!(core.discovery_ctk.as_ref().is_some_and(|ctk| !ctk.is_cancelled()));
+        assert!(!lifetime.is_cancelled());
+        core.stop_discovery_and_wait().await.unwrap();
+        assert!(core.discovery_task.is_none());
+        assert!(core.discovery_ctk.is_none());
+        core.stop().await;
+        assert!(tracker.is_closed() && tracker.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn given_discovery_shutdown_failure_when_restarted_then_no_new_worker_is_registered() {
+    scenario(async {
+        let mut core = RQS::new(Visibility::Invisible, None, None);
+        let (tracker, lifetime, guard) = core.begin_startup().unwrap();
+        guard.disarm();
+        let (old_started, old_ready) = tokio::sync::oneshot::channel();
+        core.replace_discovery_with(|token| {
+            Ok(async move {
+                old_started.send(()).unwrap();
+                token.cancelled().await;
+                Err(anyhow!("simulated SDK shutdown failure"))
+            })
+        })
+        .await
+        .unwrap();
+        old_ready.await.unwrap();
+        let (attempted_sender, mut attempted_receiver) = tokio::sync::oneshot::channel();
+        let result = core
+            .replace_discovery_with(|token| {
+                attempted_sender.send(()).unwrap();
+                Ok(async move {
+                    token.cancelled().await;
+                    Ok(())
+                })
+            })
+            .await;
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "simulated SDK shutdown failure"
+        );
+        assert!(attempted_receiver.try_recv().is_err());
+        assert!(core.discovery_task.is_none());
+        assert!(core.discovery_ctk.is_none());
+        assert!(!lifetime.is_cancelled());
+        core.stop().await;
+        assert!(tracker.is_closed() && tracker.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn given_stopped_discovery_when_restarted_then_only_new_worker_can_be_owned() {
+    scenario(async {
+        let mut core = RQS::new(Visibility::Invisible, None, None);
+        let (tracker, _lifetime, guard) = core.begin_startup().unwrap();
+        guard.disarm();
+        core.replace_discovery_with(|token| {
+            Ok(async move {
+                token.cancelled().await;
+                Ok(())
+            })
+        })
+        .await
+        .unwrap();
+        let former = core.discovery_ctk.as_ref().unwrap().clone();
+        core.stop_discovery_and_wait().await.unwrap();
+        core.stop_discovery_and_wait().await.unwrap();
+        assert!(former.is_cancelled());
+        assert!(core.discovery_task.is_none());
+
+        let (started, ready) = tokio::sync::oneshot::channel();
+        core.replace_discovery_with(|token| {
+            Ok(async move {
+                started.send(()).unwrap();
+                token.cancelled().await;
+                Ok(())
+            })
+        })
+        .await
+        .unwrap();
+        ready.await.unwrap();
+        assert!(core.discovery_ctk.as_ref().is_some_and(|ctk| !ctk.is_cancelled()));
+        core.stop().await;
+        assert!(tracker.is_empty() && tracker.is_closed());
+    })
+    .await;
+}
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

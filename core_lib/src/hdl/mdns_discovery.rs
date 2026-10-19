@@ -35,16 +35,40 @@ impl MDnsDiscovery {
     }
 
     pub async fn run(self, ctk: CancellationToken) -> Result<(), anyhow::Error> {
+        let mut cache = HashMap::new();
+        let outcome = self.run_inner(ctk, &mut cache).await;
+
+        // Withdraw endpoints before another generation can advertise them.
+        for endpoint in cache.values() {
+            let _ = self.sender.send(EndpointInfo {
+                id: endpoint.id.clone(),
+                ..Default::default()
+            });
+        }
+
+        // Joining this worker must also join the mDNS SDK's own daemon.
+        let shutdown = async {
+            let completion = self.daemon.shutdown()?;
+            completion.recv_async().await?;
+            Ok::<(), anyhow::Error>(())
+        }
+        .await;
+        outcome.and(shutdown)
+    }
+
+    async fn run_inner(
+        &self,
+        ctk: CancellationToken,
+        cache: &mut HashMap<String, EndpointInfo>,
+    ) -> Result<(), anyhow::Error> {
         info!("MDnsDiscovery: service starting");
 
         let service_type = "_FC9F5ED42C8A._tcp.local.";
         let receiver = self.daemon.browse(service_type)?;
 
-        // Map with fullname as key and EndpointInfo as value
-        let mut cache: HashMap<String, EndpointInfo> = HashMap::new();
-
         loop {
             tokio::select! {
+                biased;
                 _ = ctk.cancelled() => {
                     info!("MDnsDiscovery: tracker cancelled, breaking");
                     break;
@@ -130,7 +154,17 @@ impl MDnsDiscovery {
 
                                     let ip_port = format!("{ip}:{port}");
                                     let fullname = info.get_fullname().to_string();
-                                    match TcpStream::connect(&ip_port).await {
+                                    // An unreachable peer must not hold a stopped generation
+                    // alive until the operating system TCP timeout expires.
+                    let reachability = tokio::select! {
+                        biased;
+                        _ = ctk.cancelled() => break,
+                        result = TcpStream::connect(&ip_port) => result,
+                    };
+                    if ctk.is_cancelled() {
+                        break;
+                    }
+                    match reachability {
                                         Ok(_) => {
                                             let ei = EndpointInfo {
                                                 fullname: fullname.clone(),
