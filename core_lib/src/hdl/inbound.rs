@@ -2255,6 +2255,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             router.cancel(&expected_endpoint_id).await;
             return Err(error);
         }
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuOfferSent);
         info!(
             "BWU timing: upgrade offer sent at {} ms for endpoint {expected_endpoint_id}",
             bwu_started.elapsed().as_millis()
@@ -2262,6 +2263,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
         let mut tcp = match tokio::time::timeout(Duration::from_secs(15), socket_receiver).await {
             Ok(Ok(socket)) => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpReceived);
                 info!(
                     "BWU timing: TCP route established at {} ms for endpoint {expected_endpoint_id}",
                     bwu_started.elapsed().as_millis()
@@ -2274,6 +2276,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             }
             Err(_) => {
                 router.cancel(&expected_endpoint_id).await;
+                crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpTimeout);
                 warn!(
                     "BWU timing: no routed TCP connection after {} ms; continuing on BLE",
                     bwu_started.elapsed().as_millis()
@@ -2292,6 +2295,8 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                 identity.last_endpoint_id
             ));
         }
+        // Matching an untrusted plaintext ID is not cryptographic channel binding.
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuIntroValidated);
         if identity.endpoint_id != expected_endpoint_id {
             info!(
                 "BWU: accepted dynamic endpoint alias current={} last={:?} for expected {expected_endpoint_id}",
@@ -2311,12 +2316,14 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
         let ack = Self::client_introduction_ack_frame().encode_to_vec();
         send_plain_frame_on(&mut tcp, &ack).await?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuAckSent);
 
         self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
             EventType::LastWriteToPriorChannel,
             None,
         ))
         .await?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuPriorDrainStarted);
 
         let drain_started = Instant::now();
         for _ in 0..16 {
@@ -2362,6 +2369,9 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                     .await?;
                 }
                 Some(EventType::SafeToClosePriorChannel) => {
+                    crate::receiver_trace::event(
+                        crate::receiver_trace::Event::BwuPriorSafeToClose,
+                    );
                     debug!(
                         "BWU timing: peer marked prior channel safe to close after {} ms drain ({} ms total)",
                         drain_started.elapsed().as_millis(),
@@ -2395,6 +2405,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         self.socket = crate::hdl::MigratableStream::Tcp(tcp);
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpSwitched);
         info!(
             "BWU timing: migrated inbound session from BLE to Wi-Fi LAN in {} ms total",
             bwu_started.elapsed().as_millis()
