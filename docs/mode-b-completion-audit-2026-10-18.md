@@ -5,6 +5,14 @@
 of actual evidence, NOT a feature, refactor or relaxation of
 coverage criteria.
 
+## 2026-10-19 P0: Tauri received download path containment, actual symlinks
+
+On exact Tauri test-code SHA `1431de2b`, [Preflight 39302655899](https://github.com/morozhenko-apps/rquickshare/actions/runs/39302655899) **COMPLETED SUCCESS** (all 5 jobs), including **12 Tauri Desktop unit tests PASS, 0 FAIL**, **769 Core Rust PASS** and successful formatter/frontend/both Clippy jobs. The two new test names explicitly appear `ok` in the Tauri job logs.
+
+[Documentation-first N1–N12 test/branch inventory, provenance and scoped completion](mode-b-p0-tauri-reveal-path-containment-2026-10-19.md) covers `cmds/open_download_destination.rs::validate_received_relative_path` (4096/4097 UTF-8 bytes, 255/256-byte individual components, 64/65 component depth, controls/traversal) and `resolve_received_item` with real filesystem symlinks (outside-file, same-prefix sibling directory, inside-file and inside-directory valid links, broken/missing targets). The lexical path cannot obtain a canonical item outside downloads. Only two test methods and documentation were added; no production code change. First CI was cancelled after formatting-only correction and is not counted as green.
+
+Remaining **P0 real-desktop boundary**: `reveal_download_item` does not have a live `AppHandle`/FileManager1-integration test, nor was a concurrent symlink-swap TOCTOU race proven safe. Those are architecture/integration questions outside current test-only scope. Tauri instrumented **23.86% lines** is the older `99c26335` snapshot, not remeasured at `1431de2b`. Full ×10 current-source suite, hardware and all production-method branch map remain OPEN. Global Stage 12: **NO**.
+
 ## 2026-10-19 P0: reveal ingress ownership regression suite
 
 Following the instrumented baseline and the first GTK remote filename label suite, the **actual ingress-owned file reveal worker** was tested in [the MODE B P0 plan, exact stage matrix and final D1–D5 evidence](mode-b-p0-reveal-ingress-lifecycle-2026-10-19.md). Test-source SHA `b912108f`, documentation only afterward. The 2 newly added async tests exercise the production `native_desktop/src/ingress.rs::Ingress::reveal_job` and `Ingress::close` with real Tokio tasks, `PreparationGate` ownership and event-ordered cancellation/close; only the external KDE portal future is replaced at its boundary. Assertions include original portal error propagation, exclusive permit until completion, safe readmission after a successful/rejected reveal, dropped GUI reply without premature task shutdown, and shutdown blocking until a cancelled worker joins.
