@@ -31,8 +31,8 @@ async fn given_core_not_started_when_discovery_requested_then_no_browser_or_toke
 }
 
 #[tokio::test]
-async fn given_owned_discovery_when_stopped_twice_then_core_lifetime_survives_until_owner_shutdown(
-) {
+async fn given_owned_discovery_when_stopped_twice_then_core_lifetime_survives_until_owner_shutdown()
+{
     scenario(async {
         // Arrange: the real Core tracker owns an independent discovery-like
         // cancellation-driven worker, without initializing the mDNS SDK.
