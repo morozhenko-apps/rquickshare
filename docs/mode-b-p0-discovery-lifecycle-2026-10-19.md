@@ -111,3 +111,10 @@ The interim [Preflight 39314514605](https://github.com/morozhenko-apps/rquicksha
 
 ## Additional P0 cache retirement invariant before final gate
 Core `MDnsDiscovery::run` withdraws every published endpoint on generation exit. To make this observable without a live mDNS SDK/browser, extract a small internal cache-retirement helper that consumes the exact `HashMap<String,EndpointInfo>` cache and publishes tombstones through the unchanged production `broadcast::Sender`. Add one table-driven `#[tokio::test]` or synchronous `#[test]` to `core_lib/src/hdl/mdns_discovery.rs` verifying two distinct identities are retired exactly once, all records have the default non-present fields, and a newly published endpoint is queued only after the retirements; do not assume HashMap iteration order. The helper may not hide errors or change sender schema. This closes the deterministic replay-order sub-contract, **not** SDK event injection [#9] or real Android acceptance.
+
+
+## Additional final-gate test infrastructure root cause
+
+The source at `9d2e062e` passed prior-version Native GTK but [Preflight 39315261021](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315261021) reported (1) a single exact rustfmt line break in the mDNS cache-retirement test name and (2) `clippy::items_after_test_module` because the new test module was inserted above `pub struct MDnsDiscovery`. Corrected the exact line break at `560f2a37` and moved the test module **below the production implementation** at `4f5705f4`, retaining the same test contents. Neither requires suppressing Clippy or altering product behavior. This root cause is test placement, not mDNS runtime logic.
+
+Final implementation/test source for validation: `4f5705f4f888c3c2c6781d8999dc96a6b3d6f491`. No subsequent executable edits planned. The earlier `0c939903` Core job confirmed **774 stable tests passed** with all three generation-lifetime test method names `ok`; the new mDNS cache-retirement test is additional and must be confirmed in the final source run, not counted as already passed.
