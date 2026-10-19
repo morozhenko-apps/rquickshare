@@ -73,7 +73,7 @@ After source changes, the live GitHub connector fetched all three exact `dev` fi
 
 GitHub Actions initially observed at post-code SHA `9c8c6577`:
 - [Preflight 39326407110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39326407110): **PENDING** at observation; no pass/fail claim.
-- [Native GTK 39326407154](https://github.com/morozhenko-apps/rquickshare/actions/runs/39326407154): **IN PROGRESS** at observation; no pass/fail claim.
+- [Native GTK 39326407154](https://github.com/morozhenko-apps/rquickshare/actions/runs/39326407154): **SUCCESS**, confirmed on post-code SHA `9c8c6577` at later observation; this does not substitute for Core Preflight or Pixel hardware.
 
 Previous intermediate source pushes triggered runs that were cancelled due to the existing concurrency policy. Do not interpret them as failures or passes for the final source. The last verified green source prior to instrumentation was `4f5705f4` and does not verify these calls.
 
