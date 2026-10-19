@@ -1,5 +1,16 @@
 # MODE B Stage 12 completion audit — 2026-10-18
 
+## 2026-10-19 MODE A architectural decision implemented — discovery restart B
+
+The user explicitly approved **Option B** for the Core discovery generation lifecycle. The previous architectural STOP under [issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12) is **resolved as a decision**, although exact-source CI and real KDE/Android acceptance remain independent checkpoints. Source implementation code through `4f5705f4`:
+- `RQS::discovery` is async, serially cancels+awaits the old owned `JoinHandle`, checks Core lifetime, and only then creates a new mDNS worker. An old-generation failure blocks admission until surfaced to the caller. New `stop_discovery_and_wait` awaits the worker; existing synchronous cancel remains for Drop.
+- `MDnsDiscovery::run` drains cached endpoint tombstones, aborts pending TCP reachability on cancellation, and awaits SDK shutdown acknowledgement. The channel-order contract has its own deterministic test.
+- All identified production callers were adapted: Tauri `start_discovery/stop_discovery`, `NativeRuntime::start` and CLI `core_bin`. Tauri retains a serial mutex and uses its existing Tokio blocking bridge.
+- Three new owned-worker lifecycle tests and one mDNS cache-retirement broadcast test, plus existing prestart/stop tests. Older green Core **774 passing** on source `0c939903` is evidenced in previous Core CI; final source `4f5705f4` has independent [Preflight 39315807211](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315807211) and [Native GTK 39315807383](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315807383) in-progress at this checkpoint. No unverified full green claim.
+- Full [design, failure chronology, rollback, lifecycle matrix and current test plan](mode-b-p0-discovery-lifecycle-2026-10-19.md), updated [continuation state](current-state.md).
+
+Hardware mDNS SDK event injection and Android interoperability remain open under [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9); other transport/BWU risks remain separately tracked. Current uploaded AGENT SSOT requires one final stable gate and separate known-flaky checks, not a generic ten full-suite repetition. No release or main merge.
+
 ## Current SSOT precedence and discovery P0 (2026-10-19)
 
 **Current uploaded AGENT SSOT Stage 11 overrides historical generic "complete-suite 10×" language below.** Run the STABLE suite **once at the final gate**, execute tracked known-FLAKY cases **separately once**, and make bounded targeted reruns only to diagnose/fix failures. The updated SSOT explicitly says **not** to demand 10 successful repetitions of the complete suite, except for a separately binding release workflow. All old test counts and percentage snapshots remain historical facts; their older 10× *requirement* is no longer a generic MODE B completion condition. CI Preflight is not evidence that every Stage 12 artifact is covered.
