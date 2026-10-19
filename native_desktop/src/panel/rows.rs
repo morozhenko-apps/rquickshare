@@ -1002,3 +1002,89 @@ mod device_contract_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod untrusted_payload_label_tests {
+    use super::*;
+    use rqs_lib::service::client::state::FileDetail;
+    use rqs_lib::sessions::details::PayloadKind;
+
+    fn summary(kind: PayloadKind, names: &[&str]) -> String {
+        let details = TransferDetails {
+            kind,
+            files: names
+                .iter()
+                .map(|name| FileDetail {
+                    name: (*name).to_owned(),
+                    size: 1,
+                })
+                .collect::<Vec<_>>()
+                .into(),
+            ..Default::default()
+        };
+        payload_label(&details)
+    }
+
+    #[test]
+    fn given_untrusted_single_file_extensions_when_projected_then_only_bounded_ascii_label_is_displayed(
+    ) {
+        // Arrange: all the raw names originate at the untrusted remote peer.
+        for (filename, expected) in [
+            ("receipt.txt", "TXT"),
+            ("receipt.TXT", "TXT"),
+            ("archive.tar.gz", "GZ"),
+            ("invoice.x1", "X1"),
+            ("a.0", "0"),
+            ("a.123456789012", "123456789012"),
+            ("a.1234567890123", "File"),
+            ("a.", "File"),
+            ("filename", "File"),
+            (".hidden", "HIDDEN"),
+            ("nested/path/<b>private</b>.txt", "TXT"),
+            ("<img src=x>.svg", "SVG"),
+            ("nested/path/<script>.bad!", "File"),
+            ("untrusted.é", "File"),
+            ("untrusted.中文", "File"),
+            ("untrusted.💣", "File"),
+            ("name._", "File"),
+            ("name.dash-1", "File"),
+            ("name.space ext", "File"),
+            ("name.new\nline", "File"),
+        ] {
+            let actual = summary(PayloadKind::Files, &[filename]);
+            assert_eq!(actual, expected, "filename={filename:?}");
+            assert!(actual.is_ascii(), "remote extension must not escape as Unicode");
+            assert!(actual.bytes().all(|byte| byte.is_ascii_alphanumeric()));
+            assert!(!actual.contains('/') && !actual.contains('<') && !actual.contains('>'));
+        }
+    }
+
+    #[test]
+    fn given_file_manifest_cardinality_and_payload_kind_when_projected_then_summary_never_echoes_remote_paths(
+    ) {
+        // Arrange: a multi-file payload or non-file resource never exposes
+        // untrusted file metadata as the summary.
+        for (kind, names, expected) in [
+            (PayloadKind::Files, vec![], "0 files"),
+            (PayloadKind::Files, vec!["private.bin"], "BIN"),
+            (
+                PayloadKind::Files,
+                vec!["<secret>.txt", "private/location.html"],
+                "2 files",
+            ),
+            (
+                PayloadKind::Files,
+                vec!["x.bin", "y.bin", "z.bin"],
+                "3 files",
+            ),
+            (PayloadKind::Text, vec![], "Text"),
+            (PayloadKind::Text, vec!["<secret>.txt"], "Text"),
+            (PayloadKind::Url, vec![], "Link"),
+            (PayloadKind::Url, vec!["private/location.html"], "Link"),
+        ] {
+            let actual = summary(kind, &names);
+            assert_eq!(actual, expected, "kind={kind:?} names={names:?}");
+            assert!(!actual.contains('<') && !actual.contains('/') && !actual.contains('>'));
+        }
+    }
+}
