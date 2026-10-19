@@ -5,6 +5,14 @@
 of actual evidence, NOT a feature, refactor or relaxation of
 coverage criteria.
 
+## 2026-10-19 P0: reveal ingress ownership regression suite
+
+Following the instrumented baseline and the first GTK remote filename label suite, the **actual ingress-owned file reveal worker** was tested in [the MODE B P0 plan, exact stage matrix and final D1–D5 evidence](mode-b-p0-reveal-ingress-lifecycle-2026-10-19.md). Test-source SHA `b912108f`, documentation only afterward. The 2 newly added async tests exercise the production `native_desktop/src/ingress.rs::Ingress::reveal_job` and `Ingress::close` with real Tokio tasks, `PreparationGate` ownership and event-ordered cancellation/close; only the external KDE portal future is replaced at its boundary. Assertions include original portal error propagation, exclusive permit until completion, safe readmission after a successful/rejected reveal, dropped GUI reply without premature task shutdown, and shutdown blocking until a cancelled worker joins.
+
+[Native GTK 39268764105](https://github.com/morozhenko-apps/rquickshare/actions/runs/39268764105) **SUCCESS: 84 passed / 0 failed**, both new named methods logged `ok`, formatting/strict lint pass. [Preflight 39268764131](https://github.com/morozhenko-apps/rquickshare/actions/runs/39268764131) **SUCCESS: 5/5 jobs**, Core 769/769, desktop Tauri 10/10, frontend/format/Clippy green. **This does not cover `panel/reveal.rs::reveal_target` itself, and does not alter 10.87% measured line coverage of `panel/reveal.rs` at the older SHA.** Re-run instrumented reports to make any new source-specific coverage claim.
+
+Global MODE B Stage 12 remains **NO**: on-source entire-suite 10× repetition, full instrumented branch mapping, real KDE Portal/BlueZ/Android/mDNS hardware/runtime acceptance, and automated mutation gate remain open. Production code and `master` unchanged.
+
 ## 2026-10-19 additional GUI-safe filename projection evidence
 
 After the measured `99c26335` baseline, two Native GTK P0/P1 tests were introduced in `native_desktop/src/panel/rows.rs` (code SHA `291b7733`) with [documentation-first matrix](mode-b-p0-gtk-untrusted-file-labels-2026-10-19.md). [Native GTK 39252238328](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238328) **SUCCESS: 82/82** (both new methods named `ok`). [Preflight 39252238333](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238333) Core Rust **769/769**, formatter, frontend, and Core Clippy **SUCCESS**. At the recorded checkpoint, the Tauri desktop job remained in progress; full Preflight requires independent final-success observation.
