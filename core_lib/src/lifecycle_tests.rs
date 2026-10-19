@@ -9,6 +9,73 @@ async fn scenario(operation: impl Future<Output = ()>) {
         .expect("lifecycle scenario deadlocked");
 }
 
+#[tokio::test]
+async fn given_core_not_started_when_discovery_requested_then_no_browser_or_token_is_created() {
+    // Arrange: no Core transport lifetime or external mDNS daemon exists.
+    let mut core = RQS::new(Visibility::Invisible, None, None);
+    let (sender, _receiver) = broadcast::channel(2);
+    assert!(core.tracker.is_none());
+    assert!(core.discovery_ctk.is_none());
+
+    // Act / Assert: even repeated requests must fail before spawning a
+    // discovery daemon or changing the owner's state.
+    for _ in 0..2 {
+        let error = core.discovery(sender.clone()).unwrap_err();
+        assert_eq!(error.to_string(), "The service wasn't first started");
+        assert!(core.tracker.is_none());
+        assert!(core.ctoken.is_none());
+        assert!(core.discovery_ctk.is_none());
+    }
+    core.stop_discovery();
+    assert!(core.discovery_ctk.is_none());
+}
+
+#[tokio::test]
+async fn given_owned_discovery_when_stopped_twice_then_core_lifetime_survives_until_owner_shutdown(
+) {
+    scenario(async {
+        // Arrange: the real Core tracker owns an independent discovery-like
+        // cancellation-driven worker, without initializing the mDNS SDK.
+        // This tests stop_discovery ownership, not repeated discovery starts.
+        let mut core = RQS::new(Visibility::Invisible, None, None);
+        let (tracker, lifetime, guard) = core.begin_startup().unwrap();
+        let discovery = CancellationToken::new();
+        core.discovery_ctk = Some(discovery.clone());
+        let worker_token = discovery.clone();
+        let (started_sender, started_receiver) = tokio::sync::oneshot::channel();
+        let (finished_sender, finished_receiver) = tokio::sync::oneshot::channel();
+        tracker.spawn(async move {
+            started_sender.send(()).unwrap();
+            worker_token.cancelled().await;
+            finished_sender.send(()).unwrap();
+        });
+        guard.disarm();
+
+        // Act: discovery stops while the Core lifetime remains running.
+        started_receiver.await.unwrap();
+        assert!(!discovery.is_cancelled());
+        assert!(!lifetime.is_cancelled());
+        assert!(!tracker.is_closed());
+        core.stop_discovery();
+        finished_receiver.await.unwrap();
+        core.stop_discovery();
+
+        // Assert: cancellation and removal affect only discovery ownership.
+        assert!(discovery.is_cancelled());
+        assert!(core.discovery_ctk.is_none());
+        assert!(!lifetime.is_cancelled());
+        assert!(!tracker.is_closed());
+        assert_eq!(core.subscribe_visibility().current(), Visibility::Invisible);
+
+        // The independent Core shutdown still closes/joins the real tracker.
+        core.stop().await;
+        assert!(lifetime.is_cancelled());
+        assert!(tracker.is_closed() && tracker.is_empty());
+        assert!(core.ctoken.is_none());
+    })
+    .await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn given_started_core_when_owner_is_dropped_then_cancellation_releases_all_tracked_workers() {
     // Arrange
