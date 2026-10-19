@@ -190,6 +190,134 @@ mod tests {
     }
 
     #[test]
+    fn given_received_path_length_depth_and_component_boundaries_then_only_legal_relative_segments_pass(
+    ) {
+        // Arrange: bytes, not Unicode scalar count, are the wire contract.
+        let mut maximum_segments = vec!["a".repeat(255); 15];
+        maximum_segments.push("b".repeat(254));
+        maximum_segments.push("c".to_owned());
+        let maximum = maximum_segments.join("/");
+        assert_eq!(maximum.len(), 4096);
+        assert_eq!(
+            validate_received_relative_path(&maximum).unwrap().len(),
+            17
+        );
+        let too_long = format!("{maximum}c");
+        assert_eq!(too_long.len(), 4097);
+        assert_eq!(
+            validate_received_relative_path(&too_long),
+            Err("received relative path is empty or too long".to_owned())
+        );
+
+        let depth_64 = vec!["a"; 64].join("/");
+        let depth_65 = vec!["a"; 65].join("/");
+        assert_eq!(
+            validate_received_relative_path(&depth_64).unwrap().len(),
+            64
+        );
+        assert_eq!(
+            validate_received_relative_path(&depth_65),
+            Err("received relative path is too deep".to_owned())
+        );
+
+        let utf8_255 = format!("{}x", "é".repeat(127));
+        let utf8_256 = format!("{utf8_255}x");
+        assert_eq!(utf8_255.len(), 255);
+        assert_eq!(utf8_256.len(), 256);
+        assert_eq!(
+            validate_received_relative_path(&utf8_255).unwrap(),
+            vec![utf8_255.as_str()]
+        );
+        assert!(validate_received_relative_path(&utf8_256).is_err());
+        for acceptable in ["a", "safe/данные.txt", ".hidden", "✨.txt"] {
+            assert!(
+                validate_received_relative_path(acceptable).is_ok(),
+                "safe input rejected: {acceptable:?}"
+            );
+        }
+        for unsafe_path in [
+            "",
+            ".",
+            "..",
+            "folder/./file",
+            "folder/../file",
+            "/absolute",
+            "folder//file",
+            "folder/",
+            "folder\\file",
+            "name\0.txt",
+            "name\n.txt",
+            "name\u{0007}.txt",
+        ] {
+            assert!(
+                validate_received_relative_path(unsafe_path).is_err(),
+                "unsafe input accepted: {unsafe_path:?}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn given_received_item_symlinks_when_resolved_then_canonical_target_never_escapes_download_root(
+    ) {
+        use std::os::unix::fs::symlink;
+
+        // Arrange: the attacker may supply names of symlinks inside the
+        // download tree. A same-prefix sibling must never count as contained.
+        let root = std::env::temp_dir().join(format!(
+            "rquickshare-containment-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("thread")
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let destination = root.join("downloads");
+        let outside = root.join("downloads-escaped");
+        std::fs::create_dir_all(destination.join("inside")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+
+        let inside_file = destination.join("inside").join("allowed.txt");
+        let outside_file = outside.join("secret.txt");
+        std::fs::write(&inside_file, b"allowed").unwrap();
+        std::fs::write(&outside_file, b"secret").unwrap();
+        symlink(&outside_file, destination.join("outside-file.txt")).unwrap();
+        symlink(&outside, destination.join("outside-folder")).unwrap();
+        symlink(&inside_file, destination.join("inside-file-link.txt")).unwrap();
+        symlink(destination.join("inside"), destination.join("inside-folder")).unwrap();
+        symlink(root.join("not-present"), destination.join("broken-link")).unwrap();
+        let canonical = destination.canonicalize().unwrap();
+
+        // Act/Assert: a symlink leaf and symlinked directory may not walk
+        // into the sibling, even though its full path shares the same prefix.
+        for relative in ["outside-file.txt", "outside-folder/secret.txt"] {
+            assert_eq!(
+                resolve_received_item(&canonical, relative),
+                Err("received item escaped the download destination".to_owned()),
+                "untrusted relative item: {relative}"
+            );
+        }
+        for (relative, expected) in [
+            ("inside/allowed.txt", &inside_file),
+            ("inside-file-link.txt", &inside_file),
+            ("inside-folder/allowed.txt", &inside_file),
+        ] {
+            assert_eq!(
+                resolve_received_item(&canonical, relative).unwrap(),
+                Some(expected.canonicalize().unwrap()),
+                "legitimate contained item: {relative}"
+            );
+        }
+        for relative in ["inside/missing.txt", "broken-link"] {
+            assert_eq!(
+                resolve_received_item(&canonical, relative).unwrap(),
+                None,
+                "absent item: {relative}"
+            );
+        }
+        assert!(resolve_received_item(&canonical, "../downloads-escaped/secret.txt").is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn received_item_must_exist_under_destination() {
         let root = std::env::temp_dir().join(format!(
             "rquickshare-reveal-test-{}-{}",
