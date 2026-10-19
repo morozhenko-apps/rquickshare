@@ -5,6 +5,23 @@
 of actual evidence, NOT a feature, refactor or relaxation of
 coverage criteria.
 
+## 2026-10-19 current-source instrumented measurement and GTK follow-up
+
+Manual coverage experiments **both completed SUCCESS** at `dev` commit `99c26335`: [Coverage measurement 39209606436](https://github.com/morozhenko-apps/rquickshare/actions/runs/39209606436) and [Native GTK instrumented coverage 39209632695](https://github.com/morozhenko-apps/rquickshare/actions/runs/39209632695). The complete file-by-file Rust output and methodology are preserved in [the source-matched MODE B coverage baseline](mode-b-coverage-baseline-2026-10-19.md).
+
+| Instrumented component | Line coverage | Function coverage | Region coverage |
+| --- | ---: | ---: | ---: |
+| Core Rust | 90.42% | 86.03% | 87.77% |
+| Native GTK | 70.75% | 65.73% | 68.96% |
+| Tauri Desktop Rust | 23.86% | 19.29% | 24.98% |
+| Frontend V8 | 56.00% | 75.86% | n/a |
+
+Frontend V8 reports 88.04% branch coverage; all three Rust tables report no actual branch instrumentation (zero-count fields), not 100%. Coverage universes/denominators differ and must not be averaged. P0 Core hardware gaps: `hdl/mdns_discovery.rs` 0%, `hdl/ble.rs` 5.59%, `hdl/gatt.rs` 40.55%. GUI gaps: `panel/reveal.rs` 10.87%, `preview.rs` 23.33%; Tauri `cmds/discovery.rs` 0%. The low lines largely reflect lifecycle/hardware rather than trivial missing unit assertions. Real Android/BlueZ/mDNS and runtime testability require independent integration or a separately authorized MODE A seam.
+
+Documentation-first [GTK remote filename/manifest label plan](mode-b-p0-gtk-untrusted-file-labels-2026-10-19.md) has been implemented in `native_desktop/src/panel/rows.rs`, code SHA `86e2bb41` (two pure P0/P1 contracts). Source-exact Preflight and Native GTK have started; outcome and new coverage percentages remain **UNCONFIRMED until separate successful runs**. The latest instrumented percentages are baseline **before** these test additions.
+
+Status remains **NO** for global Stage 12: strict full 10× current-source suite, all branch categories, mutation review, hardware and packaging acceptance are open. The earlier 2026-10-18 paragraphs below are retained as historical exact-source snapshots, not as an assertion that manual coverage was still unrun after 2026-10-19.
+
 ## Latest additive client/D-Bus evidence (2026-10-18, post-baseline)
 
 This section updates the **current-source status** without rewriting the historical instrumented baseline recorded below. Latest green **test-code** source is `85faca64`; later `dev` commits through `40dc61c2` are documentation-only.
