@@ -65,6 +65,8 @@ async fn route_bandwidth_upgrade_if_pending(
         return Ok(Some(socket));
     };
 
+    // A syntactically valid plaintext introduction is not proof of peer identity.
+    crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpClassified);
     match router
         .route_with_alias(
             &identity.endpoint_id,
@@ -74,6 +76,7 @@ async fn route_bandwidth_upgrade_if_pending(
         .await
     {
         Ok(routed_as) => {
+            crate::receiver_trace::event(crate::receiver_trace::Event::BwuRouteConsumed);
             if routed_as != identity.endpoint_id {
                 info!(
                     "{INNER_NAME}: routed dynamic BWU endpoint current={} last={:?} as {routed_as}",
@@ -83,6 +86,7 @@ async fn route_bandwidth_upgrade_if_pending(
             Ok(None)
         }
         Err(_socket) => {
+            crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpUnmatched);
             warn!(
                 "{INNER_NAME}: received BWU CLIENT_INTRODUCTION for unregistered endpoint current={} last={:?}",
                 identity.endpoint_id,
