@@ -14,8 +14,8 @@ use hdl::{receiver_service_data, BleAdvertiser, ReceiverAdvertiser, ReceiverGatt
 use rand::distr::Alphanumeric;
 use rand::Rng;
 use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
 use tokio::sync::{broadcast, mpsc, watch};
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
@@ -407,13 +407,20 @@ impl RQS {
             return Err(anyhow!("The service wasn't first started"));
         }
         self.stop_discovery_and_wait().await?;
-        if self.ctoken.as_ref().is_none_or(CancellationToken::is_cancelled) {
+        if self
+            .ctoken
+            .as_ref()
+            .is_none_or(CancellationToken::is_cancelled)
+        {
             return Err(anyhow!("Core transports stopped; discovery cannot restart"));
         }
 
         let token = CancellationToken::new();
         let future = create(token.clone())?;
-        let tracker = self.tracker.as_ref().ok_or_else(|| anyhow!("Core tracker unavailable"))?;
+        let tracker = self
+            .tracker
+            .as_ref()
+            .ok_or_else(|| anyhow!("Core tracker unavailable"))?;
         self.discovery_task = Some(tracker.spawn(future));
         self.discovery_ctk = Some(token);
         Ok(())
@@ -432,7 +439,8 @@ impl RQS {
     pub async fn stop_discovery_and_wait(&mut self) -> Result<(), anyhow::Error> {
         self.stop_discovery();
         if let Some(task) = self.discovery_task.take() {
-            task.await.map_err(|err| anyhow!("Discovery worker failed to join: {err}"))??;
+            task.await
+                .map_err(|err| anyhow!("Discovery worker failed to join: {err}"))??;
         }
         Ok(())
     }

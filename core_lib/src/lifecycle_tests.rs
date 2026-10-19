@@ -1,6 +1,6 @@
 #[tokio::test]
-async fn given_active_discovery_when_replaced_then_old_worker_is_joined_before_new_generation_starts()
-{
+async fn given_active_discovery_when_replaced_then_old_worker_is_joined_before_new_generation_starts(
+) {
     scenario(async {
         // Arrange: genuine Core ownership and tracker, with external SDK
         // work represented by an event-controlled future.
@@ -43,7 +43,10 @@ async fn given_active_discovery_when_replaced_then_old_worker_is_joined_before_n
         new_ready.await.unwrap();
 
         // Assert: exactly the new generation is owned; shutdown joins it.
-        assert!(core.discovery_ctk.as_ref().is_some_and(|ctk| !ctk.is_cancelled()));
+        assert!(core
+            .discovery_ctk
+            .as_ref()
+            .is_some_and(|ctk| !ctk.is_cancelled()));
         assert!(!lifetime.is_cancelled());
         core.stop_discovery_and_wait().await.unwrap();
         assert!(core.discovery_task.is_none());
@@ -126,7 +129,10 @@ async fn given_stopped_discovery_when_restarted_then_only_new_worker_can_be_owne
         .await
         .unwrap();
         ready.await.unwrap();
-        assert!(core.discovery_ctk.as_ref().is_some_and(|ctk| !ctk.is_cancelled()));
+        assert!(core
+            .discovery_ctk
+            .as_ref()
+            .is_some_and(|ctk| !ctk.is_cancelled()));
         core.stop().await;
         assert!(tracker.is_empty() && tracker.is_closed());
     })

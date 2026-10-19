@@ -222,7 +222,7 @@ impl NativeRuntime {
             self.core.stop().await;
             return Err(RuntimeError::CoreUnavailable);
         }
-        if self.core.discovery(startup.discovery_sender).is_err() {
+        if self.core.discovery(startup.discovery_sender).await.is_err() {
             self.core.stop().await;
             return Err(RuntimeError::CoreUnavailable);
         }
