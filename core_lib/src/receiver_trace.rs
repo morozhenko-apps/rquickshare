@@ -15,6 +15,17 @@ pub enum Event {
     GattHeaderReady,
     MdnsRegister,
     MdnsResend,
+    BwuOfferSent,
+    BwuTcpClassified,
+    BwuTcpUnmatched,
+    BwuRouteConsumed,
+    BwuTcpReceived,
+    BwuTcpTimeout,
+    BwuIntroValidated,
+    BwuAckSent,
+    BwuPriorDrainStarted,
+    BwuPriorSafeToClose,
+    BwuTcpSwitched,
 }
 impl Event {
     fn name(self) -> &'static str {
@@ -32,6 +43,17 @@ impl Event {
             Self::GattHeaderReady => "gatt_header_ready",
             Self::MdnsRegister => "mdns_register",
             Self::MdnsResend => "mdns_resend",
+            Self::BwuOfferSent => "bwu_offer_sent",
+            Self::BwuTcpClassified => "bwu_tcp_classified",
+            Self::BwuTcpUnmatched => "bwu_tcp_unmatched",
+            Self::BwuRouteConsumed => "bwu_route_consumed",
+            Self::BwuTcpReceived => "bwu_tcp_received",
+            Self::BwuTcpTimeout => "bwu_tcp_timeout",
+            Self::BwuIntroValidated => "bwu_intro_validated",
+            Self::BwuAckSent => "bwu_ack_sent",
+            Self::BwuPriorDrainStarted => "bwu_prior_drain_started",
+            Self::BwuPriorSafeToClose => "bwu_prior_safe_to_close",
+            Self::BwuTcpSwitched => "bwu_tcp_switched",
         }
     }
 }
@@ -84,12 +106,25 @@ mod tests {
             Event::GattHeaderReady,
             Event::MdnsRegister,
             Event::MdnsResend,
+            Event::BwuOfferSent,
+            Event::BwuTcpClassified,
+            Event::BwuTcpUnmatched,
+            Event::BwuRouteConsumed,
+            Event::BwuTcpReceived,
+            Event::BwuTcpTimeout,
+            Event::BwuIntroValidated,
+            Event::BwuAckSent,
+            Event::BwuPriorDrainStarted,
+            Event::BwuPriorSafeToClose,
+            Event::BwuTcpSwitched,
         ] {
             for elapsed in [0, 1, u128::MAX] {
                 let message = line(stage, elapsed);
                 assert_eq!(message.split_whitespace().count(), 3);
                 assert!(message.ends_with(&format!("elapsed_ms={elapsed}")));
                 assert!(!message.contains('/'));
+                assert!(!message.contains('"'));
+                assert!(!message.contains('@'));
             }
         }
     }
