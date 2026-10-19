@@ -1,5 +1,16 @@
 # MODE B Stage 12 completion audit — 2026-10-18
 
+## Current SSOT precedence and discovery P0 (2026-10-19)
+
+**Current uploaded AGENT SSOT Stage 11 overrides historical generic "complete-suite 10×" language below.** Run the STABLE suite **once at the final gate**, execute tracked known-FLAKY cases **separately once**, and make bounded targeted reruns only to diagnose/fix failures. The updated SSOT explicitly says **not** to demand 10 successful repetitions of the complete suite, except for a separately binding release workflow. All old test counts and percentage snapshots remain historical facts; their older 10× *requirement* is no longer a generic MODE B completion condition. CI Preflight is not evidence that every Stage 12 artifact is covered.
+
+[Scoped source and branch inventory](mode-b-p0-discovery-lifecycle-2026-10-19.md) documents Tauri `start_discovery`/`stop_discovery`, Core `RQS::discovery`/`stop_discovery`, lifecycle tests, and an architectural STOP FACTOR. A repeated start unconditionally overwrites `discovery_ctk` without cancelling or joining the previous mDNS worker. [P0 issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12) has two durable contract alternatives; [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9) tracks the mDNS SDK/transport testability seam. No architectural decision or production correction has been made.
+
+Two **test-only** Tokio lifecycle tests were added at `b8545375` under `core_lib/src/lifecycle_tests.rs`: (a) rejecting discovery before startup without daemon mutation; (b) cancelling an owned discovery token twice without cancelling the independent Core lifetime or leaking its tracked worker at owner shutdown. These do **not** test duplicate-start workers and do not instantiate real mDNS. [Preflight 39309762791](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762791) and [Native GTK 39309762487](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762487) began for the exact test SHA; final results were not yet observed when this report was written. Update only after completion evidence.
+
+All previous measured line coverage is from earlier `99c26335` and should not be re-labelled current coverage after changes. Overall Stage 12 is still **NO** because real repeated-start behavior, live Android/BlueZ/mDNS acceptance, UI event integration and per-method branch/interaction gaps remain.
+
+
 **Status: NO — repository-wide MODE B testing coverage is NOT complete.**
 **Primary mode: MODE B (Testing).** This is a source/document audit
 of actual evidence, NOT a feature, refactor or relaxation of
