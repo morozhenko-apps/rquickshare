@@ -5,8 +5,8 @@ Primary mode: MODE A (architecture / security).
 Repository baseline: `dev` at `57d0dc1f5faee4a5804cf493bb0728bf058f462c` (three documentation-only commits after CI-verified source `4f5705f4f888c3c2c6781d8999dc96a6b3d6f491`).
 Issue: https://github.com/morozhenko-apps/rquickshare/issues/8
 
-**Status: ARCHITECTURAL STOP FACTOR / no option selected.**
-This is a documentation-only source and protocol audit. No production behavior, tests, installed system, keys, release workflow or security policy have been changed by this work.
+**Status: Option A APPROVED by user on 2026-10-19; required Google-compatible pre-commit proof NOT FOUND in public protocol. MODE A production implementation BLOCKED at the explicit compatibility gate.**
+This remains documentation-only architectural work. No production behavior, tests, installed system, keys, release workflow or security policy have been changed. The user approved only conditional Option A, not an incompatible wire extension, downgraded authentication contract, BLE-only fallback, or residual-risk acceptance.
 
 ## 1. Reproducible source evidence and threat boundary
 
@@ -72,11 +72,25 @@ Require a new per-session nonce + cryptographic TCP admission proof for peers th
 
 A mere bounded provisional route, TCP source-address check, randomized port, or requeue-after-failure **alone** is insufficient to satisfy I2/I3 and must not be marked a security fix. Explicit residual-risk acceptance would require a separate release/security decision, not an implicit fallback.
 
-Recommendation: **Option A only after a protocol-proof feasibility gate**, otherwise return for a decision between B and C. The exact cryptographic proof and sequencing are currently **UNVERIFIED**; do not promise an implementation without that evidence.
+Decision: **Option A selected**, conditional on passing its protocol-proof feasibility gate. The latest public Google code contains **no pre-ACK cryptographic binding in the introduction/ACK frames**, so that gate is **NOT PASSED**. Do not replace missing proof with a provisional lease, timeout, source-IP restriction or UKEY2 checks on a later channel, and do not implement B or C without renewed user approval.
+
+## 4.1. Option A feasibility result (2026-10-19, public Google code)
+
+Reviewed Google Nearby Connections `main` and the actual rQuickShare `dev` code, not just prose descriptions:
+
+- [`google/nearby/connections/implementation/offline_frames.cc`](https://github.com/google/nearby/blob/main/connections/implementation/offline_frames.cc), `ForBwuIntroduction` (~lines 496-516): wire payload includes endpoint ID, optional previous endpoint ID, and encryption-support flag; these fields are sent before an authenticated TCP binding. `ForBwuIntroductionAck` (~lines 518-529) contains only the BWU event type, with no challenge/response or MAC.
+- [`google/nearby/connections/implementation/bwu_manager.cc`](https://github.com/google/nearby/blob/main/connections/implementation/bwu_manager.cc), `OnIncomingConnection` (~lines 643-742): reads introduction, sends plaintext ACK, resolves endpoint/alias and invokes `RunUpgradeProtocol`. No socket-specific cryptographic proof is checked before selecting that endpoint.
+- Same Google source, `RunUpgradeProtocol` (~lines 753-817): pauses/replaces the new channel and drains the old channel using the SAME UKEY2 context/sequence counters; the previous encrypted channel exchanges `LAST_WRITE_TO_PRIOR_CHANNEL` and `SAFE_TO_CLOSE_PRIOR_CHANNEL`. This proves encrypted control messages on the prior session, **not the origin of the untrusted TCP socket**.
+- Our `InboundRequest::do_bandwidth_upgrade` likewise validates introduction strings, ACKs plaintext, drains old BLE and then swaps transport. Waiting for an authenticated TCP payload before ACK/old-channel drain is not supported by the evidenced Google sequence and could deadlock. Waiting until after the switch leaves an unauthenticated candidate able to consume/hold the BWU attempt, violating I2.
+- Google [draft PR #4462](https://github.com/google/nearby/pull/4462) (opened July 14, 2026) explicitly describes untrusted `CLIENT_INTRODUCTION` controls and a concurrent-upgrade deadlock. Its proposed fixes retain initiator-owned encryption settings and reject duplicate paused-channel upgrades. **The draft does not provide a pre-commit TCP-channel authentication mechanism**; its separate encryption-downgrade issue must not be confused with a proven rQuickShare decryptability flaw. As of this read it is draft, not evidence of a deployed release.
+
+**Assessment:** The evidence does not establish a way to satisfy BOTH I2 (no irreversible unauthenticated route consumption) and I3 (cryptographic channel binding before commitment) while preserving the observed Google BWU wire sequence. A fully interoperable Option A therefore cannot responsibly be implemented based on existing public protocol data. It is **not** mathematically proven impossible for every deployed Android/Windows build: independent authenticated extensions in those builds have not been checked on hardware.
+
+**STOP/next admissible evidence:** obtain exact sanitized hardware protocol traces or new authoritative protocol data demonstrating a supported pre-commit proof, including its ordering relative to introduction/ACK/old-channel drain. Without that, request a NEW decision between B (secure BLE-only with physical fallback verification) and C (authenticated rQuickShare-only extension with BLE fallback). An option-A-only local route lease might reduce contention but is **not a security fix**, must not be reported as P0 closed, and must not be merged as such.
 
 ## 5. Implementation/validation plan after approval
 
-1. Record the approved option and verified protocol evidence in this document and issue #8.
+1. Record Option A approval and the **failed public-source pre-commit proof gate** in this document and issue #8; do not start production implementation while it remains blocked.
 2. Establish trace-based source-level diagnostic coverage without disclosing peer identifiers or keys.
 3. Inventory every affected public route/upgrade method and its executable branches. Plan Positive and all applicable N1-N12 and interaction scenarios before changing code (MODE B inventory/branch map as required by current SSOT).
 4. Implement a durable session-ownership contract in Core. Keep producer, daemon, GTK and existing wire compatibility explicit; no symptom suppression.
