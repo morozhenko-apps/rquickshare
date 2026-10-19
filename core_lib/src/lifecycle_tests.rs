@@ -22,7 +22,7 @@ async fn given_active_discovery_when_replaced_then_old_worker_is_joined_before_n
         old_ready.await.unwrap();
         let first_token = core.discovery_ctk.as_ref().unwrap().clone();
 
-        let (new_started, new_ready) = tokio::sync::oneshot::channel();
+        let (new_started, mut new_ready) = tokio::sync::oneshot::channel();
         let mut replace = Box::pin(core.replace_discovery_with(|token| {
             Ok(async move {
                 new_started.send(()).unwrap();
@@ -34,8 +34,10 @@ async fn given_active_discovery_when_replaced_then_old_worker_is_joined_before_n
         // its *actual completion*, not merely observe token cancellation.
         assert!(futures::poll!(replace.as_mut()).is_pending());
         assert!(first_token.is_cancelled());
-        assert!(!old_finished.is_closed());
-        assert!(!new_ready.is_closed());
+        assert!(matches!(
+            new_ready.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
         old_finished.send(()).unwrap();
         replace.await.unwrap();
         new_ready.await.unwrap();
