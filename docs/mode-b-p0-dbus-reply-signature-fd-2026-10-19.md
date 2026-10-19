@@ -1,0 +1,41 @@
+# MODE B P0 — Authenticated D-Bus wrong-signature and unexpected-FD replies (2026-10-19)
+
+## Stages 1–2: repository scan, risks, invariants and selected approach
+**Mode:** B — Testing only. **Branch:** `dev`. Baseline `dd9d0294`; prior identical code source `85faca64` passed [Preflight 39174986191](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986191) and [Native GTK 39174986234](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986234).
+Read `agent.md`, `docs/mode-b-completion-audit-2026-10-18.md`, `core_lib/src/service/client.rs`, `core_lib/src/service/client/{visibility.rs,settings.rs,tests.rs,tests/visibility_forged.rs}`, `core_lib/src/service/bus/tests.rs`, and the current `mode-b.yml`/coverage workflows. Existing client `wire` authenticates same unique sender and requires zero reply FDs for all relevant methods; `read_visibility` and `checked_settings` deserialize exact typed bodies; `retry_visibility` retains pending intent on `Protocol`. Existing injected D-Bus fixture tests semantically invalid but correctly shaped replies. Wrong D-Bus body *signature* and valid typed payload with extra file descriptor remain untested on the actual bus.
+
+**Invariant:** An authenticated, same-owner local service can still be untrusted. Wrong body signature must yield `ClientError::Protocol`, not successfully deserialize or mutate client state. Any unexpected attached FD must be rejected at `wire` even if a valid `VisibilityView`/`SettingsView` is also sent. A rejected `Set` response must preserve exact pending request; a second user attempt is blocked, and explicit retry must not silently succeed. No reply may transfer filesystem authority to a client that did not request a descriptor. Reject without inspecting/opening/consuming attached FD.
+
+**Test-infrastructure choice:** Add separate `#[zbus::interface]` test-only implementations of `Settings2` and `Visibility2` for each malformed response kind. They own the real service name on the existing private D-Bus, with the existing healthy test-only `Manager2` and `Operations1` bootstrap. The standard `NativeClient::connect` and unchanged production `wire` execute every test. This avoids ambiguous racing manual reply injectors, unsafe raw-message fabrication and all production changes.
+
+## Stage 3: exhaustive scoped test inventory
+| Artifact | Risk and executable branch | Planned method / count |
+| --- | --- | --- |
+| `NativeClient::read_visibility` | same unique owner, wrong typed `Read` reply vs valid typed view with unexpected FD | 2 integration tests, each exercises this path |
+| `NativeClient::{read_settings,reload_settings}` / `checked_settings` | wrong `SettingsView` signature; valid settings plus unrequested FD; decode or authentication reject | same 2 tests, two method paths each |
+| `NativeClient::{set_visibility,retry_visibility,has_pending_visibility}` | wrong typed `Set` response or unexpected FD never clears pending | same 2 tests, explicit double-retry/ownership assertions |
+| `client.rs::wire/reply_sender_fds` | expected zero FD, source owner authentic, malformed content | same 2 tests; verified through full path |
+| Wrong FD with exactly the expected typed body signature and **no** `h` in signature | raw protocol manipulation required and validity depends on broker/SDK constraints | OPEN; tests below carry legitimate FD as an additional field and assert FD rejection; do not overclaim signature-independent isolation |
+| Forged sender name, malformed DBus headers, reply serial manipulation | separate security work | OPEN; previous sender-authentication unit tests exist |
+
+Two **new named Tokio tests** with two adversarial fixture modes and no changes to production code.
+
+## Stage 4: branch map
+`wire`: `name_owner()` check → authenticated `reply_sender_fds(reply, owner, 0)` rejects unexpected FD; wrong-signature response without FD proceeds to `read_visibility` / `checked_settings`, whose typed deserialize fails `Protocol`. `retry_visibility`: `Protocol` retains pending; new `set_visibility` during pending returns `PendingOperation`; repeated explicit retry calls only the same original request. `Settings2::{Read,Reload}`: both malformed routes are rejected independently. Real healthy-success variants are already covered in prior source-matched D-Bus suites.
+
+## Stages 5–6: Positive / N1–N12 and interaction matrix
+| Contract | Positive | N1 | N2 | N3 | N4 | N5 | N6 | N7 | N8 | N9 | N10 | N11 | N12 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Wrong signature | Existing healthy fixture | wrong typed body (s vs struct) | single wrong reply | real D-Bus | retry exact retained request | single mutable client; N/A race | typed wire mismatch | authenticated same owner | N/A time | explicit client retry | no visibility trust or token disclosure | N/A payments | no files |
+| Unexpected FD | Existing zero-FD healthy fixture | unexpected `h` in reply | exactly 1 attached descriptor | D-Bus Unix FD transport | retry does not clear pending | N/A same reason | typed view with additional FD | reject unrequested authority | N/A time | explicit client retry | no read/open of FD; secrets not logged | N/A payments | FD is created only by fixture and must not be adopted |
+
+Interaction matrix: response class {wrong signature, valid typed+FD} × method {Visibility2.Read, Settings2.Read, Settings2.Reload, Visibility2.Set} × first/second `Set` attempt, with two independent new test methods. No timeouts other than existing `scenario` guard, no sleeps, no OS adapters or device network.
+
+## Stages 7–8: test estimate and production-file coverage map
+Expected 2 test methods, at least 8 method-route rejection assertions, 2 pending+second-command guards, 2 repeat-retry errors, counters proving two explicit `Set` invocations, and no false discovery state. Production touched **only as test targets**: `core_lib/src/service/client.rs` `reply_sender_fds` branch, `core_lib/src/service/client/visibility.rs` `Read` and `retry_visibility`, `core_lib/src/service/client/settings.rs` `read_settings`, `reload_settings`, `checked_settings`; `core_lib/src/service/visibility_service.rs` and `settings_service.rs` supply typed payloads. Fixture-only edits: `core_lib/src/service/client/tests/visibility_forged.rs`; this plan and completion documents. File-level coverage % not claimed without llvm-cov.
+
+## Stages 9–10: implementation and mutation review
+Implement separate tiny `#[zbus::interface]` test-only faulty services with `Read/Reload/Set`; wrong-signature services return a plain string; extra-FD services return a *valid typed view plus one borrowed file descriptor*. Verify wrong signature via real response decode, FD via production `wire`. Assert exact errors, original pending intent, unchanged attempts count after locally rejected second command, read-only route rejection, and no client recovery without an explicit request. Manual mutation candidates: bypass sender/FD check; deserialize wrong signature as default; clear pending on `Protocol`; retry with new token; accept stale/foreign reply. Mutation kills not measured until actual instrumentation.
+
+## Stages 11–12: execution / completion gate
+Run existing Preflight & Native GTK on identical test SHA; inspect named Core test logs, counts, Clippy, formatting and Tauri. Do not alter `master`, production semantics, application packaging, or the release-only `workflow_call` strict 10x guard. A validated final-source 10× entire suite, current-source detailed line/branch coverage, Android/BlueZ/mDNS hardware acceptance, and complete repo-wide Stage 12 remain OPEN. Rollback: remove the two test methods and test-only service implementations plus docs.
