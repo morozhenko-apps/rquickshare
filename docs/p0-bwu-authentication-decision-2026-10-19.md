@@ -103,3 +103,13 @@ Rollback point: documentation-only planning is independently reversible. Any lat
 ## Execution evidence for this planning step
 
 Read-only GitHub connector inspection of `dev` source and existing tests; external Google source inspection. **No local tests, CI run, deployment, hardware test, production code patch or release executed.** Existing exact-source Preflight and Native GTK success on `4f5705f4` remain historical evidence and do not validate a future security fix.
+
+## User decision — 2026-10-20: defer unresolved pre-commit TCP authentication
+
+After a successful actual Pixel 6a→Ubuntu BLE→TCP physical transfer (all nine BWU phases observed; 561 ms from offer to TCP switch; successful end-to-end send/receipt reported on both devices), the user explicitly chose to **defer further work on P0 #8 and continue independent product work**. This supersedes the *immediate-work priority*, not the security invariant or the factual protocol limitation.
+
+- **Status: OPEN / DEFERRED, NOT FIXED.** Keep the Google-compatible BWU behavior working, with no unapproved protocol or BLE-only fallback change. Do not claim authenticated new-TCP-socket admission or close this issue on the strength of successful transfer.
+- Threat statement remains narrow: plaintext ID-based route-consumption race with plausible denial of service. There is no established evidence of successful content decryption or alteration by an off-session attacker.
+- This is an **engineering backlog deferral**, not a broad acceptance of residual risks for publishing a production security claim or bypassing release review. Retain a visible release/security gate that evaluates this documented risk explicitly.
+- Reopen the architectural investigation when a Google-compatible documented pre-commit proof or trustworthy hardware evidence appears, or when the user expressly authorizes a different trade-off. Google upstream behavior may change and has not been proved permanently incapable of addressing the weakness.
+- Next independent work: requested native GTK Devices attention/focus and incoming counter, issue #13. Docs and executable commits remain separate.
