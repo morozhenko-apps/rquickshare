@@ -46,3 +46,11 @@ Source commit `4506647a` changes exactly four GTK files and no Core/daemon/wire 
 No hardware build or installed candidate was touched. CI exact-source gates: [Native GTK](https://github.com/morozhenko-apps/rquickshare/actions/runs/39478722621), [Preflight](https://github.com/morozhenko-apps/rquickshare/actions/runs/39478722626); both were in progress on first read and must not be claimed green without completion evidence.
 
 Remaining acceptance beyond source: widget-level live transfer projection and physical KDE/Wayland focus/pulse observation with two incoming requests. P0 BWU proof issue #8 remains independently blocked.
+
+## Post-implementation static / CI findings
+
+- Source-only `4506647a` initially failed [Native GTK 39478722621](https://github.com/morozhenko-apps/rquickshare/actions/runs/39478722621) at `cargo +nightly fmt --check`: exact formatting changes in the new `DeviceAttention::review_pending` expression, focus guard and long table-driven unit test assertions/signature. No compiler/test outcome may be inferred from that early format failure.
+- Independent follow-up `af4c6ce8` filters `Devices (N)` against disconnected/unsynchronized snapshots to avoid stale badges; same initial formatting deficiency remained in its run. No change to daemon authority, ID handling or consent.
+- **Final executable source at this checkpoint**: `2fdda13e68c24e6ca43da3c2fd03f005f2502cd0` contains the *exact* CI rustfmt output, with no behavior/guard changes from format correction.
+- Exact-source Native GTK [39479242761](https://github.com/morozhenko-apps/rquickshare/actions/runs/39479242761) and Preflight [39479242776](https://github.com/morozhenko-apps/rquickshare/actions/runs/39479242776) were queued/running at latest observation. Do not represent these as completed or green without GitHub evidence.
+- Known residual user-level acceptance: focus/scroll on a real live consent row in expanded Devices list, reduced-motion GTK session, simultaneous requests, and small-monitor presentation. This is neither a product release nor a device-security fix.
