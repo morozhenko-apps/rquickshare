@@ -666,7 +666,7 @@ impl Panel {
             let user_busy = model.waiting
                 || model.input_active
                 || model.dialog.is_some()
-                || self.window.focus().is_some_and(|focus| {
+                || gtk::prelude::GtkWindowExt::focus(&self.window).is_some_and(|focus| {
                     matches!(focus.widget_name().as_str(), "accept" | "decline")
                 });
             let focus_allowed = model.drawer == Drawer::Open
