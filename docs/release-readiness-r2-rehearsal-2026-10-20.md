@@ -72,3 +72,29 @@ No other repo, R2 bucket, existing release, installed user service or master bra
 **Release stop conditions still active:** missing environment protection or publisher signing-only secrets, incomplete exact-source Mode B or meaningful physical acceptance, release-critical regression, conflicting signed R2 snapshot, mismatched immutable package or binary provenance. Scope selection authorizes preparation on dev; do **not** create the tag or modify production bucket while these are unresolved. No runtime environment/secrets are available to this connector for operator-only publishing.
 
 **Rollback before tag:** revert isolated development changes; retain existing debug packages and signing materials. **After tag/publishing**: no tag movement or overwriting immutable objects; use a new patch release for corrections, with explicit signed archive transition. Option B is an operational release, not a reversible dry run.
+
+## B implementation evidence — product identity and release gate
+
+Date 2026-10-20. MODE A. Changes recorded **on dev only**, not the release branch:
+
+- `28aaef56295f55894d47e899781dec17b7fc360c`: `native_desktop/Cargo.toml` product version `0.9.0`, matching `native_desktop/Cargo.lock` package entry, and native Debian revision reset `2→1` (first public package `rquickshare-native_0.9.0-1_amd64.deb`). Version/ordering negative regression in `scripts/tests/test_native_deb.py` verifies `0.9.0-1` sorts below historical `1.0.0-1.debug` and `1.0.0-2.debug`, and below internal `0.9.0-1.debug`. Local system `dpkg --compare-versions` independently returned true for all six specified orderings; the package itself has not been built locally under this new version.
+- `ce405618b0eb224094dbffea1a2f26c6595c7d77`: production tag admission now fails closed if GitHub's `branches/master` API does not report `protected=true`. A matching tag SHA alone did **not** imply protected release authority, so this enforces the already documented trust assumption. It currently blocks publication because the branch status was `false` at last read. Authorized operator must provision actual branch and tag rules before signed publication.
+- `3139fc59755103852f1e600fea53d665acf2e2a4`: GitHub Release notes for the selected `v0.9.0` explicitly state early public Linux-only support and the open BWU socket-handoff DoS limitation (#8). Later tags keep their existing general release notes, not an unconditional false early-release label.
+- Initial [Native GTK run 39491269847](https://github.com/morozhenko-apps/rquickshare/actions/runs/39491269847) failed **one out of 86** isolated GTK tests (85 passed) because the About dialog test asserted a hardcoded `1.0.0` against the correctly rendered `0.9.0`. `0b02808fd621cf31f4e00819f56fb49cdeec41a4` fixes the *test contract* to use `env!("CARGO_PKG_VERSION")` rather than hardcoding. Full final-source CI result must be read separately; no GREEN claim from a prior failing SHA.
+- The prior installed `1.0.0-1.debug` and tested uninstalled `1.0.0-2.debug` remain immutable. Never report an APT downgrade as an upgrade, or tell the owner to replace the installed app without explicit controlled hardware acceptance.
+
+### Operator-owned GitHub controls (no secret export to chat/repo)
+
+1. On GitHub `morozhenko-apps/rquickshare` → Settings → Rules → Rulesets, require protection of `master` against force push/deletion, and enforce repository-appropriate trusted update checks. Confirm the GitHub REST branch `protected=true` value after effective rules apply. Protect creation, update and deletion of `v*` tags against untrusted actors. The release CI's source-commit check is necessary but not sufficient to prove a tag is authorized.
+2. GitHub Settings → Environments → `apt-release`: make the tag publisher environment available only to the intended protected release source/tag policy; ensure the dedicated preexisting signing **subkey**, pinned public keyring, least-privilege R2 bucket and Worker token secrets, plus `RQS_R2_ACCOUNT_ID` variable, are present. Confirm **names/presence only**, never reveal values in the issue/chat or application logs.
+3. Because this is an unattended tag release design (already approved separately), a required human environment reviewer would block the automated release. Protect workflows/master/tag and environment secret edits instead; do not weaken source/tag verification just to get a green release job.
+4. Only when Linux hardware acceptance, strict final Mode B and package/source identity checks pass, intentionally promote the verified candidate from dev to master, create a never-reused annotated `v0.9.0` tag, and observe the production publisher as a true real release. On R2 or public download failure, retain immutable bytes, diagnose and use a new version for corrections, never force rollback by overwriting `InRelease`/a tag without signed-authority verification.
+
+### Remaining gates
+
+- [ ] Full exact-final-source CI success for the version/test and release workflow changes.
+- [ ] Real 0.9.0-1 uninstalled package build/verify + SHA256 and actual matching tag source provenance.
+- [ ] Operator rulesets and signing environment presence/protection.
+- [ ] Hardware consent/file/text/folder/error lifecycle acceptance on Linux/Pixel for the release candidate.
+- [ ] Strict complete Mode B and release actionlint check on exact intended tag source.
+- [ ] Public signed production R2 objects, HTTPS readback, isolated APT, GitHub Release, signed-index refresh.
