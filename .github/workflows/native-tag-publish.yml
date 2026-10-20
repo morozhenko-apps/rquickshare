@@ -24,6 +24,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # A matching commit alone cannot establish protected release authority.
+      # Fail before build/signing if production master has no effective protection.
+      - name: Require protected production master before accepting a release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/branches/master" --jq '.protected' |
+            grep -Fxq true
       - name: Confirm stable tag equals current master and native version
         id: version
         shell: bash
