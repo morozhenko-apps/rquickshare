@@ -98,3 +98,9 @@ Date 2026-10-20. MODE A. Changes recorded **on dev only**, not the release branc
 - [ ] Hardware consent/file/text/folder/error lifecycle acceptance on Linux/Pixel for the release candidate.
 - [ ] Strict complete Mode B and release actionlint check on exact intended tag source.
 - [ ] Public signed production R2 objects, HTTPS readback, isolated APT, GitHub Release, signed-index refresh.
+
+## Release-v0.9.0 exact-source validation update
+
+- `0b02808fd621cf31f4e00819f56fb49cdeec41a4`: [Native GTK UI verification 39491932598](https://github.com/morozhenko-apps/rquickshare/actions/runs/39491932598) **completed SUCCESS** after eliminating the hardcoded About version assertion. Both strict lint/format and GTK isolated widget/controller checks are represented by this exact workflow; do not attribute the earlier failure to transport or runtime.
+- [Preflight 39491926302](https://github.com/morozhenko-apps/rquickshare/actions/runs/39491926302) was still **in progress** at last observation. Mark final source Preflight pending until GitHub reports completion; earlier cancelled intermediate builds do not establish success or failure of the final candidate.
+- No release tag or public R2 change has been made. Debug package acceptance, final 0.9.0 package-build/signer/rulesets and complete Mode B remain separately open.
