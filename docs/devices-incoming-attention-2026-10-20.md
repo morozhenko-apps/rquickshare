@@ -31,6 +31,18 @@ STABLE native GTK: new pure attention-state test and existing isolated `panel/te
 
 - [x] Baseline repository scan, user requirements, issue #13, prior SSOT.
 - [x] Documentation-first implementation plan.
-- [ ] GTK model, button actions, CSS and tests implemented.
+- [x] GTK model, button actions, CSS and tests implemented in `4506647a2a87c59a35eaf20b0938d076fcd07f25` (source-only atomic commit).
 - [ ] Exact-source CI/format/lint/GTK suite verified.
 - [ ] Physical installation/visual acceptance (separate future hardware gate).
+
+## Implementation checkpoint — 2026-10-20
+
+Source commit `4506647a` changes exactly four GTK files and no Core/daemon/wire sources:
+- `native_desktop/src/panel.rs` adds `DeviceAttention` per-epoch pending/reviewed keys, clearing on disconnect/unsynchronized view, retiring resolved requests and honoring consent-round updates; real `Panel::update` detects new requests and may focus a keyed row only if the drawer is open, the window is visible and no critical modal/consent control has focus.
+- `native_desktop/src/panel/menu.rs` acknowledges existing requests on a deliberate collapsed Devices activation and focuses its last recorded incoming request; retains normal open/close action.
+- `native_desktop/ui/panel.css` adds a persistent theme-aware Devices pending highlight and a finite four-cycle pulse, selected only when desktop GTK animation setting permits.
+- `native_desktop/src/panel/tests.rs` adds a deterministic request revision/arrival/ack/reset state test that does not forge a NativeClient transfer capability.
+
+No hardware build or installed candidate was touched. CI exact-source gates: [Native GTK](https://github.com/morozhenko-apps/rquickshare/actions/runs/39478722621), [Preflight](https://github.com/morozhenko-apps/rquickshare/actions/runs/39478722626); both were in progress on first read and must not be claimed green without completion evidence.
+
+Remaining acceptance beyond source: widget-level live transfer projection and physical KDE/Wayland focus/pulse observation with two incoming requests. P0 BWU proof issue #8 remains independently blocked.
