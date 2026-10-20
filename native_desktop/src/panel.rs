@@ -88,9 +88,11 @@ impl DeviceAttention {
     }
 
     fn review_pending(&mut self) -> Option<String> {
-        let target = self.latest.clone().filter(|id| {
-            self.pending.iter().any(|key| &key.0 == id)
-        }).or_else(|| self.pending.iter().next_back().map(|key| key.0.clone()));
+        let target = self
+            .latest
+            .clone()
+            .filter(|id| self.pending.iter().any(|key| &key.0 == id))
+            .or_else(|| self.pending.iter().next_back().map(|key| key.0.clone()));
         self.reviewed.extend(self.pending.iter().cloned());
         target
     }
@@ -664,10 +666,9 @@ impl Panel {
             let user_busy = model.waiting
                 || model.input_active
                 || model.dialog.is_some()
-                || self
-                    .window
-                    .focus()
-                    .is_some_and(|focus| matches!(focus.widget_name().as_str(), "accept" | "decline"));
+                || self.window.focus().is_some_and(|focus| {
+                    matches!(focus.widget_name().as_str(), "accept" | "decline")
+                });
             let focus_allowed = model.drawer == Drawer::Open
                 && !model.preview
                 && self.window.is_visible()

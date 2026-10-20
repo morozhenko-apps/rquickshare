@@ -50,16 +50,23 @@ fn given_complete_view_and_busy_flags_when_controls_are_projected_then_only_sync
 }
 
 #[test]
-fn given_authoritative_incoming_revisions_when_devices_attention_is_reconciled_then_only_unreviewed_requests_pulse_and_new_requests_focus() {
+fn given_authoritative_incoming_revisions_when_devices_attention_is_reconciled_then_only_unreviewed_requests_pulse_and_new_requests_focus(
+) {
     let mut attention = DeviceAttention::default();
     assert!(!attention.has_unreviewed());
-    assert_eq!(attention.observe(Some(9), [("phone-a".into(), 1)], false), None);
+    assert_eq!(
+        attention.observe(Some(9), [("phone-a".into(), 1)], false),
+        None
+    );
     assert!(attention.has_unreviewed());
     assert_eq!(attention.review_pending().as_deref(), Some("phone-a"));
     assert!(!attention.has_unreviewed());
 
     // Re-rendering the same immutable view never retriggers attention.
-    assert_eq!(attention.observe(Some(9), [("phone-a".into(), 1)], true), None);
+    assert_eq!(
+        attention.observe(Some(9), [("phone-a".into(), 1)], true),
+        None
+    );
     assert!(!attention.has_unreviewed());
 
     // A second device is focused while the drawer is already open.
@@ -87,7 +94,10 @@ fn given_authoritative_incoming_revisions_when_devices_attention_is_reconciled_t
 
     // Resolved requests, disconnection and daemon epoch replacement retire all
     // presentation rights rather than leaking a stale device focus.
-    assert_eq!(attention.observe(Some(9), Vec::<(String, u64)>::new(), false), None);
+    assert_eq!(
+        attention.observe(Some(9), Vec::<(String, u64)>::new(), false),
+        None
+    );
     assert!(!attention.has_unreviewed());
     assert_eq!(attention.review_pending(), None);
     attention.observe(Some(9), [("old".into(), 1)], false);
