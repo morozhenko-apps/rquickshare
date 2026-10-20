@@ -32,7 +32,7 @@ STABLE native GTK: new pure attention-state test and existing isolated `panel/te
 - [x] Baseline repository scan, user requirements, issue #13, prior SSOT.
 - [x] Documentation-first implementation plan.
 - [x] GTK model, button actions, CSS and tests implemented in `4506647a2a87c59a35eaf20b0938d076fcd07f25` (source-only atomic commit).
-- [ ] Exact-source CI/format/lint/GTK suite verified.
+- [x] Exact-source Preflight and GTK format/lint/widget execution steps verified; GTK workflow final cleanup pending at last read.
 - [ ] Physical installation/visual acceptance (separate future hardware gate).
 
 ## Implementation checkpoint — 2026-10-20
@@ -91,3 +91,11 @@ This is an auditable *scenario plan*, not evidence of executed complete coverage
 Combinations: drawer closed/open × zero/one/two pending × unseen/reviewed × automatic/manual window × normal/reduced animation × service healthy/disconnected/new epoch × consent ready/unready × modal/idle × current/older consent round. Targeted integration must exercise the core interactions without fabricating a writable transfer handle. Mutation review: invert one `direction == Inbound`, `phase == AwaitingConsent`, `epoch` reset, `reviewed` clearing or drawer-open guard and verify the focused tests fail; reject changes that only inflate covered lines.
 
 **Current completion gate**: Pure-state testing is not a substitute for an actual widget-level StateView integration, strict Clippy/GTK suite and a user-confirmed KDE hardware observation. These remain open unless executed and documented with exact candidate SHA.
+
+## Exact-source CI confirmation at 230a2408
+
+Source-only correction `230a240858566f1d36ffe7b006df7475930c7a0d` resolved the ambiguous `GtkWindowExt::focus` vs `RootExt::focus` method lookup (`E0034`) by qualifying `gtk::prelude::GtkWindowExt::focus(&self.window)`. The previous source `2fdda13e` passed Preflight but its GTK workflow failed to compile at the ambiguous method; **not** a transport fault.
+
+- [Preflight 39485853461](https://github.com/morozhenko-apps/rquickshare/actions/runs/39485853461): workflow **completed SUCCESS**; all five jobs passed (format, frontend, Core Rust, Core Clippy, Tauri Clippy) on exactly `230a2408`.
+- [Native GTK 39485853451](https://github.com/morozhenko-apps/rquickshare/actions/runs/39485853451): exact-source native GTK formatting/lint and isolated widget/controller suite steps **SUCCESS**. At the check time the job was still in successful-step cleanup; do not call the workflow completed until the terminal GitHub result confirms it.
+- No production Debian package was rebuilt, installed or smoke-tested on KDE after `230a2408`, and the code is not merged into main. The user's confirmed Pixel BLE→TCP success belongs to the earlier debug candidate, not this UI change.
