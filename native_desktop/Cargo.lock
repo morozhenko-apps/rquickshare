@@ -2661,7 +2661,7 @@ dependencies = [
 
 [[package]]
 name = "rquickshare-desktop"
-version = "1.0.0"
+version = "0.9.0"
 dependencies = [
  "futures",
  "glycin",

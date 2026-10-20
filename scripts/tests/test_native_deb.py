@@ -42,6 +42,33 @@ class NativeDebTests(unittest.TestCase):
         for left, right in [(1, 2), (2, 10), (10, 2147483647)]:
             subprocess.run(["dpkg", "--compare-versions", package.native_version("1.0.0", left), "lt", package.native_version("1.0.0", right)], check=True)
 
+    def test_given_selected_public_0_9_0_when_versioned_then_release_is_distinct_from_earlier_diagnostic_1_0_0(self):
+        # v0.9.0 is a real public early release, not a rename of 1.0.0-2.debug.
+        import tomllib
+        root = Path(__file__).parents[2]
+        cargo = tomllib.loads((root / "native_desktop/Cargo.toml").read_text())
+        locked = tomllib.loads((root / "native_desktop/Cargo.lock").read_text())
+        revision = tomllib.loads((root / "native_desktop/packaging/release.toml").read_text())["revision"]
+        version = cargo["package"]["version"]
+        self.assertEqual(version, "0.9.0")
+        self.assertEqual(revision, 1)
+        self.assertEqual(
+            [entry["version"] for entry in locked["package"] if entry["name"] == "rquickshare-desktop"],
+            [version],
+        )
+        release = package.native_version(version, revision)
+        self.assertEqual(release, "0.9.0-1")
+        package.validate_metadata(fields() | {"Version": release})
+        # Debian will NOT silently downgrade the user's previously installed debug build.
+        subprocess.run(["dpkg", "--compare-versions", release, "lt", "1.0.0-1.debug"], check=True)
+        subprocess.run(["dpkg", "--compare-versions", release, "lt", "1.0.0-2.debug"], check=True)
+        subprocess.run(["dpkg", "--compare-versions", release, "lt", "1.0.0-2"], check=True)
+        # Even same-version .debug is an internal higher-sorting Debian version.
+        subprocess.run(["dpkg", "--compare-versions", release, "lt", "0.9.0-1.debug"], check=True)
+        # A real follow-up patch/revision must sort higher than this immutable release.
+        subprocess.run(["dpkg", "--compare-versions", release, "lt", "0.9.0-2"], check=True)
+        subprocess.run(["dpkg", "--compare-versions", release, "lt", "0.9.1-1"], check=True)
+
     def test_given_selected_assets_when_validated_then_process_ownership_supports_only_opt_in_login_without_direct_fallback(self):
         # Arrange / Act / Assert: actual shipped service/activation assets.
         package.validate_assets()
