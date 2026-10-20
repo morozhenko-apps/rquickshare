@@ -32,7 +32,7 @@ STABLE native GTK: new pure attention-state test and existing isolated `panel/te
 - [x] Baseline repository scan, user requirements, issue #13, prior SSOT.
 - [x] Documentation-first implementation plan.
 - [x] GTK model, button actions, CSS and tests implemented in `4506647a2a87c59a35eaf20b0938d076fcd07f25` (source-only atomic commit).
-- [x] Exact-source Preflight and GTK format/lint/widget execution steps verified; GTK workflow final cleanup pending at last read.
+- [x] Exact-source Preflight and Native GTK workflows completed SUCCESS for `230a2408`; packaging revision-only follow-up awaits its own gate.
 - [ ] Physical installation/visual acceptance (separate future hardware gate).
 
 ## Implementation checkpoint — 2026-10-20
@@ -99,3 +99,13 @@ Source-only correction `230a240858566f1d36ffe7b006df7475930c7a0d` resolved the a
 - [Preflight 39485853461](https://github.com/morozhenko-apps/rquickshare/actions/runs/39485853461): workflow **completed SUCCESS**; all five jobs passed (format, frontend, Core Rust, Core Clippy, Tauri Clippy) on exactly `230a2408`.
 - [Native GTK 39485853451](https://github.com/morozhenko-apps/rquickshare/actions/runs/39485853451): exact-source native GTK formatting/lint and isolated widget/controller suite steps **SUCCESS**. At the check time the job was still in successful-step cleanup; do not call the workflow completed until the terminal GitHub result confirms it.
 - No production Debian package was rebuilt, installed or smoke-tested on KDE after `230a2408`, and the code is not merged into main. The user's confirmed Pixel BLE→TCP success belongs to the earlier debug candidate, not this UI change.
+
+## CI terminal gate and diagnostic package revision — 2026-10-20
+
+Both workflows on **exact executable source `230a240858566f1d36ffe7b006df7475930c7a0d` finished SUCCESS**:
+- [Preflight 39485853461](https://github.com/morozhenko-apps/rquickshare/actions/runs/39485853461): all five jobs successful.
+- [Native GTK UI verification 39485853451](https://github.com/morozhenko-apps/rquickshare/actions/runs/39485853451): strict formatting/lint and isolated GTK widget/controller suite successful; clean terminal workflow outcome.
+
+After this gate, packaging-only `native_desktop/packaging/release.toml` revision was increased `1 → 2` by `3c9ccf057d8a25e88e8793cebf70d375d7323e85` to reserve an **independent local diagnostic `rquickshare-native_1.0.0-2.debug_amd64.deb` candidate**, rather than silently replacing already installed/preserved `1.0.0-1.debug` artifact bytes. Package build, its SHA-256, APT simulation and physical KDE acceptance have **not** been executed or claimed. `master` / published APT / signing are unchanged. Exact-source packaging-only CI after this revision remains a separate check.
+
+Physical acceptance still required: two incoming requests while closed/open, correct sender focus, static/animated Devices attention, counter and Receive caption, response/terminal cleanup, manual focus/lock constraints, no regression to Pixel BLE→TCP transfer.
