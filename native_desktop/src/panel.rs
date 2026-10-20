@@ -1111,6 +1111,7 @@ impl Panel {
             .state
             .view
             .as_ref()
+            .filter(|view| !model.state.disconnected && view.synchronized)
             .map(|view| {
                 view.transfers
                     .iter()
