@@ -57,28 +57,21 @@ not block the first accepted Linux package.
 
 ## Independent releases and versioning
 
-- **`v1.0.0`** is the **target** first public stable Git tag and semantic
-  product version, without `native-`, `beta`, or OS suffixes. Future product
-  tags follow `vMAJOR.MINOR.PATCH` (e.g. `v1.0.1`, `v1.1.0`).
+- **`v0.9.0`** is the **selected next early public Ubuntu Linux release**, using a normal immutable `vMAJOR.MINOR.PATCH` Git tag and the existing signed R2/APT production channel. It is a real release, not a staging upload. **`v1.0.0` remains the later stable-product target**, after additional acceptance. No `native-`, `beta`, or OS suffix belongs in the product tag; future product tags follow `vMAJOR.MINOR.PATCH`.
 - SemVer measures the stability/compatibility contract of the released
   product, **not the percentage of Google's full roadmap completed**.
   Announce only verified features/platforms; full parity is not a
   `v1.0.0` claim.
-- Existing `0.11.5+nativeN` artifacts and crate version `0.11.5` are
-  **internal legacy/native-development identifiers**. They are not the
-  public product version or evidence that `v1.0.0` has shipped.
+- Existing `0.11.5+nativeN` and `1.0.0-N.debug` artifacts are **historical internal test builds**; they do not establish a public release and are not the selected `v0.9.0` artifact. The library/core and retained Tauri version identifiers remain separate from the native product.
 - Selected planned Debian package identity: `rquickshare-native`, to avoid
   APT conflating the fork with upstream `rquickshare`. A conventional
-  candidate release name is `rquickshare-native_1.0.0-1_amd64.deb`
+  first public candidate is `rquickshare-native_0.9.0-1_amd64.deb`
   for the verified Ubuntu 26.04 amd64 channel. Keep the CLI `rquickshare`
   only if upgrade/conflict tests prove its ownership safe. Internal Rust
   crate/library versions may be independently managed; do not mechanically
   rewrite the retained Tauri/macOS project to match the desktop product tag.
-- **No new identity/version format has been implemented yet.** The current
-  builder, APT validator, Worker allowlist and local desktop assets still
-  enforce the earlier package/version. Change these together in a separate
-  reviewed implementation, including migration and negative tests.
-- Do not announce stable `v1.0.0` or create a public signed channel on source
+- The existing native builder, APT validator, Worker allowlist and desktop assets already support the independent `rquickshare-native` Debian identity and stable three-part SemVer. The newly selected product version needs a matching native Cargo/lockfile revision, regression checks and release-candidate validation; do not relabel old 1.0.0 debug bytes.
+- Do not publish even early public `v0.9.0`, or announce stable `v1.0.0`, on source
   coverage alone. Release acceptance is based on the actual supported-platform
   ordinary sharing, refusal/cancel/retry, safety, install/upgrade/removal,
   automated Mode B and signed-download gates in
@@ -167,8 +160,8 @@ The complete current **readiness list, source/hash/CI evidence, staging-vs-produ
 5. With explicit release approval, check live bucket/Worker state, controlled
    R2 write/readback/denial, signer identity/recovery and metadata refresh,
    then release signed APT plus a versioned direct .deb from the same bytes.
-   Only after verification, publish `v1.0.0` with source/attribution/release
-   notes and a truthful supported-platform matrix.
+   Only after verification, publish the selected public `v0.9.0` with source/attribution/release
+   notes and a truthful supported-platform matrix; retain `v1.0.0` as a later stable target.
 
 This task is **documentation only**: no code, version, branch promotion,
 signing, key handling, R2 writes, live installation or release publication.

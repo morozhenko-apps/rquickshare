@@ -11,9 +11,8 @@ secret, bucket object or tag is created by this source task.
 
 - Product: **rQuickShare**. Targets Linux, Windows and macOS in the roadmap;
   only a physically accepted OS/architecture gets release artifacts.
-- First intended product release: `1.0.0`, Git tag `v1.0.0` (not beta,
-  not `native-*`). Later tags `vMAJOR.MINOR.PATCH`.
-- Native Debian package: `rquickshare-native`; version `1.0.0-1`;
+- Selected first public early release: `0.9.0`, Git tag `v0.9.0` (not a sandbox, not `native-*`). Later stabilized product target: `v1.0.0`; future tags use `vMAJOR.MINOR.PATCH`.
+- Native Debian package: `rquickshare-native`; version `0.9.0-1`;
   source binary remains `/usr/bin/rquickshare`. Crate `rqs_lib` and
   historical Tauri remain independently versioned.
 - Keep private R2 bucket `rquickshare-native-apt`, read-only Worker route
@@ -129,7 +128,7 @@ encrypted recovery archive into a GitHub issue, chat or job log.
    cleanly if a secret or permissions are missing. Check the public
    `download.morozhenko.com` Worker route separately; changing only a
    GitHub Secret does not deploy the new allowlist automatically.
-6. For the first real version, obtain verified real Android/Linux,
+6. For the selected first public `v0.9.0`, obtain verified real Android/Linux,
    Debian install/migration/rollback and exact-source complete Mode B
    evidence. Fast-forward verified `dev` to protected `master`, then
    create exactly one new annotated `vMAJOR.MINOR.PATCH` tag on
@@ -169,7 +168,7 @@ by overwriting immutable package bytes or moving tags.
 
 Explicit non-goals: full Google Quick Share parity, macOS/Windows ports,
 new desktop UX, new R2 bucket/route, automatic enrollment, publishing
-`v1.0.0` now, replacing the installed package, or modifying active
+`v0.9.0` before its verified release gates, replacing the installed package, or modifying active
 signing/recovery material. Existing transfers and Linux settings remain
 untouched. Scope is reversible per atomic commit until public signed
 artifacts or a new package identity are installed/published.
