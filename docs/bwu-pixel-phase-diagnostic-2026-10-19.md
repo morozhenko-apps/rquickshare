@@ -107,4 +107,27 @@ Filtered `journalctl --user -u rquickshare-daemon.service` displayed **`rqs-rece
 
 Source check: `scripts/native_deb.py` builds `core_lib/rquickshare-daemon` without `--no-default-features`; `core_lib/Cargo.toml` default features include `experimental`; `core_lib/src/hdl/gatt.rs` enables BWU and calls the guarded `do_bandwidth_upgrade` worker. Therefore this package build is not statically disabling BWU. A successful ordinary Wi-Fi-LAN transfer may still produce **zero BWU events** if there was no BLE upgrade negotiation; that must be distinguished from a failed protocol path.
 
-No Python/Rust locally executed, no new app installed, no user daemon/environment change, no ADB access or physical Pixel proof. **Option A cryptographic proof NOT FOUND; P0 #8 still OPEN.**
+The preceding sections' installation/absence-of-BWU observations are historical checkpoints. Subsequent physical tracing is recorded below; `Option A` cryptographic pre-commit socket authentication remains **UNPROVEN**, and P0 #8 remains OPEN.
+
+## Actual Pixel BLE→Wi-Fi LAN BWU phase trace — 2026-10-20
+
+The user supplied fixed-phase `journalctl --user -u rquickshare-daemon.service -n 0 -f -o cat` output from the installed `rquickshare-native 1.0.0-1.debug` diagnostic candidate. This **is physical-device evidence of the transport switch**, unlike the prior `start`-only read. User said these events appeared during the subsequent attempt; Android post-send success and independent received-file SHA-256 are **not yet reported**.
+
+| Monotonic elapsed_ms | Sanitized event | Delta since offer |
+|---:|---|---:|
+| 639623 | `bwu_offer_sent` | 0 ms |
+| 639827 | `bwu_tcp_classified` | 204 ms |
+| 639827 | `bwu_route_consumed` | 204 ms |
+| 639827 | `bwu_tcp_received` | 204 ms |
+| 639827 | `bwu_intro_validated` | 204 ms |
+| 639827 | `bwu_ack_sent` | 204 ms |
+| 639827 | `bwu_prior_drain_started` | 204 ms |
+| 639984 | `bwu_prior_safe_to_close` | 361 ms |
+| 640184 | `bwu_tcp_switched` | 561 ms |
+
+Interpretation: the local BLE receiver sent a BWU offer and handed a TCP socket to the session, accepted a syntactically/identity-matching *plaintext* `CLIENT_INTRODUCTION`, received safe-to-close acknowledgement over the prior authenticated channel, then **mutated** the local transport to TCP. This is a concrete interoperable BLE→TCP migration sequence and a 561 ms offer-to-swap trace from one session. It does **not** prove that the TCP peer possessed a cryptographic secret before `bwu_route_consumed`; on the contrary, current implementation consumes the route based on untrusted introduction IDs. The static traces cannot distinguish a legitimate initiator from an attacker spoofing the introduction.
+
+Pending: separate user report of actual file receipt and sender-side completion, independent hash if needed; architectural proof of Google-compatible authenticated *pre-commit* new-socket admission, or an explicit new user decision when Option A is infeasible. Retain exact package/rollback hashes and the saved fixed-phase-only trace, not full journal/endpoint identifiers. No protocol/security source change made based on this trace.
+
+Related **deferred UI request**, separately tracked as [#13](https://github.com/morozhenko-apps/rquickshare/issues/13): Devices attention pulse for collapsed incoming requests, focus actual sender when opened/already expanded, move awaiting-consent count from Receive to Devices. Do not implement in this BWU diagnostic/security slice.
+
