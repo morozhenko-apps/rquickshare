@@ -9,12 +9,17 @@ impl Panel {
         let weak = Rc::downgrade(self);
         devices.connect_activate(move |_, _| {
             if let Some(panel) = weak.upgrade() {
-                let drawer = panel.drawer();
-                panel.set_drawer(if drawer == Drawer::Closed {
-                    Drawer::Open
+                if panel.drawer() == Drawer::Closed {
+                    let target = panel.model.borrow_mut().attention.review_pending();
+                    panel.set_drawer(Drawer::Open);
+                    panel.pages.set_visible_child_name("nearby");
+                    panel.render();
+                    if let Some(id) = target {
+                        panel.focus_transfer(&id);
+                    }
                 } else {
-                    Drawer::Closed
-                });
+                    panel.set_drawer(Drawer::Closed);
+                }
             }
         });
         self.actions.add_action(&devices);

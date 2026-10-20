@@ -15,6 +15,7 @@ use rqs_lib::service::client::{
 use rqs_lib::service::{Direction, Lifecycle, Phase};
 use std::{
     cell::{Cell, RefCell},
+    collections::BTreeSet,
     rc::Rc,
     sync::Arc,
 };
@@ -39,6 +40,62 @@ mod text;
 mod transfers;
 mod tray;
 
+/// A session-scoped projection of authoritative awaiting-consent requests.
+#[derive(Default)]
+struct DeviceAttention {
+    epoch: Option<u128>,
+    pending: BTreeSet<(String, u64)>,
+    reviewed: BTreeSet<(String, u64)>,
+    latest: Option<String>,
+}
+
+impl DeviceAttention {
+    fn observe(
+        &mut self,
+        epoch: Option<u128>,
+        requests: impl IntoIterator<Item = (String, u64)>,
+        focus_allowed: bool,
+    ) -> Option<String> {
+        if self.epoch != epoch {
+            self.epoch = epoch;
+            self.pending.clear();
+            self.reviewed.clear();
+            self.latest = None;
+        }
+        let current: BTreeSet<_> = requests.into_iter().collect();
+        let arrived = current.difference(&self.pending).last().cloned();
+        self.pending = current;
+        self.reviewed.retain(|key| self.pending.contains(key));
+        if let Some((id, _)) = arrived {
+            self.latest = Some(id.clone());
+            if focus_allowed {
+                self.review_pending();
+                return Some(id);
+            }
+        }
+        if self
+            .latest
+            .as_ref()
+            .is_some_and(|id| !self.pending.iter().any(|key| &key.0 == id))
+        {
+            self.latest = self.pending.iter().next_back().map(|key| key.0.clone());
+        }
+        None
+    }
+
+    fn has_unreviewed(&self) -> bool {
+        self.pending.iter().any(|key| !self.reviewed.contains(key))
+    }
+
+    fn review_pending(&mut self) -> Option<String> {
+        let target = self.latest.clone().filter(|id| {
+            self.pending.iter().any(|key| &key.0 == id)
+        }).or_else(|| self.pending.iter().next_back().map(|key| key.0.clone()));
+        self.reviewed.extend(self.pending.iter().cloned());
+        target
+    }
+}
+
 #[derive(Default)]
 struct Model {
     state: PanelState,
@@ -58,6 +115,7 @@ struct Model {
     safety_active: bool,
     automatic: bool,
     automatic_focus: Option<String>,
+    attention: DeviceAttention,
     manual_requested: bool,
     preview: bool,
     position_pinned: bool,
@@ -563,7 +621,7 @@ impl Panel {
             self.close_image();
             self.close_reveal();
         }
-        {
+        let focus = {
             let mut model = self.model.borrow_mut();
             model.state = state;
             if !model.state.disconnected {
@@ -576,7 +634,47 @@ impl Panel {
                     );
                 }
             }
-        }
+            let epoch = model
+                .state
+                .view
+                .as_ref()
+                .filter(|view| !model.state.disconnected && view.synchronized)
+                .map(|view| view.epoch);
+            let pending = model
+                .state
+                .view
+                .as_ref()
+                .filter(|view| epoch == Some(view.epoch))
+                .map(|view| {
+                    view.transfers
+                        .iter()
+                        .filter(|transfer| {
+                            transfer.direction == Direction::Inbound
+                                && transfer.phase == Phase::AwaitingConsent
+                        })
+                        .map(|transfer| {
+                            (
+                                transfer.transfer.id().to_owned(),
+                                transfer.consent_revision.unwrap_or_default(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let user_busy = model.waiting
+                || model.input_active
+                || model.dialog.is_some()
+                || self
+                    .window
+                    .focus()
+                    .is_some_and(|focus| matches!(focus.widget_name().as_str(), "accept" | "decline"));
+            let focus_allowed = model.drawer == Drawer::Open
+                && !model.preview
+                && self.window.is_visible()
+                && (!model.safety_active || model.safety.manual_allowed())
+                && !user_busy;
+            model.attention.observe(epoch, pending, focus_allowed)
+        };
         if let Some(editor) = self.settings_owner.borrow().as_ref() {
             editor.refresh();
         }
@@ -586,6 +684,12 @@ impl Panel {
         self.refresh_reveal();
         self.render();
         self.apply_presentation();
+        if let Some(id) = focus {
+            if self.window.is_visible() && self.drawer() == Drawer::Open {
+                self.pages.set_visible_child_name("nearby");
+                self.focus_transfer(&id);
+            }
+        }
     }
     pub fn bind_desktop(&self, desktop: DesktopHandle) {
         self.desktop.replace(Some(desktop));
@@ -919,11 +1023,25 @@ impl Panel {
         self.box_widget("device-drawer").set_visible(full);
         self.pages.set_visible(full);
         self.box_widget("compact").set_visible(true);
-        self.button("quick-devices").set_tooltip_text(Some(if full {
+        let devices = self.button("quick-devices");
+        devices.set_tooltip_text(Some(if full {
             "Hide devices and transfers"
         } else {
             "Show devices and transfers"
         }));
+        let attention = !preview && !full && model.attention.has_unreviewed();
+        if attention {
+            devices.add_css_class("devices-attention");
+        } else {
+            devices.remove_css_class("devices-attention");
+        }
+        let animations = gtk::Settings::default()
+            .is_some_and(|settings| settings.property::<bool>("gtk-enable-animations"));
+        if attention && animations {
+            devices.add_css_class("devices-pulse");
+        } else {
+            devices.remove_css_class("devices-pulse");
+        }
         let ready = !preview
             && (!model.safety_active || model.safety.manual_allowed())
             && controls_ready(
@@ -1003,12 +1121,13 @@ impl Panel {
                     .count()
             })
             .unwrap_or(0);
+        self.text("quick-receive-label", "Receive");
         self.text(
-            "quick-receive-label",
+            "quick-devices-label",
             &if waiting_requests == 0 {
-                "Receive".into()
+                "Devices".into()
             } else {
-                format!("Receive ({waiting_requests})")
+                format!("Devices ({waiting_requests})")
             },
         );
         for (name, enabled) in [

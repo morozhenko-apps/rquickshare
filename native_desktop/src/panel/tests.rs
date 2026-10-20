@@ -49,6 +49,56 @@ fn given_complete_view_and_busy_flags_when_controls_are_projected_then_only_sync
     assert!(!controls_ready(&state, false));
 }
 
+#[test]
+fn given_authoritative_incoming_revisions_when_devices_attention_is_reconciled_then_only_unreviewed_requests_pulse_and_new_requests_focus() {
+    let mut attention = DeviceAttention::default();
+    assert!(!attention.has_unreviewed());
+    assert_eq!(attention.observe(Some(9), [("phone-a".into(), 1)], false), None);
+    assert!(attention.has_unreviewed());
+    assert_eq!(attention.review_pending().as_deref(), Some("phone-a"));
+    assert!(!attention.has_unreviewed());
+
+    // Re-rendering the same immutable view never retriggers attention.
+    assert_eq!(attention.observe(Some(9), [("phone-a".into(), 1)], true), None);
+    assert!(!attention.has_unreviewed());
+
+    // A second device is focused while the drawer is already open.
+    assert_eq!(
+        attention.observe(
+            Some(9),
+            [("phone-a".into(), 1), ("phone-b".into(), 2)],
+            true,
+        ),
+        Some("phone-b".into())
+    );
+    assert!(!attention.has_unreviewed());
+    // A new consent round is a new request even when the transfer ID is reused.
+    assert_eq!(
+        attention.observe(
+            Some(9),
+            [("phone-a".into(), 3), ("phone-b".into(), 2)],
+            false,
+        ),
+        None
+    );
+    assert!(attention.has_unreviewed());
+    assert_eq!(attention.review_pending().as_deref(), Some("phone-a"));
+    assert!(!attention.has_unreviewed());
+
+    // Resolved requests, disconnection and daemon epoch replacement retire all
+    // presentation rights rather than leaking a stale device focus.
+    assert_eq!(attention.observe(Some(9), Vec::<(String, u64)>::new(), false), None);
+    assert!(!attention.has_unreviewed());
+    assert_eq!(attention.review_pending(), None);
+    attention.observe(Some(9), [("old".into(), 1)], false);
+    assert!(attention.has_unreviewed());
+    attention.observe(None, Vec::<(String, u64)>::new(), false);
+    assert!(!attention.has_unreviewed());
+    assert_eq!(attention.review_pending(), None);
+    attention.observe(Some(10), [("new".into(), 1)], false);
+    assert_eq!(attention.review_pending().as_deref(), Some("new"));
+}
+
 fn labels(widget: &impl IsA<gtk::Widget>) -> Vec<gtk::Label> {
     let widget = widget.as_ref();
     let mut found = Vec::new();

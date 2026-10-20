@@ -37,6 +37,18 @@ button.quick-action.receive-active {
   animation: receive-pulse 1.8s ease-in-out infinite;
 }
 
+/* An unseen inbound consent highlights Devices without an unbounded flash.
+   GTK disables the animation class when desktop animations are disabled. */
+button.quick-action.devices-attention {
+  background-image: none;
+  background-color: mix(@theme_bg_color, @warning_color, 0.15);
+  color: @theme_fg_color;
+  border-color: mix(@theme_bg_color, @warning_color, 0.42);
+}
+button.quick-action.devices-pulse {
+  animation: receive-pulse 1.8s ease-in-out 4;
+}
+
 /* The primary drawer is one flat list, including transient incoming peer rows. */
 .rqs-card-body .device-row { padding: 8px 0; border: none; border-radius: 0; }
 
