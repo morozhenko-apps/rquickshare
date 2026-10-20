@@ -143,6 +143,12 @@ Technical contracts: [native-apt.md](native-apt.md),
 
 The user selected **GitHub Actions auto-sign and R2 publication on validated Git tags** (option B), with an isolated signing subkey in protected GitHub Secrets. See [native-tagged-release.md](native-tagged-release.md) for the approved implementation plan and security boundary. The older manual-signing handoff remains available for recovery; production CI still requires a separately verified first release and secret provisioning.
 
+## Release readiness checkpoint — 2026-10-20
+
+The owner requested a prioritized remaining-work list and a safe rehearsal of GitHub Actions → Cloudflare R2 ahead of the intended first stable `v1.0.0`. Current green revision-2 CI and the verified local debug package do not yet satisfy real-device/installed final acceptance. The release pipeline is a production signer/publisher and must not be exercised with an arbitrary early stable tag as a dry run.
+
+The complete current **readiness list, source/hash/CI evidence, staging-vs-production architectural choice and concrete release rehearsal gates** are in [release-readiness-r2-rehearsal-2026-10-20.md](release-readiness-r2-rehearsal-2026-10-20.md) and [issue #14](https://github.com/morozhenko-apps/rquickshare/issues/14). The recommended `v1.0.0-rc.1` staging tag is a **proposal**, not an existing tag or a released package. This checkpoint does not authorize new secrets, buckets, tags, public R2 writes, master promotion or the publication of `v1.0.0`.
+
 ## Next implementation handoff and non-goals of this docs change
 
 1. Finish the currently running **strict complete Mode B ten-pass** gate and
