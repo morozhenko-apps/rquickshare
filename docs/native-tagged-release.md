@@ -68,6 +68,32 @@ registration, access-scoped environment rules, subkey-only export and
 end-to-end R2 acceptance require the repository operator. Do not
 print or ask the user to paste secrets in chat.
 
+## Operator wiring map: RepoTicker comparison and two installation channels
+
+Updated 2026-10-21 after owner selected **real public v0.9.0** in the production `rquickshare-native-apt` bucket. All values below belong in **this repository's** GitHub Settings → Environments → `apt-release`. An environment with the same name in `morozhenko-apps/repoticker` is *not shared* by GitHub.
+
+| GitHub location | Exact name | Source | Privilege/usage |
+| --- | --- | --- | --- |
+| Environment variable | `RQS_R2_ACCOUNT_ID` | Same non-secret Cloudflare account ID as RepoTicker's `REPOTICKER_R2_ACCOUNT_ID`; already present in `infra/native-download/wrangler.jsonc` | R2 SDK account endpoint |
+| Environment secret | `RQS_R2_ACCESS_KEY_ID` | New R2 S3 API token, Access Key ID | Object access scoped to `rquickshare-native-apt`, not RepoTicker's `app-dist` |
+| Environment secret | `RQS_R2_SECRET_ACCESS_KEY` | Secret Access Key from that same new bucket-scoped S3 token | Conditional read/write existing signed snapshot, pool/by-hash and `InRelease` |
+| Environment secret | `RQS_APT_PUBLIC_KEYRING_BASE64` | Base64 of existing **public** `scripts/keyrings/rquickshare-native-archive.gpg` | Pinned primary identity; never use RepoTicker archive keyring |
+| Environment secret | `RQS_APT_SECRET_SUBKEY_BASE64` | Base64 of already existing **signer-only** protected rQuickShare subkey, not primary/certifying key | CI GPG signing, strictly no usable primary key |
+| Environment secret | `RQS_APT_SUBKEY_PASSPHRASE` | Passphrase belonging to the rQuickShare signer-only subkey | Do not substitute backup/recovery or RepoTicker passphrase |
+| Environment secret | `RQS_CLOUDFLARE_API_TOKEN` | Worker deploy API token, scoped to existing `rquickshare-download` Worker/route | Currently required because `native-tag-publish.yml` itself invokes `wrangler deploy`; do not provide broad account access |
+
+Use only the already-approved rQuickShare public primary fingerprint `6D8854762CF0C86881138A56695A0888D09FA616` (workflow constant). Owner must confirm effective branch/tag rules, `apt-release` deployment policy, secret **presence** and least-privilege access before creating the immutable real public tag. Never print/export secret contents to issue, chat, CI logs or Git.
+
+**Two distribution methods use identical R2 bytes after a successful production tag run:**
+
+| User path | Published location / expected asset | Behavior |
+| --- | --- | --- |
+| Direct public HTTPS | `https://download.morozhenko.com/dist/rQuickShare/pool/main/r/rquickshare-native/rquickshare-native_0.9.0-1_amd64.deb` | Single versioned direct .deb, served by read-only Worker from private R2; not live until release completed |
+| Public GitHub Release | `https://github.com/morozhenko-apps/rquickshare/releases/tag/v0.9.0` | Same verified .deb, .sha256 and public keyring/.sources after R2/HTTPS acceptance; not live until release completed |
+| Signed APT | `https://download.morozhenko.com/dist/rQuickShare/`, suite `rquickshare-native-ubuntu26.04`, component `main` | Owner's clients explicitly enroll a public keyring and generated `rquickshare-native.sources`; then normal `apt update` / `apt install rquickshare-native` / `apt upgrade` |
+
+APT signing/verification and direct download are distinct UX, **not** separate storage buckets or two builds. Never make private R2 bucket public or enable `r2.dev`: Worker exposes only allowlisted package/by-hash/`InRelease` paths. No `latest.deb` endpoint currently exists. Direct .deb install alone does not enroll signed APT, and historical installed `1.0.0-*.debug` sorts **above** public `0.9.0-1` so it cannot automatically upgrade/downgrade to this earlier product version.
+
 ## Public download and APT enrollment contract
 
 GitHub Releases publishes one immutable verified `.deb` and its `.sha256`
