@@ -120,13 +120,17 @@ Never print a private key, passphrase, R2 secret, backup plaintext, or
 encrypted recovery archive into a GitHub issue, chat or job log.
 
 1. Under repository **Settings → Environments**, create `apt-release`.
-   Restrict deployments to the protected `master` branch and protected
-   `v*` tags as supported by environment deployment policies. For **B**
-   (unattended release and scheduled refresh), do not enable a required
-   reviewer that would block every unattended signature. Instead protect
-   writes to `master` and creation/deletion/movement of `v*` tags via
-   repository rulesets and restrict who can edit release workflows or
-   environment secrets.
+   Restrict deployments to protected `master` and protected `v*`
+   according to the repository environment deployment policy. The operator
+   deliberately configured a **Required reviewer** for the first public
+   `v0.9.0` release (observed 2026-10-21), in addition to master/tag Rulesets.
+   This means release signing is **not fully unattended**: the protected
+   `publish` job waits for manual approval before accessing signing secrets.
+   Scheduled APT metadata renewal also uses `apt-release`, and may therefore
+   wait for the same review; ensure an accountable review cadence before the
+   seven-day signed metadata expiry. Remove the reviewer only after a separate
+   explicit owner decision to enable unattended signing and refresh. Keep
+   rulesets and restricted workflow/environment edits in either case.
 2. Set environment **variable** `RQS_R2_ACCOUNT_ID` to the exact
    32-character Cloudflare account ID. This is a variable, not a password.
 3. Add the following exact environment **secrets**:
