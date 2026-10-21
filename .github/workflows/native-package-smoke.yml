@@ -1,7 +1,18 @@
 name: Native Linux package smoke
 
-# Package acceptance is manual or validated release-only, not dev preflight.
+# This is a credential-free release candidate gate, not production publication.
+# It runs only when release packaging/identity contracts change, never for docs-only commits.
 on:
+  push:
+    branches: ["dev", "master"]
+    paths:
+      - "native_desktop/Cargo.toml"
+      - "native_desktop/Cargo.lock"
+      - "native_desktop/packaging/**"
+      - "scripts/native_deb.py"
+      - "scripts/native_apt.py"
+      - "scripts/tests/test_native_*.py"
+      - ".github/workflows/native-package-smoke.yml"
   workflow_dispatch:
 
 permissions:

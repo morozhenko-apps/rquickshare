@@ -1,7 +1,15 @@
 name: Release workflow contract check
 
-# Validate release workflow syntax explicitly, without a heavy dev build.
+# Release workflow syntax is checked automatically when the release graph changes.
+# Documentation-only updates and ordinary development do not consume a runner.
 on:
+  push:
+    branches: ["dev", "master"]
+    paths:
+      - ".github/workflows/native-tag-publish.yml"
+      - ".github/workflows/native-apt-refresh.yml"
+      - ".github/workflows/mode-b.yml"
+      - ".github/workflows/native-release-check.yml"
   workflow_dispatch:
 
 permissions:
