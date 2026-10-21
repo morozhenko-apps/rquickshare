@@ -95,7 +95,9 @@ jobs:
           cargo +nightly fmt --manifest-path native_desktop/Cargo.toml -- --check
           cargo +stable test --locked --manifest-path core_lib/Cargo.toml
           cargo +stable clippy --locked --manifest-path core_lib/Cargo.toml --all-targets -- -D warnings
-          "$RUNNER_TEMP/native-publication-python/bin/python" -m unittest discover -s scripts/tests -p 'test_native_*.py' -v
+          # Test-only GPG homes need short Unix socket paths for gpg-agent.
+          # Keep Rust's workspace TMPDIR for disk capacity, but isolate Python fixtures.
+          TMPDIR="$RUNNER_TEMP" "$RUNNER_TEMP/native-publication-python/bin/python" -m unittest discover -s scripts/tests -p 'test_native_*.py' -v
           desktop-file-validate native_desktop/packaging/share/applications/io.github.morozhenko_apps.RQuickShare.desktop
 
       - name: Isolated GTK and native lint gate
