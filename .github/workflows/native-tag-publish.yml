@@ -161,21 +161,10 @@ jobs:
           [[ "$RQS_R2_ACCOUNT_ID" =~ ^[a-f0-9]{32}$ ]] || exit 1
           test -s "$RUNNER_TEMP/native-package/rquickshare-native_${VERSION}-${REVISION}_amd64.deb"
           test -s "$RUNNER_TEMP/native-package/rquickshare-native_${VERSION}-${REVISION}_amd64.deb.sha256"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: infra/native-download/package-lock.json
-      - name: Deploy only the dedicated read-only R2 Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.RQS_CLOUDFLARE_API_TOKEN }}
-        shell: bash
-        working-directory: infra/native-download
-        run: |
-          set -euo pipefail
-          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || exit 1
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx wrangler deploy
+      # Worker deployment is owned by Cloudflare Git Builds from protected master.
+      # The signed R2 publisher never modifies Worker routing or requests a
+      # second Cloudflare API token. Admission already validates Worker source;
+      # public HTTPS and isolated APT acquisition below enforce serving readiness.
       - name: Prepare isolated S3 SDK before importing any key
         shell: bash
         run: |
