@@ -1,7 +1,7 @@
 # Automated tagged release and independent package versioning
 
 2026-10-18. Mode A, user selected option B: GitHub Actions signs and publishes
-after an immutable `vMAJOR.MINOR.PATCH` tag. This supersedes the earlier
+after an immutable annotated `native/vMAJOR.MINOR.PATCH` tag. This supersedes the earlier
 operator-only signing selection **for public release CI**, while preserving the
 isolated local signer/recovery tools as an optional disaster-recovery path.
 This is a new explicitly approved security trust boundary; no release key,
@@ -11,7 +11,7 @@ secret, bucket object or tag is created by this source task.
 
 - Product: **rQuickShare**. Targets Linux, Windows and macOS in the roadmap;
   only a physically accepted OS/architecture gets release artifacts.
-- Selected first public early release: `0.9.0`, Git tag `v0.9.0` (not a sandbox, not `native-*`). Later stabilized product target: `v1.0.0`; future tags use `vMAJOR.MINOR.PATCH`.
+- Selected first public early release: Native product `0.9.0`, Git tag **`native/v0.9.0`** (not a sandbox). Later stable target is independent product `1.0.0`, Git tag `native/v1.0.0`. Preserve old upstream `v0.9.0` and `v0.11.5` refs without reuse. Future Native tags use `native/vMAJOR.MINOR.PATCH`.
 - Native Debian package: `rquickshare-native`; version `0.9.0-1`;
   source binary remains `/usr/bin/rquickshare`. Crate `rqs_lib` and
   historical Tauri remain independently versioned.
@@ -70,7 +70,7 @@ print or ask the user to paste secrets in chat.
 
 ## Operator wiring map: RepoTicker comparison and two installation channels
 
-Updated 2026-10-21 after owner selected **real public v0.9.0** in the production `rquickshare-native-apt` bucket. All values below belong in **this repository's** GitHub Settings → Environments → `apt-release`. An environment with the same name in `morozhenko-apps/repoticker` is *not shared* by GitHub.
+Updated 2026-10-22 after owner selected **real public native/v0.9.0** in the production `rquickshare-native-apt` bucket. All values below belong in **this repository's** GitHub Settings → Environments → `apt-release`. An environment with the same name in `morozhenko-apps/repoticker` is *not shared* by GitHub.
 
 | GitHub location | Exact name | Source | Privilege/usage |
 | --- | --- | --- | --- |
@@ -92,7 +92,7 @@ Use only the already-approved rQuickShare public primary fingerprint `6D8854762C
 | User path | Published location / expected asset | Behavior |
 | --- | --- | --- |
 | Direct public HTTPS | `https://download.morozhenko.com/dist/rQuickShare/pool/main/r/rquickshare-native/rquickshare-native_0.9.0-1_amd64.deb` | Single versioned direct .deb, served by read-only Worker from private R2; not live until release completed |
-| Public GitHub Release | `https://github.com/morozhenko-apps/rquickshare/releases/tag/v0.9.0` | Same verified .deb, .sha256 and public keyring/.sources after R2/HTTPS acceptance; not live until release completed |
+| Public GitHub Release | `https://github.com/morozhenko-apps/rquickshare/releases/tag/native/v0.9.0` | Same verified .deb, .sha256 and public keyring/.sources after R2/HTTPS acceptance; not live until release completed |
 | Signed APT | `https://download.morozhenko.com/dist/rQuickShare/`, suite `rquickshare-native-ubuntu26.04`, component `main` | Owner's clients explicitly enroll a public keyring and generated `rquickshare-native.sources`; then normal `apt update` / `apt install rquickshare-native` / `apt upgrade` |
 
 APT signing/verification and direct download are distinct UX, **not** separate storage buckets or two builds. Never make private R2 bucket public or enable `r2.dev`: Worker exposes only allowlisted package/by-hash/`InRelease` paths. No `latest.deb` endpoint currently exists. Direct .deb install alone does not enroll signed APT, and historical installed `1.0.0-*.debug` sorts **above** public `0.9.0-1` so it cannot automatically upgrade/downgrade to this earlier product version.
@@ -119,11 +119,11 @@ performed with an authenticated maintainer's GitHub/Cloudflare access.
 Never print a private key, passphrase, R2 secret, backup plaintext, or
 encrypted recovery archive into a GitHub issue, chat or job log.
 
-1. Under repository **Settings → Environments**, create `apt-release`.
-   Restrict deployments to protected `master` and protected `v*`
+1. Under repository **Settings → Environments**, use existing `apt-release`.
+   Restrict deployments to protected `master` and protected **`native/v*`**
    according to the repository environment deployment policy. The operator
    deliberately configured a **Required reviewer** for the first public
-   `v0.9.0` release (observed 2026-10-21), in addition to master/tag Rulesets.
+   `native/v0.9.0` release (observed 2026-10-21), in addition to master/tag Rulesets.
    This means release signing is **not fully unattended**: the protected
    `publish` job waits for manual approval before accessing signing secrets.
    Scheduled APT metadata renewal also uses `apt-release`, and may therefore

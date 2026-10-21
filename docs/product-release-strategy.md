@@ -57,7 +57,7 @@ not block the first accepted Linux package.
 
 ## Independent releases and versioning
 
-- **`v0.9.0`** is the **selected next early public Ubuntu Linux release**, using a normal immutable `vMAJOR.MINOR.PATCH` Git tag and the existing signed R2/APT production channel. It is a real release, not a staging upload. **`v1.0.0` remains the later stable-product target**, after additional acceptance. No `native-`, `beta`, or OS suffix belongs in the product tag; future product tags follow `vMAJOR.MINOR.PATCH`.
+- **`native/v0.9.0`** is the selected **first public early Native** source tag, built from independent product SemVer **`0.9.0`** and Debian **`0.9.0-1`**. Future Native Git tags use `native/vMAJOR.MINOR.PATCH` (including later `native/v1.0.0`); original upstream `vMAJOR.MINOR.PATCH` Git tags remain historical and are never moved. This is a real signed production R2/APT release channel, **not** staging, and `0.9.0` remains the early public Linux product version.
 - SemVer measures the stability/compatibility contract of the released
   product, **not the percentage of Google's full roadmap completed**.
   Announce only verified features/platforms; full parity is not a
@@ -71,7 +71,7 @@ not block the first accepted Linux package.
   crate/library versions may be independently managed; do not mechanically
   rewrite the retained Tauri/macOS project to match the desktop product tag.
 - The existing native builder, APT validator, Worker allowlist and desktop assets already support the independent `rquickshare-native` Debian identity and stable three-part SemVer. The newly selected product version needs a matching native Cargo/lockfile revision, regression checks and release-candidate validation; do not relabel old 1.0.0 debug bytes.
-- Do not publish even early public `v0.9.0`, or announce stable `v1.0.0`, on source
+- Do not publish early public `native/v0.9.0` or announce stable `native/v1.0.0` on source
   coverage alone. Release acceptance is based on the actual supported-platform
   ordinary sharing, refusal/cancel/retry, safety, install/upgrade/removal,
   automated Mode B and signed-download gates in
@@ -160,7 +160,7 @@ The complete current **readiness list, source/hash/CI evidence, staging-vs-produ
 5. With explicit release approval, check live bucket/Worker state, controlled
    R2 write/readback/denial, signer identity/recovery and metadata refresh,
    then release signed APT plus a versioned direct .deb from the same bytes.
-   Only after verification, publish the selected public `v0.9.0` with source/attribution/release
+   Only after verification, publish the selected public `native/v0.9.0` with source/attribution/release
    notes and a truthful supported-platform matrix; retain `v1.0.0` as a later stable target.
 
 This task is **documentation only**: no code, version, branch promotion,
