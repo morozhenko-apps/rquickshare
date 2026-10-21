@@ -82,7 +82,7 @@ class NativeCIArchiveTests(unittest.TestCase):
 
     def test_given_last_authenticated_generation_when_selected_then_only_its_version_tag_is_proposed(self):
         client, active = self.channel()
-        self.assertEqual(archive.current_tag(r2.S3Store(client)), "v1.0.0")
+        self.assertEqual(archive.current_tag(r2.S3Store(client)), "native/v1.0.0")
         prefix = f"snapshots/{active.sha256}/pool/main/r/rquickshare-native/"
         client.objects[prefix + "rquickshare-native_2.0.0-1_arm64.deb"] = b"untrusted"
         with self.assertRaises(ValueError):

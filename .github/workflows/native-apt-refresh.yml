@@ -40,7 +40,7 @@ jobs:
           [[ -n "$RQS_R2_ACCESS_KEY_ID" && -n "$RQS_R2_SECRET_ACCESS_KEY" ]] || exit 1
           tag="$("$RUNNER_TEMP/rqs-readonly-python/bin/python" scripts/native_ci_archive.py \
             --account-id "$RQS_R2_ACCOUNT_ID" --select-tag)"
-          [[ -z "$tag" || "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || exit 1
+          if [[ -n "$tag" ]]; then python3 scripts/native_release_tag.py version "$tag" >/dev/null; fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           if [[ -z "$tag" ]]; then echo "No published APT authority; refresh skipped"; fi
 
@@ -64,12 +64,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || exit 1
+          python3 scripts/native_release_tag.py version "$TAG" >/dev/null
           git fetch origin master "refs/tags/$TAG:refs/tags/$TAG"
           git merge-base --is-ancestor "refs/tags/$TAG^{commit}" "origin/master^{commit}"
           git checkout --detach "refs/tags/$TAG^{commit}"
           source_version="$(python3 -c 'import tomllib; print(tomllib.load(open("native_desktop/Cargo.toml", "rb"))["package"]["version"])')"
-          [[ "v$source_version" == "$TAG" ]] || exit 1
+          [[ "$(python3 scripts/native_release_tag.py tag "$source_version")" == "$TAG" ]] || exit 1
       - name: Install pinned SDK before importing keys
         shell: bash
         run: |

@@ -8,6 +8,7 @@ import sys
 
 import native_apt as apt
 import native_r2 as r2
+import native_release_tag as release_tag
 
 MAX_SNAPSHOT_OBJECTS = 64
 PACKAGE = re.compile(r"pool/main/r/rquickshare-native/rquickshare-native_(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-[1-9][0-9]{0,9}_(?:amd64|arm64)\.deb(?:\.sha256)?")
@@ -97,7 +98,7 @@ def current_tag(store):
             apt.require(key.endswith(".deb.sha256") and admitted(key[len(f"snapshots/{current.sha256}/"):]),
                         "Unexpected release inventory object")
     apt.require(1 <= len(versions) <= 2 and len(set(versions)) == 1, "Ambiguous current release")
-    return "v" + versions[0]
+    return release_tag.tag_from_version(versions[0])
 
 
 def main():

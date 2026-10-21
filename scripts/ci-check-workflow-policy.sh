@@ -29,6 +29,16 @@ grep -Eq '^  workflow_call:' "$mode_b" || fail 'Mode B reusable entry is missing
 if grep -Eq '^  (push|workflow_dispatch):' "$mode_b"; then
   fail 'Full 10x Mode B must not run directly from development'
 fi
+grep -Fq 'tags: ["native/v*"]' .github/workflows/native-tag-publish.yml ||
+  fail 'Native release must trigger exclusively on its independent tag namespace'
+grep -Fq 'native_release_tag.py version "$GITHUB_REF_NAME"' .github/workflows/native-tag-publish.yml ||
+  fail 'Native release admission lacks canonical tag parsing'
+grep -Fq 'test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag' .github/workflows/native-tag-publish.yml ||
+  fail 'Native release admission must require an annotated tag'
+grep -Fq 'native_release_tag.py version "$TAG"' .github/workflows/native-apt-refresh.yml ||
+  fail 'APT refresh does not verify the Native tag namespace'
+grep -Fq 'release_tag.tag_from_version' scripts/native_ci_archive.py ||
+  fail 'APT archive does not derive the Native source tag'
 grep -Fq 'needs: admission' .github/workflows/native-tag-publish.yml ||
   fail 'Release Mode B lacks tag-admission dependency'
 grep -Fq 'uses: ./.github/workflows/mode-b.yml' .github/workflows/native-tag-publish.yml ||
