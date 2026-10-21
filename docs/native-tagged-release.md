@@ -80,9 +80,12 @@ Updated 2026-10-21 after owner selected **real public v0.9.0** in the production
 | Environment secret | `RQS_APT_PUBLIC_KEYRING_BASE64` | Base64 of existing **public** `scripts/keyrings/rquickshare-native-archive.gpg` | Pinned primary identity; never use RepoTicker archive keyring |
 | Environment secret | `RQS_APT_SECRET_SUBKEY_BASE64` | Base64 of already existing **signer-only** protected rQuickShare subkey, not primary/certifying key | CI GPG signing, strictly no usable primary key |
 | Environment secret | `RQS_APT_SUBKEY_PASSPHRASE` | Passphrase belonging to the rQuickShare signer-only subkey | Do not substitute backup/recovery or RepoTicker passphrase |
-| Environment secret | `RQS_CLOUDFLARE_API_TOKEN` | Worker deploy API token, scoped to existing `rquickshare-download` Worker/route | Currently required because `native-tag-publish.yml` itself invokes `wrangler deploy`; do not provide broad account access |
 
 Use only the already-approved rQuickShare public primary fingerprint `6D8854762CF0C86881138A56695A0888D09FA616` (workflow constant). Owner must confirm effective branch/tag rules, `apt-release` deployment policy, secret **presence** and least-privilege access before creating the immutable real public tag. Never print/export secret contents to issue, chat, CI logs or Git.
+
+**Worker deploy ownership correction (2026-10-21).** The production Worker `rquickshare-download` is connected to GitHub and has a previously successful Cloudflare Git Build on 2026-10-18 (source/receipt in [native-download-git-build-2026-10-18.md](native-download-git-build-2026-10-18.md)). On user confirmation of this workflow, source commit `8a5d6650` removed the redundant release-time `wrangler deploy` and `RQS_CLOUDFLARE_API_TOKEN` secret requirement. Only R2 object publisher secrets remain. Git Build deployment is not itself a signed archive upload, so both independent owners stay: Cloudflare for read-only Worker code, GitHub Actions for signed R2/APT bytes. Final public HTTPS/isolated APT verification still fails closed if the Worker route is wrong.
+
+**Existing signing identity — DO NOT GENERATE A SECOND KEY:** the owner created the rQuickShare primary on 2026-10-14, fingerprint `6D8854762CF0C86881138A56695A0888D09FA616`, signing subkey `1F5150D98D94C43109FBA2503E7DE744C1014357`. Profile is `~/.rquickshare-signing/signer` (primary secret stub), and public keyring at `scripts/keyrings/rquickshare-native-archive.gpg`. Production evidence in [native-local-signing.md](native-local-signing.md). Reinspect that exact local identity with `python3 scripts/native_signer_local.py inspect` before any export. Owner-selected private CI handoff directory `/home/morozhenko/morozhenko/secrets/rquickshare/` is **outside this repository**; only the operator can create/review that host directory. Reuse the *existing signing passphrase*, not a newly chosen one. Export only signer-only protected subkey packets, verify imported test GPG profile has stub primary and exactly one signing subkey using `scripts/native_ci_signing_key.py`; stage base64 and plaintext passphrase files mode 0600 in a 0700 directory, never in Git/backup sync by default. Set three secrets directly in `apt-release` GitHub Environment using the exact names; do not paste values into chat or job logs.
 
 **Two distribution methods use identical R2 bytes after a successful production tag run:**
 
@@ -135,8 +138,7 @@ encrypted recovery archive into a GitHub issue, chat or job log.
    | `RQS_APT_SUBKEY_PASSPHRASE` | The existing signing-only subkey passphrase, not a backup/archive passphrase |
    | `RQS_R2_ACCESS_KEY_ID` | Access key belonging solely to the dedicated `rquickshare-native-apt` R2 bucket |
    | `RQS_R2_SECRET_ACCESS_KEY` | Corresponding scoped R2 secret for conditional object reads/writes |
-   | `RQS_CLOUDFLARE_API_TOKEN` | API token scoped to deployment of the dedicated `native-download` Worker |
-
+   
    Do not reuse Picturix's `app-dist` publisher credential and never
    upload authority/master/revocation private packets. In CI a new
    temporary GPG home enforces the pinned primary and signing subkey
@@ -149,11 +151,12 @@ encrypted recovery archive into a GitHub issue, chat or job log.
    Confirm `gpg --list-secret-keys` shows the stub primary (`sec#`) and
    signing-only (`ssb`) **before** uploading. Do not upload secret values
    or a keyring path to this repository.
-5. Check the configured environment, tag protection, worker token and
-   scoped R2 token before authorizing any production tag. CI must fail
-   cleanly if a secret or permissions are missing. Check the public
-   `download.morozhenko.com` Worker route separately; changing only a
-   GitHub Secret does not deploy the new allowlist automatically.
+5. Check the configured environment, tag protection and scoped R2 token before
+   authorizing any production tag. CI must fail cleanly if a secret or permissions
+   are missing. **Cloudflare Git Builds owns deployment of the already connected
+   `rquickshare-download` Worker from protected master.** Verify the exact
+   Cloudflare build and route are healthy before publication; GitHub Actions must
+   not execute a second `wrangler deploy` or require a Worker API token.
 6. For the selected first public `v0.9.0`, obtain verified real Android/Linux,
    Debian install/migration/rollback and exact-source complete Mode B
    evidence. Fast-forward verified `dev` to protected `master`, then
