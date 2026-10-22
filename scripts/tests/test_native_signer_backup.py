@@ -159,7 +159,7 @@ class SigningBackupTests(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             backup.verify(ciphertext, self.primary, self.root, wrong, self.root / "wrong-password")
         self.assertFalse((self.root / "wrong-password").exists())
-        self.assertFalse(any(p.name.startswith((".rqs-backup-crypto-", ".rqs-recovery-check-", ".rqs-recovery-proof-")) for p in self.root.rglob("*")))
+        self.assertFalse(any(p.name.startswith((".rqs-c-", ".rqs-r-", ".rqs-p-")) for p in self.root.rglob("*")))
 
     def test_given_gpg_agent_socket_boundary_when_restoring_then_long_private_home_is_rejected_before_writes(self):
         # The longest GnuPG agent socket is S.gpg-agent.browser. Linux sun_path
