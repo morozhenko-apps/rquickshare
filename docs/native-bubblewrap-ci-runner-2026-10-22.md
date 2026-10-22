@@ -35,3 +35,7 @@ Candidate causes, in priority order: (1) container runtime namespace/seccomp den
 5. [ ] Update this docs and issue #14 with real evidence; documentation and code commits remain separate.
 
 Rollback: revert diagnostic/migration code commits only; production source, package version, protected master, tag namespace, signing keys and immutable R2 channel unaffected.
+
+## Probe result (2026-10-22)
+
+[Native sandbox capability probe 39832994681](https://github.com/morozhenko-apps/rquickshare/actions/runs/39832994681) SUCCESS. Real unprivileged Bubblewrap created user/PID/mount namespaces on the Ubuntu 26.04 GitHub VM, runner account and OS 26.04. The existing nested-container source of Glycin Unavailable is not proven to syscall level. The selected correction: run the native ABI workflows directly on a hosted 26.04 VM, installing dependencies with sudo and requiring an actual bwrap namespace probe. Keep real Glycin tests and existing security assertions. The full decoder test remains pending.
