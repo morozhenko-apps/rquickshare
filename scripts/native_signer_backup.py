@@ -21,6 +21,15 @@ import native_signer_local as local
 MAX_ARCHIVE = 4 * 1024 * 1024
 MAX_CIPHERTEXT = MAX_ARCHIVE + 65536
 MAX_MEMBER = 1024 * 1024
+# Linux AF_UNIX sun_path includes a trailing NUL in its 108-byte buffer.
+# Browser is the longest standard GnuPG agent socket name in private homes.
+MAX_AGENT_SOCKET_PATH_BYTES = 107
+
+
+def require_agent_socket(home):
+    socket = home / "S.gpg-agent.browser"
+    apt.require(len(os.fsencode(socket)) <= MAX_AGENT_SOCKET_PATH_BYTES,
+                "GPG home path exceeds Linux agent socket limit")
 
 
 def canonical(value):
@@ -129,8 +138,9 @@ def unpack(data, expected):
 
 @contextmanager
 def crypto_home(parent, pinentry=None):
-    with tempfile.TemporaryDirectory(prefix=".rqs-backup-crypto-", dir=parent) as temporary:
+    with tempfile.TemporaryDirectory(prefix=".rqs-c-", dir=parent) as temporary:
         home = Path(temporary)
+        require_agent_socket(home)
         config = local.AGENT_CONFIG
         if pinentry is not None:
             apt.require(pinentry.is_file() and pinentry.resolve() == pinentry
@@ -158,6 +168,8 @@ def crypt(home, data, encrypt):
 def restore_values(values, expected, output, pinentry=None):
     bundle(values, expected)  # Validate every name/size before constructing any destination.
     local.fresh_state(output)
+    for name in ("authority", "signer"):
+        require_agent_socket(output / name)
     output.mkdir(mode=0o700)
     homes = []
     try:
@@ -185,7 +197,7 @@ def restore_values(values, expected, output, pinentry=None):
         for name, required in [("authority", {key["keygrip"] for key in verified["identity"].values()}),
                                ("signer", {verified["identity"]["signing_subkey"]["keygrip"]})]:
             local.protected_keys(local.Gpg(output / name).keyinfo(), required)
-        with tempfile.TemporaryDirectory(prefix=".rqs-recovery-proof-", dir=output.parent) as temporary:
+        with tempfile.TemporaryDirectory(prefix=".rqs-p-", dir=output.parent) as temporary:
             proof = Path(temporary)
             message, signature = proof / "challenge", proof / "challenge.sig"
             local.write_private(message, b"rQuickShare restored-key verification; NOT A RELEASE OR PUBLICATION APPROVAL\n")
@@ -200,7 +212,9 @@ def restore_values(values, expected, output, pinentry=None):
             # material must still sign as the same subkey and remain protected.
             local.protected_keys(local.Gpg(output / "signer").keyinfo(), {verified["identity"]["signing_subkey"]["keygrip"]})
             # This public-only revocation check cannot revoke the active custody.
-            with crypto_home(proof) as revoke:
+            # Proof and revocation homes are siblings; nesting them can exceed
+            # AF_UNIX socket path limits without adding any custody isolation.
+            with crypto_home(output.parent) as revoke:
                 local.Gpg(revoke).run("--import", str(output / "archive-keyring.gpg"))
                 certificate = values[f"authority/openpgp-revocs.d/{expected}.rev"]
                 apt.require(certificate.count(b":-----BEGIN PGP PUBLIC KEY BLOCK-----") == 1, "Invalid recovery revocation certificate")
@@ -225,8 +239,8 @@ def verify(ciphertext, expected, parent, pinentry=None, output=None):
         values = unpack(crypt(home, ciphertext, False), expected)
         if output is not None:
             return restore_values(values, expected, output, pinentry)
-        with tempfile.TemporaryDirectory(prefix=".rqs-recovery-check-", dir=parent) as temporary:
-            return restore_values(values, expected, Path(temporary) / "custody", pinentry)
+        with tempfile.TemporaryDirectory(prefix=".rqs-r-", dir=parent) as temporary:
+            return restore_values(values, expected, Path(temporary) / "c", pinentry)
 
 
 def create(state, output, pinentry=None):
