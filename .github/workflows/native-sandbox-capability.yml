@@ -1,0 +1,40 @@
+name: Native sandbox capability probe
+
+# One small credential-free OS/namespace probe; never triggers full package tests.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - ".github/workflows/native-sandbox-capability.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bubblewrap:
+    name: Verify real unprivileged Bubblewrap namespaces on Ubuntu 26.04 VM
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Install target-OS Bubblewrap, no privileged container
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bubblewrap
+      - name: Observe safe namespace prerequisites and require actual sandbox
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /etc/os-release
+          test "$VERSION_ID" = "26.04"
+          printf 'Target OS: %s %s\n' "$ID" "$VERSION_ID"
+          printf 'User: %s\n' "$(id -un)"
+          test "$(id -u)" -ne 0
+          bwrap --version
+          for key in /proc/sys/user/max_user_namespaces               /proc/sys/kernel/unprivileged_userns_clone               /proc/sys/kernel/apparmor_restrict_unprivileged_userns; do
+            if [[ -f "$key" ]]; then printf '%s: %s\n' "$key" "$(cat "$key")"; fi
+          done
+          # This actual user + PID + mount namespace probe must not be mocked,
+          # sudoed, disabled, retried or allowed to succeed after a bwrap failure.
+          bwrap --die-with-parent --unshare-user --unshare-pid             --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
+          echo "PASS: real unprivileged Bwrap user, PID and mount sandbox"
