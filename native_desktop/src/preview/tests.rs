@@ -245,7 +245,7 @@ fn process_fixture(body: &str) -> (tempfile::TempDir, PathBuf) {
 async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_children_are_reaped(
 ) {
     // Arrange / Act / Assert: external transport fixtures, not a fake image decoder.
-    for (body, expected) in [
+    for (case, (body, expected)) in [
         (
             "import sys; sys.stdin.buffer.read(); sys.stdout.buffer.write(b'RQSP')".to_owned(),
             Error::Rejected,
@@ -261,12 +261,40 @@ async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_
             "import sys; sys.stdin.buffer.read(); sys.exit(3)".to_owned(),
             Error::Unavailable,
         ),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let (_root, path) = process_fixture(&body);
+        // A deterministic direct subprocess check separates test-fixture launch
+        // failures from Decoder's asynchronous stdin/stdout/exit handling.
+        // Fixture output is synthetic; never print image bytes or private paths.
+        let probe = std::process::Command::new(&path)
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+            .output()
+            .expect("test fixture executable must spawn");
+        let correct_fixture = match case {
+            0 => probe.status.success() && probe.stdout == b"RQSP",
+            1 => probe.status.success() && probe.stdout.len() == MAX_OUTPUT + 1,
+            2 => probe.status.code() == Some(3) && probe.stdout.is_empty(),
+            _ => unreachable!(),
+        };
+        assert!(
+            correct_fixture,
+            "malformed fixture #{case} failed before Decoder: status={:?}, bytes={}",
+            probe.status.code(),
+            probe.stdout.len()
+        );
         let result = Decoder::new(path)
             .decode(PNG.to_vec(), CancellationToken::new())
             .await;
-        assert_eq!(result.unwrap_err(), expected);
+        assert_eq!(
+            result.unwrap_err(),
+            expected,
+            "malformed fixture #{case}: unexpected Decoder classification"
+        );
     }
     for expire in [false, true] {
         let socket_root = tempfile::tempdir().unwrap();
