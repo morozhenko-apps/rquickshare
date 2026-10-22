@@ -28,6 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/release-tools/actionlint" \
+            -config-file .github/actionlint.yaml \
             -shellcheck= -pyflakes= \
             .github/workflows/native-tag-publish.yml \
             .github/workflows/native-apt-refresh.yml \

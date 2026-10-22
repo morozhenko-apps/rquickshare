@@ -29,6 +29,19 @@ grep -Eq '^  workflow_call:' "$mode_b" || fail 'Mode B reusable entry is missing
 if grep -Eq '^  (push|workflow_dispatch):' "$mode_b"; then
   fail 'Full 10x Mode B must not run directly from development'
 fi
+# Pinned actionlint predates the newly available GitHub-hosted Ubuntu 26.04.
+# Admit only this verified label through its narrow compatibility config;
+# do not disable runner-label checking or the other actionlint rules.
+grep -Fqx 'self-hosted-runner:' .github/actionlint.yaml ||
+  fail 'actionlint compatibility label configuration is missing'
+grep -Fqx '    - ubuntu-26.04' .github/actionlint.yaml ||
+  fail 'actionlint does not recognize the verified Ubuntu 26.04 runner'
+grep -Fq -- '-config-file .github/actionlint.yaml' .github/workflows/native-release-check.yml ||
+  fail 'release actionlint does not explicitly read its runner compatibility config'
+grep -Fq 'runs-on: ubuntu-26.04' .github/workflows/native-tag-publish.yml ||
+  fail 'native release no longer builds against the verified Ubuntu 26.04 runner'
+grep -Fq 'runs-on: ubuntu-26.04' .github/workflows/mode-b.yml ||
+  fail 'Native Mode B no longer tests on the verified Ubuntu 26.04 runner'
 grep -Fq 'tags: ["native/v*"]' .github/workflows/native-tag-publish.yml ||
   fail 'Native release must trigger exclusively on its independent tag namespace'
 grep -Fq 'native_release_tag.py version "$GITHUB_REF_NAME"' .github/workflows/native-tag-publish.yml ||
