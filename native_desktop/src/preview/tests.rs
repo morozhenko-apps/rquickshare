@@ -266,33 +266,35 @@ async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_
     .enumerate()
     {
         let (_root, path) = process_fixture(&body);
-        // A deterministic direct subprocess check separates test-fixture launch
-        // failures from Decoder's asynchronous stdin/stdout/exit handling.
-        // Fixture output is synthetic; never print image bytes or private paths.
-        let probe = std::process::Command::new(&path)
-            .env_clear()
-            .env("PATH", "/usr/bin:/bin")
-            .env("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
-            .output()
-            .expect("test fixture executable must spawn");
-        let correct_fixture = match case {
-            0 => probe.status.success() && probe.stdout == b"RQSP",
-            1 => probe.status.success() && probe.stdout.len() == MAX_OUTPUT + 1,
-            2 => probe.status.code() == Some(3) && probe.stdout.is_empty(),
-            _ => unreachable!(),
-        };
-        assert!(
-            correct_fixture,
-            "malformed fixture #{case} failed before Decoder: status={:?}, bytes={}",
-            probe.status.code(),
-            probe.stdout.len()
-        );
-        let result = Decoder::new(path)
+        // Observe the actual Decoder first: priming a Python fixture before
+        // this call can change the child exit/stdin pipe timing being tested.
+        let actual = Decoder::new(path.clone())
             .decode(PNG.to_vec(), CancellationToken::new())
-            .await;
+            .await
+            .expect_err("malformed fixture must never produce valid pixels");
+        if actual != expected {
+            // Only on failure, independently inspect this disposable fixture in
+            // the same stripped environment. Never log input or response bytes.
+            let probe = std::process::Command::new(&path)
+                .env_clear()
+                .env("PATH", "/usr/bin:/bin")
+                .env("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+                .output()
+                .expect("test fixture executable must spawn");
+            let correct_fixture = match case {
+                0 => probe.status.success() && probe.stdout == b"RQSP",
+                1 => probe.status.success() && probe.stdout.len() == MAX_OUTPUT + 1,
+                2 => probe.status.code() == Some(3) && probe.stdout.is_empty(),
+                _ => unreachable!(),
+            };
+            panic!(
+                "malformed fixture #{case}: Decoder={actual:?}, expected={expected:?}, direct_fixture_valid={correct_fixture}, status={:?}, bytes={}",
+                probe.status.code(),
+                probe.stdout.len()
+            );
+        }
         assert_eq!(
-            result.unwrap_err(),
-            expected,
+            actual, expected,
             "malformed fixture #{case}: unexpected Decoder classification"
         );
     }
