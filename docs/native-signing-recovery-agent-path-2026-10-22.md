@@ -36,3 +36,10 @@ Applicable N1 invalid/deep path; N2 socket-size limit and Unicode byte lengths; 
 4. [ ] Record actual run/artefact hashes and outstanding KDE/Pixel and full tag Mode B gates; issue #14 status.
 
 **Rollback:** revert only the recovery layout/bound implementation if actual new failures surface; preserve existing production signing identity, APT archive and immutable tag namespace.
+
+## Implementation evidence — 2026-10-22
+
+- Code-only `4898da93cc8cf529f557cfc5c31daaa4c6880d10`: `scripts/native_signer_backup.py` checks the filesystem byte length of the longest standard `S.gpg-agent.browser` Unix socket before creating recovered private homes; uses shorter same-parent private temp prefixes `.rqs-r-`, `.rqs-p-`, `.rqs-c-`; removes redundant temporary `/custody` level; the revocation verification crypto-home is a sibling of the proof instead of nested inside it. No GPG command, key role, cryptographic assertion, passphrase or authority change.
+- Test-only follow-up `26f76c7f9c584062023a53391b019a479d9edead`: cleanup assertions now check the exact new shortened temporary prefixes. Regression exercises fit vs over-limit Unix sockets, multibyte pathname byte-length and rejection of deep private restored output **before** secret material is written.
+- [Preflight 39826399397](https://github.com/morozhenko-apps/rquickshare/actions/runs/39826399397) triggered on the implementation commit but **was not yet terminal** at last check. Do not infer its outcome for the follow-up test-only commit without reading actual results.
+- **Still open:** manual final-source native package smoke on `dev`. The source connector lacks `workflow_dispatch` and cannot sign or build on the owner's machine. The operator can trigger the existing credential-free workflow in GitHub Actions without creating a release tag; attach its run ID, hash and `.deb` receipt to #14 only after verified completion.
