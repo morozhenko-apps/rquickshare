@@ -52,7 +52,7 @@ Recommendation **A**, since requested objective is one real device with reliable
 - [x] Root and existing docs/issue architecture consulted; user screenshot and live hardware claims classified.
 - [x] Google Quick Share Android and public Nearby Connections developer guidance compared, distinguishing public SDK from proprietary wire/Android UI text.
 - [x] Canonical 20 languages verified from PersonalLanding config, not inferred.
-- [ ] Owner chooses peer-identity architecture A/B/C before corresponding production code.
+- [x] **Owner selected A on 2026-10-23:** strict authenticated identity binding; never merge unverified aliases or redirect explicit Send. Architecture decision is recorded, but issue #16 remains OPEN until code, CI and physical acceptance are complete.
 - [ ] Reproduce and correct UI focus/scroll, measure cold start, and capture bilateral rejection terminal evidence.
 - [ ] Complete physical acceptance matrix and archive redacted evidence.
 - [ ] Implement localization after all other planned features, before final 1.0.0 test gate.
@@ -63,3 +63,7 @@ Recommendation **A**, since requested objective is one real device with reliable
 - GTK production+focused regression commit `b1fd2f073033c77e1807687db792ca10cf4bbe4f`, test expectation follow-up `c7c50deecc6d8bb6fd55c3d5d9093e58cf3fcee7`: `native_desktop/src/panel/rows.rs::focus_transfer` still focuses the exact current keyed transfer row/Accept, then schedules **one frame** to obtain GTK's final layout. It computes the row bounds in the nearby content's coordinate system and changes the scroll vertical adjustment by the minimum valid distance to bring an offscreen consent into view; if the row is gone, detached or the scroll view is unmapped, it leaves scroll untouched. It does not change transport, consent, sender selection, auto-open policy, persistent state or notification override. No busy wait, arbitrary sleep or timer. A pure regression function exercises above/below/already-visible/oversized/end-of-list/clamped/zero viewport cases.
 - **Execution status at document update:** Rust GTK CI results **not yet verified**, installed `0.9.0-1` is unchanged; do not claim that this fix is already present on Alcotester or physically accepted. Existing issue #13 retains KDE long-list acceptance.
 - Issue trackers: [#16 unverified peer-route identity STOP](https://github.com/morozhenko-apps/rquickshare/issues/16), [#17 20-locale final feature](https://github.com/morozhenko-apps/rquickshare/issues/17), [#18 cold launch/decline compatibility](https://github.com/morozhenko-apps/rquickshare/issues/18).
+
+## Owner's branch/issue lifecycle rule — 2026-10-23
+
+Primary development branch is `dev` for every agent unless **verified** another agent actively owns `dev`, in which case use an isolated short-lived branch + PR targeting `dev` and integrate it safely later. Close issues after their implementation and required test/physical gates actually pass; an architectural choice alone is not a completed feature. Root [AGENTS.md](../AGENTS.md) and [remote branch audit](branch-audit-2026-10-23.md) are the repository checkpoints.
