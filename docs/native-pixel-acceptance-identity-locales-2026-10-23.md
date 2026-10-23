@@ -77,3 +77,17 @@ Read-only source verification after owner choice A:
 - This is a concrete **security/protocol integration gap**, not a reason to reinterpret option A as option B. As a feature planning stage, first inventory actual Google-compatible certificate/identity trust availability and how a peer would prove its association to a discovered route while preserving existing consent and offline anonymous sharing. If an actual interoperable cryptographic identity anchor cannot be established without new credential/account flows or protocol changes, apply a separate architectural STOP FACTOR before introducing one. The conservative current runtime keeps entries distinct; it cannot promise one card per unverified Pixel prior to proof.
 - Issue #16 remains **OPEN** and is not implemented or accepted. This docs-only investigation deliberately makes no runtime, test, app installation or CI change.
 
+
+## Confirmed Actions policy contradiction — 2026-10-23
+
+Physical operator commands (successful HTTP 200 API responses):
+- `gh api repos/morozhenko-apps/rquickshare/actions/permissions` reports `enabled=true`, `allowed_actions=all`, `sha_pinning_required=false`.
+- `gh api orgs/morozhenko-apps/actions/permissions` reports `enabled_repositories=all`, `allowed_actions=all`, `sha_pinning_required=false`.
+- `gh workflow list --all` lists `Native GTK UI verification` and other workflows `active`.
+- `gh workflow run native-gtk-ui.yml --repo morozhenko-apps/rquickshare --ref dev` returns **HTTP 422 `Actions has been disabled for this repository`**; no workflow run is created. The local owner worktree `dev` is clean and tracks `origin/dev`.
+- Official GitHub docs describe a **separate GitHub-controlled disabled state** that is not repaired by changing repository or organization Actions permissions, and recommend contacting GitHub Support: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository .
+- GitHub status history lists an Oct 23 Actions **result delivery delay** resolved at 08:05 UTC, and an Oct 22 Actions-result delay resolved at 15:18 UTC. Those incidents do **not** establish that the later permanent-looking 422 repository-disabled response is part of the outage. On Oct 23 status page Actions was reported operational during a later check: https://www.githubstatus.com/ .
+
+**State:** repository/org configured as enabled, but workflow dispatcher blocked; precise GitHub-side cause remains **UNVERIFIED** until GitHub Support reviews the repository/account state. Do not toggle settings, create bypass/replacement workflows, force CI acceptance, adjust CI tests, claim new successful native-gtk tests, sign/publish a release, or mark issue #13/#14 done. The owner can open a GitHub Support case with the above four observations.
+
+**Development continuation independent of dispatch:** run the same native GTK local formatting/Clippy/helper/test suite on the owner's Ubuntu 26.04 KDE in a child subshell (never `set -e` in the persistent interactive terminal), preserve command output and exit codes in a local log. This is local provisional quality evidence, **not** a passed release CI gate and **not** actual installed package acceptance. Re-run required CI once GitHub formally restores the workflow service.
