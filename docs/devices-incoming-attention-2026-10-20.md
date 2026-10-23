@@ -113,3 +113,18 @@ Physical acceptance still required: two incoming requests while closed/open, cor
 ## Physical follow-up — 2026-10-23 installed 0.9.0-1
 
 Owner reported that newly inbound consent was not brought visibly into focus when an already open Devices list held many duplicate Android rows. This is a FAIL of the **physical viewport/scroll acceptance**, not a proof that the consent state failed to arrive. Current `focus_transfer` grabs keyboard focus on an existing keyed row/Accept but lacks explicit `GtkScrolledWindow` viewport ensure-visible behavior after row arrangement. Fix must keep existing lock, focus-stealing, modal guard and exact transfer/consent revision binding. Add a long-list widget integration test for pending consent arriving below or above viewport; confirm physical KDE before issue #13 closure. See [2026-10-23 Pixel findings](native-pixel-acceptance-identity-locales-2026-10-23.md).
+
+## 2026-10-24 — One-target incoming navigation correction (MODE A)
+
+**Observed source-level defect:** `native_desktop/src/panel/menu.rs` handles the `incoming` action by iterating **all** currently awaiting-consent transfer IDs and calling `Panel::focus_transfer` for each. Every call can enqueue a distinct GTK one-shot frame scroll in `rows.rs`. The resulting final focus/viewport can reflect transfer iteration order rather than the authoritative `DeviceAttention` priority. This is not an observed peer-authentication or Pixel wire failure.
+
+**Root-cause hypotheses reviewed:** stale StateView, outdated daemon epoch, incorrect inbound phase filtering, repeated focus scheduling, layout allocation delay, and missing row on re-render. For this focused defect, the repeated `focus_transfer` loop is directly evidenced; old epoch/phase filtering and GTK allocation remain separate acceptance concerns. Existing `DeviceAttention::review_pending` already supplies an epoch-scoped, consent-revision-aware single target and records acknowledgment.
+
+**Change plan:** replace the menu action's multi-target loop with one call to `review_pending()` when activating `incoming`; keep the original `nearby` navigation and drawer rendering. Add a deterministic regression for two live requests with opposite lexical ID order, showing that the most recently observed request remains the selected target and a duplicate snapshot cannot refocus it. No new trust, transport, consent, persistence, accessibility shortcut or timer. Keep the single focus call on the GTK UI thread. Rollback is one `menu.rs` source change plus focused test; revert without touching Core or installed packages.
+
+**Validation / acceptance:** review the exact diff, then complete the native GTK formatting/Clippy and isolated GTK tests at the final gate, with existing Preflight as applicable. Physical KDE acceptance must show correct sender controls/viewport with two simultaneous requests, including reversed row order, no auto-accept, no focus stealing from active consent interaction. Do not close issue #13 until CI and physical acceptance pass. Work on `dev` only; source/test changes committed separately from this documentation.
+
+- [x] Source inspection and independent risk/rollback analysis.
+- [x] Documentation-first correction plan.
+- [ ] Implementation and focused regression.
+- [ ] Latest-source CI verification and physical KDE/Pixel acceptance.
