@@ -375,11 +375,17 @@ mod incoming_navigation_tests {
     ) {
         // Arrival order, not lexical order, selects the single review target.
         let mut attention = DeviceAttention::default();
-        attention.observe(Some(17), [("zz-sender".into(), 1)], false);
-        attention.observe(
-            Some(17),
-            [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
-            false,
+        assert_eq!(
+            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
+            None
+        );
+        assert_eq!(
+            attention.observe(
+                Some(17),
+                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+                false,
+            ),
+            None
         );
 
         assert_eq!(attention.review_pending().as_deref(), Some("aa-sender"));
@@ -389,8 +395,11 @@ mod incoming_navigation_tests {
     #[test]
     fn given_same_pending_snapshot_after_review_when_replayed_then_focus_does_not_retrigger() {
         let mut attention = DeviceAttention::default();
-        attention.observe(Some(17), [("sender".into(), 1)], false);
-        attention.review_pending();
+        assert_eq!(
+            attention.observe(Some(17), [("sender".into(), 1)], false),
+            None
+        );
+        assert_eq!(attention.review_pending().as_deref(), Some("sender"));
 
         assert_eq!(
             attention.observe(Some(17), [("sender".into(), 1)], true),
@@ -402,13 +411,22 @@ mod incoming_navigation_tests {
     #[test]
     fn given_latest_consent_withdrawn_when_incoming_is_opened_then_remaining_sender_is_selected() {
         let mut attention = DeviceAttention::default();
-        attention.observe(Some(17), [("zz-sender".into(), 1)], false);
-        attention.observe(
-            Some(17),
-            [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
-            false,
+        assert_eq!(
+            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
+            None
         );
-        attention.observe(Some(17), [("zz-sender".into(), 1)], false);
+        assert_eq!(
+            attention.observe(
+                Some(17),
+                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
+            None
+        );
 
         assert_eq!(attention.review_pending().as_deref(), Some("zz-sender"));
     }
