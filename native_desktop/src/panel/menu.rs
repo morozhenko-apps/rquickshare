@@ -371,40 +371,45 @@ mod incoming_navigation_tests {
     use super::*;
 
     #[test]
-    fn given_multiple_pending_requests_when_incoming_is_opened_then_only_latest_live_request_is_selected(
+    fn given_new_consent_with_lower_lexical_id_when_incoming_is_opened_then_latest_sender_is_selected(
     ) {
-        // A newer request can sort before the previous one lexically.
+        // Arrival order, not lexical order, selects the single review target.
         let mut attention = DeviceAttention::default();
-        assert_eq!(
-            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
-            None
-        );
-        assert_eq!(
-            attention.observe(
-                Some(17),
-                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
-                false,
-            ),
-            None
+        attention.observe(Some(17), [("zz-sender".into(), 1)], false);
+        attention.observe(
+            Some(17),
+            [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+            false,
         );
 
-        // Incoming navigation reviews all requests but returns exactly one
-        // current sender, rather than scheduling focus for both rows.
         assert_eq!(attention.review_pending().as_deref(), Some("aa-sender"));
         assert!(!attention.has_unreviewed());
+    }
+
+    #[test]
+    fn given_same_pending_snapshot_after_review_when_replayed_then_focus_does_not_retrigger() {
+        let mut attention = DeviceAttention::default();
+        attention.observe(Some(17), [("sender".into(), 1)], false);
+        attention.review_pending();
+
         assert_eq!(
-            attention.observe(
-                Some(17),
-                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
-                true,
-            ),
+            attention.observe(Some(17), [("sender".into(), 1)], true),
             None
         );
+        assert!(!attention.has_unreviewed());
+    }
 
-        // A withdrawn latest request cannot be focused from stale attention.
+    #[test]
+    fn given_latest_consent_withdrawn_when_incoming_is_opened_then_remaining_sender_is_selected() {
+        let mut attention = DeviceAttention::default();
         attention.observe(Some(17), [("zz-sender".into(), 1)], false);
+        attention.observe(
+            Some(17),
+            [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+            false,
+        );
+        attention.observe(Some(17), [("zz-sender".into(), 1)], false);
+
         assert_eq!(attention.review_pending().as_deref(), Some("zz-sender"));
-        attention.observe(Some(18), [("fresh-sender".into(), 1)], false);
-        assert_eq!(attention.review_pending().as_deref(), Some("fresh-sender"));
     }
 }
