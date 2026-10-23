@@ -97,29 +97,11 @@ impl Panel {
                         panel.set_drawer(Drawer::Open);
                         panel.pages.set_visible_child_name("nearby");
                         panel.render();
-                        let ids = panel
-                            .model
-                            .borrow()
-                            .state
-                            .view
-                            .as_ref()
-                            .map(|view| {
-                                view.transfers
-                                    .iter()
-                                    .filter(|transfer| {
-                                        if name == "incoming" {
-                                            transfer.direction == Direction::Inbound
-                                                && transfer.phase == Phase::AwaitingConsent
-                                        } else {
-                                            !transfer.phase.is_terminal()
-                                        }
-                                    })
-                                    .map(|transfer| transfer.transfer.id().to_owned())
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
-                        if name != "nearby" {
-                            for id in ids {
+                        if name == "incoming" {
+                            // One authoritative consent target avoids competing GTK
+                            // focus/scroll callbacks for other pending requests.
+                            let target = panel.model.borrow_mut().attention.review_pending();
+                            if let Some(id) = target {
                                 panel.focus_transfer(&id);
                             }
                         }
@@ -381,5 +363,48 @@ impl Panel {
         self.watch_idle_widget(&about);
         self.about.replace(Some(about.clone()));
         about.present();
+    }
+}
+
+#[cfg(test)]
+mod incoming_navigation_tests {
+    use super::*;
+
+    #[test]
+    fn given_multiple_pending_requests_when_incoming_is_opened_then_only_latest_live_request_is_selected(
+    ) {
+        // A newer request can sort before the previous one lexically.
+        let mut attention = DeviceAttention::default();
+        assert_eq!(
+            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
+            None
+        );
+        assert_eq!(
+            attention.observe(
+                Some(17),
+                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+                false,
+            ),
+            None
+        );
+
+        // Incoming navigation reviews all requests but returns exactly one
+        // current sender, rather than scheduling focus for both rows.
+        assert_eq!(attention.review_pending().as_deref(), Some("aa-sender"));
+        assert!(!attention.has_unreviewed());
+        assert_eq!(
+            attention.observe(
+                Some(17),
+                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+                true,
+            ),
+            None
+        );
+
+        // A withdrawn latest request cannot be focused from stale attention.
+        attention.observe(Some(17), [("zz-sender".into(), 1)], false);
+        assert_eq!(attention.review_pending().as_deref(), Some("zz-sender"));
+        attention.observe(Some(18), [("fresh-sender".into(), 1)], false);
+        assert_eq!(attention.review_pending().as_deref(), Some("fresh-sender"));
     }
 }
