@@ -126,5 +126,8 @@ Owner reported that newly inbound consent was not brought visibly into focus whe
 
 - [x] Source inspection and independent risk/rollback analysis.
 - [x] Documentation-first correction plan.
-- [ ] Implementation and focused regression.
-- [ ] Latest-source CI verification and physical KDE/Pixel acceptance.
+- [x] Implemented single-target `incoming` action and scoped regression at source commit `ceaef98216bf68e7f70e30459ffd89d264bbacc9` (`native_desktop/src/panel/menu.rs` only).
+- [ ] Final Rust GTK format/Clippy and isolated widget tests on that source; no success claim: the connected GitHub interface does not expose workflow dispatch or direct list-runs, and the current execution environment has no Cargo/rustfmt or access to the operator's Alcotester terminal.
+- [ ] Physical KDE/Pixel two-request focus/scroll acceptance; issue #13 remains OPEN.
+
+**Commit evidence:** docs plan `aa6b78920392b43e5276dc0800dd482006d9aafc`, executable and test `ceaef98216bf68e7f70e30459ffd89d264bbacc9`. Source-exact Rust build/test outcome is **UNVERIFIED**; never equate GitHub commit success or zero legacy commit statuses with a CI pass. The `native-gtk-ui.yml` push trigger covers `native_desktop/**` when GitHub Actions is actually enabled; only an actual run record can prove workflow admission and completion.
