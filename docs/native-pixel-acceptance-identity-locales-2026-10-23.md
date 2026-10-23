@@ -57,3 +57,9 @@ Recommendation **A**, since requested objective is one real device with reliable
 - [ ] Complete physical acceptance matrix and archive redacted evidence.
 - [ ] Implement localization after all other planned features, before final 1.0.0 test gate.
 - [ ] Final stable/flaky/coverage checks and any release actions (separate authorization). No performance number, root-cause fix, release or new binary claimed.
+
+## Scope-limited viewport correction checkpoint (2026-10-23)
+
+- GTK production+focused regression commit `b1fd2f073033c77e1807687db792ca10cf4bbe4f`, test expectation follow-up `c7c50deecc6d8bb6fd55c3d5d9093e58cf3fcee7`: `native_desktop/src/panel/rows.rs::focus_transfer` still focuses the exact current keyed transfer row/Accept, then schedules **one frame** to obtain GTK's final layout. It computes the row bounds in the nearby content's coordinate system and changes the scroll vertical adjustment by the minimum valid distance to bring an offscreen consent into view; if the row is gone, detached or the scroll view is unmapped, it leaves scroll untouched. It does not change transport, consent, sender selection, auto-open policy, persistent state or notification override. No busy wait, arbitrary sleep or timer. A pure regression function exercises above/below/already-visible/oversized/end-of-list/clamped/zero viewport cases.
+- **Execution status at document update:** Rust GTK CI results **not yet verified**, installed `0.9.0-1` is unchanged; do not claim that this fix is already present on Alcotester or physically accepted. Existing issue #13 retains KDE long-list acceptance.
+- Issue trackers: [#16 unverified peer-route identity STOP](https://github.com/morozhenko-apps/rquickshare/issues/16), [#17 20-locale final feature](https://github.com/morozhenko-apps/rquickshare/issues/17), [#18 cold launch/decline compatibility](https://github.com/morozhenko-apps/rquickshare/issues/18).
