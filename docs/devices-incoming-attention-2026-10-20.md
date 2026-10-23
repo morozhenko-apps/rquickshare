@@ -131,3 +131,9 @@ Owner reported that newly inbound consent was not brought visibly into focus whe
 - [ ] Physical KDE/Pixel two-request focus/scroll acceptance; issue #13 remains OPEN.
 
 **Commit evidence:** docs plan `aa6b78920392b43e5276dc0800dd482006d9aafc`, executable and test `ceaef98216bf68e7f70e30459ffd89d264bbacc9`. Source-exact Rust build/test outcome is **UNVERIFIED**; never equate GitHub commit success or zero legacy commit statuses with a CI pass. The `native-gtk-ui.yml` push trigger covers `native_desktop/**` when GitHub Actions is actually enabled; only an actual run record can prove workflow admission and completion.
+
+### Final scoped test-source checkpoint (2026-10-24)
+
+The direct one-target `incoming` action remains at `ceaef98216bf68e7f70e30459ffd89d264bbacc9`. Subsequent test-only commits `601a8a1b35f7d513434ff47c610952808cefe012` and `d74b837896ce6ba66f9f4eebba8f2df4ea413dd8` split the regression into three independent Given/When/Then methods and assert all observed reconciliation results, including discarded/departed sender and no repeated focus on duplicate snapshots. Current executable/test source is `d74b837896ce6ba66f9f4eebba8f2df4ea413dd8`.
+
+Static source read-back after the earlier code commit confirmed the menu has a single `focus_transfer` in the `incoming` action and no per-transfer iteration; the repository's true widget execution, Clippy, nightly formatting and CI have **not** been confirmed by this session. Only an exact-source successful run can close that quality gate. Physical acceptance remains outstanding. This checkpoint is documentation-only and does not promote `master`, tag, sign, install or release.
