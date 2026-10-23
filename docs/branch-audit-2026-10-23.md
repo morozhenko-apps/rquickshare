@@ -33,3 +33,15 @@ Existing source PR [#10](https://github.com/morozhenko-apps/rquickshare/pull/10)
 - `compare master...ci/ignore-docs-only-main-20261018`: ahead 1, behind 1, one modified file; blob equal on both.
 - No GitHub branch/PR mutation performed by this docs audit. No code was merged because there was **no missing remote code to merge**.
 - If any other owner produces local unique commits, first cherry-pick/rebase/PR-review them safely onto `dev` with tests as required; update this audit before deleting their branch. Never assume the previous remote audit covers newly pushed refs.
+
+## Alcotester follow-up: remote branch deleted, local old Vite branch superseded
+
+Owner executed the lease-guarded `git push --force-with-lease=refs/heads/ci/ignore-docs-only-main-20261018:<expected> origin --delete ...`; terminal output returned `[deleted] ci/ignore-docs-only-main-20261018`. A fresh connected GitHub branches query independently confirmed only `dev` and protected `master` remain, with zero open PRs. The earlier CI-branch **is deleted**, not merely pending.
+
+Owner's `git status --short --branch` reports local `dev` clean, `behind 6`, no worktree changes; `git worktree list` shows only the root worktree on `dev`. `git branch --no-merged origin/dev` shows one local-only branch `dependabot/npm_and_yarn/app/main/vite-6.4.2` at `950f5a5`, tracking `upstream/dependabot/npm_and_yarn/app/main/vite-6.4.2`. Local `master` tracks `origin/master` and must remain.
+
+GitHub commit `950f5a5` is available to read and changes only `app/main/package.json` (Vite `^5.4.10` → `^6.4.2`) and `app/main/pnpm-lock.yaml` (older lock graph). `compare dev...950f5a5` is diverged, 1 ahead / 1368 behind, changes exactly those two files. Current `dev` `app/main/package.json` already declares `vite: ^6.4.3`, `vitest: ^3.2.7`, `@vitejs/plugin-vue: ^5.2.4`; its lockfile resolves `vite@6.4.3`. The old Dependabot change is **superseded** and must **not** be merged/cherry-picked, because that would replace newer vetted package metadata with older versions. The original dependabot git commit is left available in upstream/history, but no unique desired effect is missing from `dev`.
+
+Owner's next safe local actions: fast-forward clean `dev` via `git pull --ff-only origin dev`; verify unchanged `950f5a5` local branch tip and existence of newer `^6.4.3` source before `git branch -D dependabot/npm_and_yarn/app/main/vite-6.4.2`. Explicit `-D` is justified **only for this audited, intentionally unmerged superseded branch**. Do not delete local master, dev, upstream remote branches or any other branch. GitHub connector cannot execute commands on Alcotester; local branch deletion is **not yet verified**.
+
+With the sole unmerged local branch removed, root local branches should be `dev` and `master` only. Remote cleanup is complete, but local cleanup awaits owner execution.
