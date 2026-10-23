@@ -12,6 +12,8 @@ tag is `v1.0.0`, subject to release acceptance; this is not a parity claim.
 The current native GTK implementation and Debian package remain Linux-specific,
 and no Windows/macOS native-port acceptance is implied.
 
+**New 2026-10-23 owner requirements before product 1.0.0:** [installed Pixel acceptance, device-route identity decisions and twenty-locale final feature gate](native-pixel-acceptance-identity-locales-2026-10-23.md). Finish remaining sharing/discovery/safety/UI features first. Localize the complete native client into the canonical 20 languages **last among features**, conduct a contextual audit of every locale, then run the final complete test/release gate. Focused regression tests remain mandatory during feature development. This is a 1.0.0 target, not a retroactive blocker for the approved 0.9.0 early candidate. Do not group same-name peers as trusted identity; architecture selection is pending.
+
 Active scope is [essential native sharing](native-essential-priorities.md).
 The user excluded previews and requested only necessary work. The comprehensive
 capability matrix below is a long-term inventory, not the active implementation

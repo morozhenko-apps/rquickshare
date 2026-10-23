@@ -1719,3 +1719,7 @@ Physical KDE cosmetic review is pending user response. Broader Android reverse/
 version/hash/interruption, Windows, lock/DND/focus/lifecycle and signed APT gates
 remain; do not equate this eight-point slice with full product/UI/parity completion.
 Exact source/build/install/visual observations: evidence/native-card-cleanup-2026-10-16.json.
+
+## 2026-10-23 installed Native 0.9.0 Pixel acceptance and pre-1.0.0 roadmap
+
+Owner confirmed one file sent and returned plus explicit inbound decline on installed rquickshare-native 0.9.0-1 (USER PASS; hashes and exact code/remote status not yet independently checked). Screenshot shows repeated Android discovery rows and no reliable focus/scroll to a newly arriving consent while Devices is expanded; first-launch discovery latency unmeasured. See [current live backlog, Google documentation boundaries, proposed safe identity options and exact 20 locales](native-pixel-acceptance-identity-locales-2026-10-23.md). Before 1.0.0, localization is the last feature after remaining parity/reliability/UI work, followed by contextual audit of all 20 languages and final tests. Current installed 0.9.0 is not yet fully physically accepted; production tag, master and R2 not changed.

@@ -82,3 +82,7 @@ Historical native15 added the requested card/tray presentation repair. Installed
 KDE review remains pending. The user confirmed receiving the Android outbound
 fixture with matching code on native13; daemon reports Finished. Reverse/content
 hash/versions and remaining matrix checks are still open. See [card cleanup](native-card-cleanup.md).
+
+## Observed installed 0.9.0 Pixel functional smoke — 2026-10-23
+
+Owner reports that the verified signed-**not-yet** (unsigned CI candidate) rquickshare-native 0.9.0-1 installation on Alcotester KDE successfully sent a single test file to Pixel 6a, received one file back, and explicitly declined an inbound transfer. These are operator-observed functional PASS, not complete byte/hash or 20-scenario security acceptance. Pixel UI renders Linux decline as **Failed**, rather than a distinguishable Declined; protocol-level cause and Android display mapping are UNVERIFIED. Expanded Devices screenshot has several repeated Android-like names plus Mercury; incoming request did not visibly scroll/focus into view, and first discovery was slow without measured timing. Relevant source backlog and external reference boundary in [2026-10-23 findings](native-pixel-acceptance-identity-locales-2026-10-23.md). Continue bidirectional folders/text/multiple, both rejection directions, cancellation/network interruption, reliable identity and long-list UI checks. Windows unavailable remains UNTESTED.
