@@ -16,6 +16,35 @@ impl Rows {
         self.entries.clear();
     }
 }
+// Return the smallest valid scroll movement that fully reveals a keyed row.
+// An oversized row is aligned to its start; any already visible row is unchanged.
+fn reveal_vertical_interval(
+    start: f64,
+    end: f64,
+    offset: f64,
+    page_size: f64,
+    lower: f64,
+    upper: f64,
+) -> Option<f64> {
+    if page_size <= 0.0 || end <= start {
+        return None;
+    }
+    let max_offset = (upper - page_size).max(lower);
+    let target = if start < offset {
+        start
+    } else if end > offset + page_size {
+        if end - start > page_size {
+            start
+        } else {
+            end - page_size
+        }
+    } else {
+        return None;
+    };
+    let value = target.clamp(lower, max_offset);
+    (value != offset).then_some(value)
+}
+
 fn named(root: &gtk::Widget, name: &str) -> Option<gtk::Widget> {
     if root.widget_name() == name {
         return Some(root.clone());
@@ -324,19 +353,49 @@ impl Panel {
         root.append(&row);
     }
     pub(super) fn focus_transfer(&self, id: &str) {
-        if let Some(entry) = self
+        let Some(row) = self
             .rows
             .borrow()
             .entries
             .get(&("nearby".to_owned(), id.to_owned()))
-        {
-            if let Some(accept) = named(entry.root.upcast_ref(), "accept") {
-                accept.grab_focus();
-            } else {
-                entry.root.set_focusable(true);
-                entry.root.grab_focus();
-            }
+            .map(|entry| entry.root.clone())
+        else {
+            return;
+        };
+        // Focus the keyed request, not the untrusted advertised device name.
+        // A focus change alone does not guarantee that an offscreen request
+        // becomes visible after GTK's new row allocation.
+        if let Some(accept) = named(row.upcast_ref(), "accept") {
+            accept.grab_focus();
+        } else {
+            row.set_focusable(true);
+            row.grab_focus();
         }
+        let Some(scroll) = self.builder.object::<gtk::ScrolledWindow>("nearby-scroll") else {
+            return;
+        };
+        let content = self.box_widget("nearby");
+        // A one-shot frame callback observes the settled row geometry. There
+        // is no timer, retry or recurrent frame work. If the row is removed or
+        // the drawer is hidden before the frame, it cannot scroll stale UI.
+        scroll.add_tick_callback(move |scroll, _| {
+            if scroll.is_mapped() {
+                if let Some(bounds) = row.compute_bounds(&content) {
+                    let adjustment = scroll.vadjustment();
+                    if let Some(value) = reveal_vertical_interval(
+                        bounds.y() as f64,
+                        (bounds.y() + bounds.height()) as f64,
+                        adjustment.value(),
+                        adjustment.page_size(),
+                        adjustment.lower(),
+                        adjustment.upper(),
+                    ) {
+                        adjustment.set_value(value);
+                    }
+                }
+            }
+            glib::ControlFlow::Break
+        });
     }
     fn cached_transfer(
         self: &Rc<Self>,
@@ -858,6 +917,37 @@ mod badge_tests {
         }
         assert_eq!(badge_style(Badge::Available), ("●", "success"));
         assert_eq!(badge_style(Badge::Unavailable), ("−", "dim-label"));
+    }
+}
+
+#[cfg(test)]
+mod focus_scroll_tests {
+    use super::reveal_vertical_interval;
+
+    #[test]
+    fn given_offscreen_or_visible_consent_row_when_requested_then_scroll_moves_minimally() {
+        for (start, end, offset, page, expected) in [
+            (0.0, 40.0, 400.0, 200.0, Some(0.0)),
+            (620.0, 680.0, 400.0, 200.0, Some(480.0)),
+            (450.0, 490.0, 400.0, 200.0, None),
+            (350.0, 420.0, 400.0, 200.0, Some(350.0)),
+            (600.0, 900.0, 100.0, 200.0, Some(600.0)),
+            (780.0, 830.0, 500.0, 200.0, Some(800.0)),
+            (120.0, 140.0, 0.0, 0.0, None),
+            (120.0, 120.0, 0.0, 200.0, None),
+        ] {
+            assert_eq!(
+                reveal_vertical_interval(start, end, offset, page, 0.0, 1000.0),
+                expected,
+                "row={start}..{end}, viewport={offset}..{}",
+                offset + page
+            );
+        }
+        // The scroll target cannot leave the adjustment's legal range.
+        assert_eq!(
+            reveal_vertical_interval(980.0, 990.0, 200.0, 300.0, 0.0, 1000.0),
+            Some(690.0)
+        );
     }
 }
 
