@@ -52,3 +52,15 @@ N1 empty/wrong IDs and malformed frame: existing parser checks; N2 0/1/2/8 indep
 ## 5. Rollback / evidence gate
 
 A1 is test-only and reversible; CI script unchanged; feature gates and installed binary untouched. If source-exact Core/GTK passes, document the terminal outcomes and exact test names **as expected-panic diagnostics, not proof the security bug is fixed**. If A2 requires breaking wire compatibility or disabling unverified BWU, apply an explicit new STOP decision with trade-offs; there is no architecturally sound way to infer an untransmitted proof. Do not spin/poll for CI.
+
+## A2 protocol compatibility: concrete decision required
+
+The approved Option A is retained. The remaining question is what to do with **peers whose legacy TCP introduction has no authenticated binding proof**, notably current Google Quick Share Android builds. At least two defensible product contracts remain, with distinct consequences:
+
+**A2.1 (preferred for a security-blocking release): authenticated-capable peers use two-phase BWU; legacy peers keep the already encrypted BLE connection without Wi-Fi upgrade**. Pros: no unverified TCP ownership and no invented wire frames; contents remain on the established crypto channel; retry/failure semantics explicit. Cons: physical Pixel transfers would be slower until interoperable TCP proof is identified; needs hardware confirmation that the legacy peer tolerates declining an offered upgrade without dropping the transfer; this is a material fallback change.
+
+**A2.2: keep shipping the existing legacy upgrade path while researching authenticated on-TCP proof, then switch all supported peers at once**. Pros: existing Android BWU throughput and protocol behavior unchanged in the meantime; no compatibility regression while measuring. Cons: the demonstrated unauthenticated route-consumption availability risk remains in production; unsuitable for closing #8 or claiming security-ready 1.0.0.
+
+A speculative mandatory challenge/proprietary packet before CLIENT_INTRODUCTION_ACK is **not** presented as a sound third option: available upstream frames contain no such commitment, so claiming Google compatibility without a cooperating peer would be technically false. Likewise, choosing source-IP equality or waiting for a BLE-only encrypted message is not proof the candidate TCP socket belongs to that session.
+
+The preferred decision is **A2.1** if secure staged BWU must ship before there is an interoperable proof mechanism. If full-speed Google Quick Share BWU is a non-negotiable 1.0.0 invariant, choose **A2.2** and leave the security gate formally OPEN while a genuine protocol-level solution is researched. Explicit owner decision is required because this changes the throughput/backward-compatibility contract independently from selecting Option A.
