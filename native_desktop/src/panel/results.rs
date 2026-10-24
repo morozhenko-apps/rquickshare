@@ -33,6 +33,20 @@ impl Results {
         self.phases.retain(|id, _| present.contains(id));
         self.visible.retain(|id| present.contains(id));
         self.pending.retain(|id| present.contains(id));
+        // The nearby card shows current work and only the latest received
+        // result. Each new inbound transfer has its own capability and consent
+        // even when the device display name matches an earlier transfer.
+        // Retire only its old card presentation, never History or the
+        // independent completed-result reveal queue.
+        if !baseline
+            && rows.iter().any(|(id, direction, phase)| {
+                *direction == Direction::Inbound
+                    && !phase.is_terminal()
+                    && !self.phases.contains_key(id)
+            })
+        {
+            self.visible.clear();
+        }
         for (id, direction, phase) in rows {
             let previous = self.phases.insert(id.clone(), phase);
             if !baseline
@@ -149,6 +163,140 @@ mod tests {
                 .map(|(id, direction, phase)| ((*id).into(), *direction, *phase)),
         );
     }
+    #[test]
+    fn given_a_finished_inbound_when_another_consent_arrives_then_old_card_row_retires_but_reveal_remains()
+    {
+        let mut results = Results::default();
+        observe(&mut results, 5, &[]);
+        observe(&mut results, 5, &[("old", Direction::Inbound, Phase::Receiving)]);
+        observe(&mut results, 5, &[("old", Direction::Inbound, Phase::Finished)]);
+        assert!(results.visible("old"));
+        assert_eq!(results.pending.len(), 1);
+
+        // Neither an outbound transfer nor a duplicate completed snapshot
+        // suppresses the finished card row.
+        observe(
+            &mut results,
+            5,
+            &[
+                ("old", Direction::Inbound, Phase::Finished),
+                ("out", Direction::Outbound, Phase::Queued),
+            ],
+        );
+        assert!(results.visible("old"));
+        assert_eq!(results.pending.len(), 1);
+
+        // A fresh incoming consent is a new transfer, not a name-based
+        // replacement of the old daemon session or its saved result.
+        observe(
+            &mut results,
+            5,
+            &[
+                ("old", Direction::Inbound, Phase::Finished),
+                ("out", Direction::Outbound, Phase::Queued),
+                ("new", Direction::Inbound, Phase::AwaitingConsent),
+            ],
+        );
+        assert!(!results.visible("old"));
+        assert!(results.phases.contains_key("old"));
+        assert_eq!(
+            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["old"],
+            "completion reveal must not be lost when a new peer requests consent"
+        );
+
+        // Redraws and consent→Receiving are not new IDs.
+        for phase in [Phase::AwaitingConsent, Phase::Receiving] {
+            observe(
+                &mut results,
+                5,
+                &[
+                    ("old", Direction::Inbound, Phase::Finished),
+                    ("new", Direction::Inbound, phase),
+                ],
+            );
+            assert!(!results.visible("old"));
+            assert_eq!(results.pending.len(), 1);
+        }
+
+        observe(
+            &mut results,
+            5,
+            &[
+                ("old", Direction::Inbound, Phase::Finished),
+                ("new", Direction::Inbound, Phase::Finished),
+            ],
+        );
+        assert!(!results.visible("old"));
+        assert!(results.visible("new"));
+        assert_eq!(
+            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["old", "new"],
+            "fresh completion is presented once without replaying the old row"
+        );
+    }
+
+    #[test]
+    fn given_duplicate_ids_terminal_arrivals_and_parallel_consents_then_only_new_active_inbound_retires_card_result(
+    ) {
+        let mut results = Results::default();
+        observe(&mut results, 12, &[]);
+        observe(&mut results, 12, &[("a", Direction::Inbound, Phase::Receiving)]);
+        observe(&mut results, 12, &[("a", Direction::Inbound, Phase::Finished)]);
+        assert!(results.visible("a"));
+
+        // Newly observed terminal-only records are historical and must not
+        // count as live new consent. Fresh outbound sessions also do not clear.
+        observe(
+            &mut results,
+            12,
+            &[
+                ("a", Direction::Inbound, Phase::Finished),
+                ("older", Direction::Inbound, Phase::Rejected),
+                ("send", Direction::Outbound, Phase::Active),
+            ],
+        );
+        assert!(results.visible("a"));
+
+        observe(
+            &mut results,
+            12,
+            &[
+                ("a", Direction::Inbound, Phase::Finished),
+                ("b", Direction::Inbound, Phase::AwaitingConsent),
+                ("c", Direction::Inbound, Phase::AwaitingConsent),
+            ],
+        );
+        assert!(!results.visible("a"));
+        assert_eq!(results.phases.get("b"), Some(&Phase::AwaitingConsent));
+        assert_eq!(results.phases.get("c"), Some(&Phase::AwaitingConsent));
+        assert_eq!(results.pending.len(), 1);
+
+        // Two independent requests remain tracked even across repeated
+        // snapshots and one rejection, without reviving a stale completed row.
+        observe(
+            &mut results,
+            12,
+            &[
+                ("a", Direction::Inbound, Phase::Finished),
+                ("b", Direction::Inbound, Phase::Rejected),
+                ("c", Direction::Inbound, Phase::AwaitingConsent),
+            ],
+        );
+        assert!(!results.visible("a"));
+        assert_eq!(results.phases.get("b"), Some(&Phase::Rejected));
+        assert_eq!(results.phases.get("c"), Some(&Phase::AwaitingConsent));
+
+        // A different generation cannot replay the old completion or reveal.
+        observe(
+            &mut results,
+            13,
+            &[("a", Direction::Inbound, Phase::Finished)],
+        );
+        assert!(!results.visible("a"));
+        assert!(results.pending_empty());
+    }
+
     #[test]
     fn given_baseline_or_new_epoch_when_completed_records_are_read_then_old_results_never_reopen() {
         let mut results = Results::default();
