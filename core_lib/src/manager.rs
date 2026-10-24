@@ -411,10 +411,10 @@ mod tests {
         framed
     }
 
-    // P0 #8: Deliberately ignored until the authenticated BWU admission
-    // contract is approved and implemented. These oracles document the
-    // *required* fail-closed outcome, not the current insecure behavior.
-    // The ordinary green route tests only prove syntactic plaintext matching.
+    // P0 #8: These expected-panic sentinels reproduce the KNOWN vulnerability
+    // while preserving the actual fail-closed assertion below. Passing here
+    // confirms the bug persists; it is NOT a passing security acceptance test.
+    // Remove should_panic and require normal success once admission is fixed.
     async fn assert_untrusted_claim_preserves_original_bwu_owner(
         current: &str,
         previous: Option<&str>,
@@ -454,15 +454,17 @@ mod tests {
         router.cancel("established-ble-session").await;
     }
 
+    // This test must STOP passing when a real authorization fix lands:
+    // switch back to a normal fail-closed regression, not an expected panic.
     #[tokio::test]
-    #[ignore = "P0 #8: no protocol-compatible authenticated TCP admission gate yet"]
-    async fn given_forged_current_bwu_id_when_classified_then_established_owner_is_not_consumed() {
+    #[should_panic(expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner")]
+    async fn given_forged_current_bwu_id_when_classified_then_known_pre_auth_theft_is_detected() {
         assert_untrusted_claim_preserves_original_bwu_owner("established-ble-session", None).await;
     }
 
     #[tokio::test]
-    #[ignore = "P0 #8: no protocol-compatible authenticated TCP admission gate yet"]
-    async fn given_forged_previous_bwu_id_when_classified_then_established_owner_is_not_consumed() {
+    #[should_panic(expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner")]
+    async fn given_forged_previous_bwu_id_when_classified_then_known_pre_auth_theft_is_detected() {
         assert_untrusted_claim_preserves_original_bwu_owner(
             "untrusted-dynamic-id",
             Some("established-ble-session"),
