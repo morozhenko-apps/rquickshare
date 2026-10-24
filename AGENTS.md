@@ -32,3 +32,37 @@ See [the full decision and 20-locale gate](docs/native-pixel-acceptance-identity
 ## Canonical live backlog and owner checkpoints
 
 Before starting or resuming work, read [the active backlog and release handoff](docs/active-backlog.md) and the linked open issue. This short index states the live execution order, exact CI checkpoints, deferrals/STOP factors, code-vs-installed acceptance, and current native release-tag namespace; `docs/current-state.md` is a dated **historical evidence journal**, not the live task queue. Refresh GitHub issue/source CI for new evidence, then update the short index and issue after each significant slice. Preserve detailed dated plans without copying their historical pending CI state into new status claims.
+
+## Repository housekeeping — 2026-10-24
+
+MODE A; documentation/ignore maintenance only, baseline
+`f700d7014b1487531bd6f36db7a6488da4325e23`. The older cleanup audit predates
+the explicit live-backlog/historical-journal split. Preserve the entire journal
+and current independent development instead of rebuilding it as another live SSOT.
+
+1. [x] Inspect rules, actual branch/worktree/PR ownership, latest backlog/source,
+   issue24 and source-exact check runs. Dev is clean/synchronized, one worktree,
+   no open PR and no observed active competing writer. Recheck expected tip
+   before each ref mutation; no speculative branch or protected-master change.
+2. [ ] Add a noncanonical docs navigation index: group all46 Mode B records by
+   subsystem and include verified local Git commit references with provenance.
+   Keep every inventory, branch/negative/interaction map, failure and physical
+   acceptance record unchanged. Do not claim current coverage from old counts.
+3. [ ] Correct README's live entrypoint; retain the old native29 paragraph
+   verbatim behind an explicit historical boundary. Add bounded CI readback to
+   the live handoff without deleting/reclassifying its original source evidence.
+   Functional issues and hardware/signing/publication gates remain open.
+4. [ ] Ignore future local IDE/assistant state; retain shared
+   `.vscode/settings.json` linking the actual Core/Tauri Cargo manifests.
+   No disposable tracked model preset was found. Keep BUILD, component
+   changelogs, D-Bus text inputs, preview fixtures, keys and signing recovery.
+5. [ ] Final gate: existing workflow-policy guard and native release-tag unit
+   contracts once, source/hash/body/catalog/link/anchor/ignore checks and diff.
+   No Rust/GTK/installed package/device/10x/signing/R2 gate is required for docs.
+   Commit docs/config separately and normal-push dev after a fresh expected-SHA
+   check; no master, protected tags, PR/issue closure or provider operation.
+
+Risk is lost provenance, stale installed/source claims or interfering with the
+active functional queue. Preserve original bytes, qualify historical candidate
+facts and record actual checks. Rollback uses inverse shared-branch commits;
+no source, device, signer, artifact, key or runtime-state restoration is needed.
