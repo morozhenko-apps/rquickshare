@@ -1,3 +1,10 @@
+## Current source-exact stable verification — 2026-10-24
+
+Executable source **`afce867644baab8e4f5e9ffa66e70b9a27b09ff9`**; final source [Preflight 40115424146](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424146) and [GTK 40115424114](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424114).
+- Core Rust stable job `120935659444` terminal SUCCESS: **796 passed, 0 failed, 0 ignored, 8 filtered**; both integration binaries **4/4** each. All three diagnostic regression tests individually `ok`, including full encrypted response+LAST_CHUNK read and opt-in marker formatter. Strict Rust format SUCCESS, Core Clippy SUCCESS, frontend SUCCESS, Native GTK SUCCESS.
+- **Tauri Clippy job `120935659581` still IN PROGRESS as of this documentation checkpoint**, therefore **5/6 verified, not full 6/6**. Do not ask operator to install until terminal source-exact sixth gate is confirmed.
+- No physical Pixel trace run on this source. The last user-reported data remains **3/3 Pixel `Failed`**, despite preceding drain change; **root cause not established**. Next step is the single user-approved trace on a fresh installed debug candidate, not another protocol/timing guess. See [plan](native-pixel-reject-wire-trace-2026-10-24.md).
+
 ## 2026-10-24 diagnostic code validation handoff
 
 Current **executable source SHA** `afce867644baab8e4f5e9ffa66e70b9a27b09ff9`. Only docs will follow until evidence arrives. Four distinct code/test commits since the previous fully-validated package:
