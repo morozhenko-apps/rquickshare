@@ -593,9 +593,7 @@ mod tests {
             let later = "198.51.100.20".parse::<std::net::IpAddr>().unwrap();
             for addresses in [[invalid, public, later], [public, invalid, later]] {
                 assert_eq!(
-                    select_lan_ipv4(
-                        addresses.into_iter().map(|ip| ("eth0".to_owned(), ip))
-                    ),
+                    select_lan_ipv4(addresses.into_iter().map(|ip| ("eth0".to_owned(), ip))),
                     Some([203, 0, 113, 10]),
                     "special={special}, order={addresses:?}"
                 );
