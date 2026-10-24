@@ -41,3 +41,7 @@ Positive: known valid resolved probe routes then removed; N1 malformed/missing T
 5. [ ] Record executed test names, outcomes/coverage evidence, code SHA, rollback; issue update. Physical mDNS SDK/Pixel/Windows remains OPEN; no closed claim without installed acceptance.
 
 Do not use green unit fixtures as proof of real SDK multicast timing or Google peer compatibility. The selected architecture is a testability boundary, not a security change.
+
+## Implementation checkpoint (CI pending)
+
+Production+test `c444ca84c1b5746d47477777631deca49b02c6b7` extracts one real `run_event_loop` for both SDK and tests, with event+reachability future ports. Four real `ServiceEvent`+real `ServiceInfo`-based Tokio tests cover resolved+removed/duplicate/unknown, missing/bad TXT or unreachable probe, cancellation-before-event and cancellation-during-pending-reachability. `df502aa89064f37b1ec2dc9e9dfb31543c8ad2c2` applied exact nightly rustfmt and removed an unused fixture assignment; `2545e0519bb8f236e1948993eef28b31d2e58ac0` corrected `IntoTxtProperties` argument types (requires `&[T]`, not `&[T; 1]`) after a real CI compile diagnostic. This **does not** assert that the final source has passed. No changes to installed daemon, SDK lifetime finalizer or real multicast acceptance. Next: inspect final CI, fix only proven compile/test issues; update issue and checkpoint; leave issue OPEN pending real SDK/hardware verification.

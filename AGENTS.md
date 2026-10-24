@@ -28,3 +28,7 @@ These project-specific rules supplement the operator's Universal Feature / Refac
 For issue #16, owner chose **A**: collapse aliases/routes of one real device only after a cryptographically authenticated and session-bound identity match, keeping independently addressable routes and explicit consent. No grouping by user-visible name, IP, MAC, mDNS fullname or uncontrolled peer-advertised metadata may grant trust or silently select a transfer recipient. Document the proof/binding contract, lifecycle, fail-closed ambiguity and corresponding regressions before production changes. The choice resolves the A/B/C decision; it does **not** close issue #16 until actual implementation, CI and physical acceptance are complete.
 
 See [the full decision and 20-locale gate](docs/native-pixel-acceptance-identity-locales-2026-10-23.md) and [branch audit](docs/branch-audit-2026-10-23.md).
+
+## Canonical live backlog and owner checkpoints
+
+Before starting or resuming work, read [the active backlog and release handoff](docs/active-backlog.md) and the linked open issue. This short index states the live execution order, exact CI checkpoints, deferrals/STOP factors, code-vs-installed acceptance, and current native release-tag namespace; `docs/current-state.md` is a dated **historical evidence journal**, not the live task queue. Refresh GitHub issue/source CI for new evidence, then update the short index and issue after each significant slice. Preserve detailed dated plans without copying their historical pending CI state into new status claims.
