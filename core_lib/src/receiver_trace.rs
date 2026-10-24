@@ -27,6 +27,7 @@ pub enum Event {
     GattFirstDataPacketReceived,
     GattFirstDataLastFragment,
     GattNotifyWorkerExited,
+    GattNotifyCallbackReturning,
     GattNotifyOpened,
     GattBridgeBusy,
     GattSessionOpened,
@@ -93,6 +94,7 @@ impl Event {
             Self::GattFirstDataPacketReceived => "gatt_first_data_packet_received",
             Self::GattFirstDataLastFragment => "gatt_first_data_last_fragment",
             Self::GattNotifyWorkerExited => "gatt_notify_worker_exited",
+            Self::GattNotifyCallbackReturning => "gatt_notify_callback_returning",
             Self::GattNotifyOpened => "gatt_notify_opened",
             Self::GattBridgeBusy => "gatt_bridge_busy",
             Self::GattSessionOpened => "gatt_session_opened",
@@ -194,6 +196,7 @@ mod tests {
             Event::GattFirstDataPacketReceived,
             Event::GattFirstDataLastFragment,
             Event::GattNotifyWorkerExited,
+            Event::GattNotifyCallbackReturning,
             Event::GattNotifyOpened,
             Event::GattBridgeBusy,
             Event::GattSessionOpened,
@@ -347,6 +350,10 @@ mod startup_timeline_contract_tests {
                 "gatt_first_data_last_fragment",
             ),
             (Event::GattNotifyWorkerExited, "gatt_notify_worker_exited"),
+            (
+                Event::GattNotifyCallbackReturning,
+                "gatt_notify_callback_returning",
+            ),
         ];
         let mut unique = std::collections::BTreeSet::new();
         for (event, name) in markers {
@@ -357,7 +364,7 @@ mod startup_timeline_contract_tests {
             assert!(!output.contains('@'));
             assert!(!output.contains('/'));
         }
-        assert_eq!(unique.len(), 6);
+        assert_eq!(unique.len(), 7);
     }
 
     #[test]
