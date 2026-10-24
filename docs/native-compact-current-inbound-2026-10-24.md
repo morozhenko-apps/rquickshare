@@ -31,7 +31,7 @@ Risks: hiding a completed row when new unrelated inbound request arrives; accept
 
 1. [x] Physical observation and root-cause / alternative hypotheses documented, issue #20 opened. Android `Failed` on Linux Decline belongs to #18 separately: `inbound.rs::apply_consent(false)` already sends encrypted Sharing `ConnectionResponse::Reject`, and updates Linux `Rejected`. Google Android's UI mapping is unproven without a protocol trace; do not send false `Cancel`/failure codes by guess.
 2. [x] Source change limited to new nonterminal inbound ID admission and tests in `Results`; source commit `d886146aafd0b479eb5efad7fc44101c40090bb9`, one code commit separate from docs plan. CI pending at checkpoint.
-3. [ ] Source-exact nightly formatting, GTK strict Clippy/test and stable preflight final terminal results; full Mode B later.
+3. [x] Source-exact nightly formatting, GTK strict Clippy/test and stable Preflight terminal **6/6 SUCCESS** at `2de1bb70`; full release Mode B and installed checks remain later.
 4. [ ] Operator installs candidate after existing debug package with controlled rollback, visually verifies new consent does not show prior Completed row, but History retains original. Old installed package cannot prove new fix; do not close #20 without physical updated version.
 5. [ ] Backlog + issue completion evidence update, no `master` promotion, tag, cloud or auto-install.
 
@@ -43,3 +43,13 @@ Risks: hiding a completed row when new unrelated inbound request arrives; accept
 Production code `d886146aafd0b479eb5efad7fc44101c40090bb9`; solely nightly-rustfmt correction `2de1bb70d7b864e3faae849891176d510f678e35` is the final executable SHA for these tests. The first GTK run [40100886094](https://github.com/morozhenko-apps/rquickshare/actions/runs/40100886094) reported formatter failure, no assertion failure or functional diagnosis. The corrected [Native GTK 40101207886](https://github.com/morozhenko-apps/rquickshare/actions/runs/40101207886) completed **SUCCESS**: native GTK source formatting/strict Clippy, **10/10** in one test partition, **92/92** in core GTK widget/controller tests and 0 failures. Both new regressions for retiring stale card result on consent and parallel/unrelated/terminal arrivals printed `ok`; exact job `120893552998`. [Preflight 40101208122](https://github.com/morozhenko-apps/rquickshare/actions/runs/40101208122) Core stable `790/790`, two integrations `4/4` each, Rust format, Core Clippy, frontend **SUCCESS**. At this checkpoint Tauri Clippy `120893731534` still **IN PROGRESS**: source exact 5/6 successes, **do not infer full final gate** until that job terminates. No updated KDE package installed from this source; physical screenshot remains pre-fix repro.
 
 Next: verify terminal Tauri job; update the issue/backlog. Then build distinct `rquickshare-candidate-<commit>` local debug package, package checksum+contents, graceful idle replacement with preserved rollback .deb and **verify installed executable hashes** after reinvocation. The package version may still be `0.9.0-1.debug`; directory name + SHA and binary comparison, not dpkg version alone, establish freshness. Do not touch `master`, public `native/v0.9.0`, APT or R2.
+
+
+## 2026-10-24 FINAL exact-source CI (supersedes earlier 5/6)
+
+**Production+test source `2de1bb70d7b864e3faae849891176d510f678e35` — ALL SIX checks terminal SUCCESS.**
+
+- [Preflight 40101208122](https://github.com/morozhenko-apps/rquickshare/actions/runs/40101208122): Rust format `120893731492`, Core tests `120893731359`, Core Clippy `120893731514`, Tauri Clippy + Desktop Rust tests `120893731534`, frontend `120893731585` all completed success.
+- [Native GTK 40101207886](https://github.com/morozhenko-apps/rquickshare/actions/runs/40101207886): `120893552998` completed success; GTK 10/10 auxiliary + 92/92 unit/widget/controller assertions, including the **two new Results regression methods individually `ok`**.
+- Core `790 passed, 0 failed, 0 ignored, 8 filtered`; 4/4 + 4/4 integration. The eight filtered race-sensitive tests are not marked as executed. Mode B full 10×, mutation engine and physical user tests have **not** been executed on this change.
+- Rebuilding/installing the package on operator KDE is still OPEN; the currently shown MP4 screenshot predates the #20 fix. Old/rollback installed `0.9.0-1` and candidate debug package may share a version with new debug build, so **use source SHA + extracted-vs-installed executable hashes**, not dpkg version alone, before marking acceptance. No `master`, published artifacts or tag.

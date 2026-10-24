@@ -112,3 +112,13 @@ Before installing the current debug build, the operator searched only their loca
 - **#20 code change** `d886146aafd0b479eb5efad7fc44101c40090bb9` removes old completed results from compact card on new incoming nonterminal transfer, preserves History and queued result reveals. UI-only `native_desktop/src/panel/results.rs`, two regression methods. Needs exact CI terminal statuses and updated installed package on KDE before acceptance.
 - **#18 Android Failed mapping** confirmed by operator, source sends encrypted `Status::Reject`; no proven Pixel reception or timing and no speculative wire change.
 - **#21 startup policy** is separate from actual mDNS discovery and from Receive 60s UI. New-install default is Visible; stored temporary can restart a 60s window. Needs owner decision to preserve saved intentional Visible and make temporary truly one-shot. No source/settings modification yet.
+
+
+## 2026-10-24 FINAL exact-source CI (supersedes earlier 5/6)
+
+**Production+test source `2de1bb70d7b864e3faae849891176d510f678e35` — ALL SIX checks terminal SUCCESS.**
+
+- [Preflight 40101208122](https://github.com/morozhenko-apps/rquickshare/actions/runs/40101208122): Rust format `120893731492`, Core tests `120893731359`, Core Clippy `120893731514`, Tauri Clippy + Desktop Rust tests `120893731534`, frontend `120893731585` all completed success.
+- [Native GTK 40101207886](https://github.com/morozhenko-apps/rquickshare/actions/runs/40101207886): `120893552998` completed success; GTK 10/10 auxiliary + 92/92 unit/widget/controller assertions, including the **two new Results regression methods individually `ok`**.
+- Core `790 passed, 0 failed, 0 ignored, 8 filtered`; 4/4 + 4/4 integration. The eight filtered race-sensitive tests are not marked as executed. Mode B full 10×, mutation engine and physical user tests have **not** been executed on this change.
+- Rebuilding/installing the package on operator KDE is still OPEN; the currently shown MP4 screenshot predates the #20 fix. Old/rollback installed `0.9.0-1` and candidate debug package may share a version with new debug build, so **use source SHA + extracted-vs-installed executable hashes**, not dpkg version alone, before marking acceptance. No `master`, published artifacts or tag.
