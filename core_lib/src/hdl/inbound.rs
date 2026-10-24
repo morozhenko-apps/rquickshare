@@ -45,6 +45,28 @@ use crate::{location_nearby_connections, sharing_nearby};
 
 type HmacSha256 = Hmac<Sha256>;
 
+// A completed Sharing REJECT must reach the sender before the transport
+// owner retires the session. Google's Nearby Share similarly closes incoming
+// rejected connections after a bounded response-delivery interval.
+const REJECTION_PEER_DRAIN_LIMIT: Duration = Duration::from_secs(2);
+
+/// After an encrypted REJECT has been flushed, keep the transport alive until
+/// the peer closes or the bounded grace interval expires. Ignore any further
+/// peer bytes: the terminal consent decision must not admit new payloads.
+/// Managed worker cancellation still interrupts this future on shutdown.
+async fn drain_rejected_peer<S: AsyncRead + Unpin>(socket: &mut S) {
+    let mut buffer = [0_u8; 512];
+    let _ = tokio::time::timeout(REJECTION_PEER_DRAIN_LIMIT, async {
+        loop {
+            match tokio::io::AsyncReadExt::read(socket, &mut buffer).await {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    })
+    .await;
+}
+
 const MAX_RECEIVED_FILENAME_BYTES: usize = 255;
 const MAX_RECEIVED_PARENT_FOLDER_BYTES: usize = 4096;
 const MAX_RECEIVED_FOLDER_DEPTH: usize = 64;
@@ -1879,6 +1901,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             sharing_nearby::connection_response_frame::Status::Reject,
         ))
         .await?;
+        // Closing the BLE/TCP worker here can race the sender's processing of
+        // the encrypted response; peer EOF or this deadline ends the drain.
+        drain_rejected_peer(&mut self.socket).await;
         Err(anyhow!(crate::errors::AppError::NotAnError))
     }
 
@@ -2415,6 +2440,109 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 #[cfg(test)]
 mod security_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn given_explicit_inbound_reject_when_peer_reads_encrypted_response_then_terminal_waits_for_peer_close(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        let (socket, peer_socket) = tokio::io::duplex(8192);
+        let (sender, _receiver) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "declined-fixture".into(), sender.clone());
+        let mut peer = InboundRequest::new(peer_socket, "sender-fixture".into(), sender);
+        request.state.state = State::WaitingForUserConsent;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+        peer.state.decrypt_key = Some(vec![0x11; 32]);
+        peer.state.recv_hmac_key = Some(vec![0x22; 32]);
+
+        let responder = tokio::spawn(async move {
+            let result = request.apply_consent(false).await;
+            (result, request.state.state)
+        });
+
+        // Read the exact framed, encrypted response on the real in-memory
+        // stream; no mock of the frame encoder or protocol parser.
+        let mut length = [0_u8; 4];
+        peer.socket.read_exact(&mut length).await.unwrap();
+        let count = u32::from_be_bytes(length) as usize;
+        assert!(count > 0 && count <= SANE_FRAME_LENGTH as usize);
+        let mut bytes = vec![0_u8; count];
+        peer.socket.read_exact(&mut bytes).await.unwrap();
+        let encrypted = SecureMessage::decode(bytes.as_slice()).unwrap();
+        let response = peer.decrypt_secure_message(&encrypted).await.unwrap();
+        let v1 = response.v1.unwrap();
+        assert_eq!(
+            v1.r#type(),
+            location_nearby_connections::v1_frame::FrameType::PayloadTransfer
+        );
+        let sharing = sharing_nearby::Frame::decode(
+            v1.payload_transfer
+                .unwrap()
+                .payload_chunk
+                .unwrap()
+                .body
+                .as_deref()
+                .unwrap(),
+        )
+        .unwrap();
+        let message = sharing.v1.unwrap();
+        assert_eq!(
+            message.r#type(),
+            sharing_nearby::v1_frame::FrameType::Response
+        );
+        assert_eq!(
+            message.connection_response.unwrap().status(),
+            sharing_nearby::connection_response_frame::Status::Reject
+        );
+        // The actual response is visible, but closing was not yet initiated:
+        // no immediate EOF is allowed to race the sender's UI decision.
+        assert!(!responder.is_finished());
+        drop(peer);
+
+        let (result, state) = tokio::time::timeout(Duration::from_millis(300), responder)
+            .await
+            .expect("rejection did not retire promptly after remote close")
+            .unwrap();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .downcast_ref::<crate::errors::AppError>()
+            .is_some());
+        assert_eq!(state, State::Rejected);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn given_silent_or_chatty_peer_after_reject_when_grace_deadline_expires_then_drain_is_bounded(
+    ) {
+        use tokio::io::AsyncWriteExt;
+
+        let (mut local, mut peer) = tokio::io::duplex(128);
+        let draining = tokio::spawn(async move {
+            drain_rejected_peer(&mut local).await;
+        });
+        tokio::task::yield_now().await;
+        assert!(!draining.is_finished(), "must retain socket during grace");
+
+        peer.write_all(b"late post-rejection bytes").await.unwrap();
+        tokio::task::yield_now().await;
+        assert!(!draining.is_finished(), "unexpected bytes must not end grace");
+        tokio::time::advance(Duration::from_secs(2)).await;
+        draining.await.unwrap();
+        // The first drain is bounded even while the peer stays connected.
+        drop(peer);
+
+        let (mut local, peer) = tokio::io::duplex(32);
+        let draining = tokio::spawn(async move {
+            drain_rejected_peer(&mut local).await;
+        });
+        tokio::task::yield_now().await;
+        assert!(!draining.is_finished());
+        drop(peer);
+        // EOF retires immediately without waiting for a wall-clock delay.
+        draining.await.unwrap();
+    }
 
     #[tokio::test]
     async fn given_interrupted_frame_header_when_control_is_handled_then_inbound_resumes_exactly() {
