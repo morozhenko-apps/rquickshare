@@ -29,7 +29,7 @@ Plausible observed-path contributors: (1) plaintext exact ID used as admission c
 | `InboundRequest::do_bandwidth_upgrade`, subsequent secure BLE fallback | P0 | full secure-session integration | OPEN: new secure owner gate is not designed/approved; no falsified coverage |
 | External real Quick Share interoperability | P0 | physical | OPEN, independent acceptance |
 
-Planned **one table-driven test method with two adversarial cases**, deliberately ignored until #8 architecture is implemented, asserting original sender is not fulfilled, registration still pending, then legitimate TCP introduction would route. No field-value heuristics from claimed endpoint strings can decide legitimate vs attacker; this test exposes the missing authenticated proof, rather than offering a matching-string bypass.
+Planned **two independently named ignored tests** sharing one loopback fixture, with exact-ID and previous-ID adversarial inputs. They assert the original sender was not fulfilled and the registration remains pending. The ability of a legitimate authenticated TCP session to complete will require a separate fixture after the Mode A authenticated admission contract is implemented. No field-value heuristics from claimed endpoint strings can decide legitimate vs attacker; this test exposes the missing authenticated proof, rather than offering a matching-string bypass.
 
 ## Stage 5: Positive / N1–N12 (each cell explicit)
 
@@ -43,14 +43,14 @@ Question-mark cells above are explicitly `planned` and are not counted as achiev
 ## Stage 6/7/8 interactions, estimation and coverage map
 
 - Interactions: current-ID vs previous-ID spoof × pending single BLE owner; forged claim arrives before legitimate connection; malicious socket vs byte-preserved candidate; cancelled/late claimed route; replay/new generation. Only one pair of direct spoof scenarios is implemented as a disabled, expected-red **oracle**, not claimed as active P0 protection.
-- One new test method, two table-driven negative cases, no production refactor, zero stable behavior changes. Coverage improvement is **diagnostic**, not measured line/branch coverage. `manager.rs` current/alias unsafe branch has a fail-closed expectation in source; actual passing security branch coverage is **0** until Mode A. `hdl/bwu.rs` registration/replay/concurrency existing tests remain; `hdl/inbound.rs` authenticated BWU ingress needs contract testability after decision.
+- Two independently named ignored negative cases and one shared test fixture, no production refactor, zero stable behavior changes. Coverage improvement is **diagnostic**, not measured line/branch coverage. `manager.rs` current/alias unsafe branch has a fail-closed expectation in source; actual passing security branch coverage is **0** until Mode A. `hdl/bwu.rs` registration/replay/concurrency existing tests remain; `hdl/inbound.rs` authenticated BWU ingress needs contract testability after decision.
 - Required risk delta: without actual preconsumption proof, the test should fail if `#[ignore]` is removed; **do not** rewrite it to assert a stolen route is correct or hide the P0.
 
 ## Stages 9–12 execution / mutation / completion
 
 - [x] Source scan and 5–7 causal hypotheses, user-approved limits/STOP
 - [x] Doc-first test inventory, interaction, N-matrix and per-production-file coverage
-- [ ] Add ignored, deterministic real-loopback fail-closed oracle
+- [ ] Add two ignored, deterministic real-loopback fail-closed oracles
 - [ ] Source-exact final Preflight and Native GTK; verify test compiles and remains visible as ignored, not passed
 - [ ] Mode A approved and real authenticated admission implemented
 - [ ] Re-enable and actually pass both spoof cases; real Android/Windows physical gate
