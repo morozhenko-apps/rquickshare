@@ -53,7 +53,8 @@ impl Results {
                     && !self.phases.contains_key(id)
             })
         {
-            self.visible.retain(|id| self.phases.get(id) != Some(&Phase::Rejected));
+            self.visible
+                .retain(|id| self.phases.get(id) != Some(&Phase::Rejected));
         }
         for (id, direction, phase) in rows {
             let previous = self.phases.insert(id.clone(), phase);
