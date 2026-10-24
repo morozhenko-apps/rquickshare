@@ -1,3 +1,9 @@
+## FINAL source-exact CI for bounded inbound Reject drain — 2026-10-24
+
+**Executable source `3a35097f5c0afe3140d2b52f81ebc79677faf1a9`: ALL SIX check-runs terminal SUCCESS.** [Preflight 40111072020](https://github.com/morozhenko-apps/rquickshare/actions/runs/40111072020) and [Native GTK 40111071885](https://github.com/morozhenko-apps/rquickshare/actions/runs/40111071885) were inspected independently. Core stable **795 passed, 0 failed, 0 ignored, 8 filtered**, plus 4/4 and 4/4 integration tests; both newly added rejection tests logged `ok`: real encrypted Sharing REJECT delivered/read and peer EOF before transport retirement; silent/chatty drain bounded to 2s. Rust fmt, Core Clippy, Tauri Clippy+desktop tests, frontend and GTK all **SUCCESS**. The prior source `57739042` had only one nightly rustfmt test layout failure, corrected in `3a35097f` without production changes; earlier cancelled jobs are not the final CI status.
+
+**Still NOT a Pixel fix validation:** none of this source has been built/installed/tested on the operator's Pixel/KDE. Next build fresh current `dev` after this 6/6 CI, verify SHA and rollback, reinstall only after transfers idle / tray Quit and byte compare all three extracted binaries. Physical Pixel→KDE Decline needs a new repeat test to see whether Pixel shows `Declined` consistently; also ensure KDE→Pixel Decline, manual Receive and successful sending do not regress. Do not close #18 until actual acceptance; cold discovery remains separately unmeasured. The full final release-wide Mode B (including 8 filtered race-sensitive tests and hardware scope) has not been claimed. No master/tag/R2 changes.
+
 # Pixel→KDE Decline regression: protocol response flush and bounded peer drain
 
 **Mode A — scoped transport lifecycle correction**, 2026-10-24. [#18](https://github.com/morozhenko-apps/rquickshare/issues/18), [active backlog](active-backlog.md), [native hardware acceptance](native-current-source-physical-acceptance-2026-10-24.md).
@@ -45,6 +51,6 @@ Per-production-file coverage: `core_lib/src/hdl/inbound.rs` (real `apply_consent
 1. [x] Root cause source scan and external design reference; user physical outcomes captured.
 2. [x] Docs-first minimal plan and invariants; preserve rollback of one production+test commit.
 3. [x] Modify only inbound reject terminal path to add bounded peer drain and deterministic crypto/EOF/deadline tests: production+tests `57739042`, strict rustfmt test-only `3a35097f`; CI and Pixel recheck pending.
-4. [ ] Source-exact fmt, stable Core, two Clippy, GTK, frontend; separate flaky-sensitive tests as final global release gate. Do not busy-poll CI.
+4. [x] Source-exact fmt, stable Core, two Clippy, GTK, frontend: **6/6 SUCCESS** on `3a35097f`, Core 795/795 plus 4/4+4/4. Eight filtered/race-sensitive tests remain global final Mode B gate.
 5. [ ] User rebuilds an **uninstalled** candidate from new source only after exact CI is verified, then explicitly reinstalls with original rollback intact and all 3 executable comparisons. Pixel→KDE Decline should report `Declined` repeatedly; both directions, one accepted transfer and manual visibility remain green. Physical result required before closing the remaining part of #18.
 6. [ ] Update #18 and active backlog with source SHA/CI and hardware acceptance. #18 still includes cold/warm discovery measurement outside this regression. `master`, production tags and R2 untouched.
