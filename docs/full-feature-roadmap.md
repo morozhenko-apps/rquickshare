@@ -14,6 +14,8 @@ and no Windows/macOS native-port acceptance is implied.
 
 **New 2026-10-23 owner requirements before product 1.0.0:** [installed Pixel acceptance, device-route identity decisions and twenty-locale final feature gate](native-pixel-acceptance-identity-locales-2026-10-23.md). Finish remaining sharing/discovery/safety/UI features first. Localize the complete native client into the canonical 20 languages **last among features**, conduct a contextual audit of every locale, then run the final complete test/release gate. Focused regression tests remain mandatory during feature development. This is a 1.0.0 target, not a retroactive blocker for the approved 0.9.0 early candidate. Do not group same-name peers as trusted identity; architecture selection is pending.
 
+**BWU security backlog decision (2026-10-24):** P0 [#8](https://github.com/morozhenko-apps/rquickshare/issues/8) is **OPEN / DEFERRED, not fixed**. Owner chose **A2.2**: retain the present Google Quick Share-compatible fast BLE→TCP upgrade while researching a cryptographically authenticated TCP ownership proof. Two CI expected-panic diagnostics demonstrate the known untrusted-ID route-consumption risk; green CI is not security acceptance. Do not introduce BLE-only fallback or incompatible wire challenge without a new decision. Revisit after new protocol/hardware proof or explicit owner request, and assess this documented residual risk separately at any security/release gate. [Architecture and decision record](bwu-option-a-admission-design-2026-10-24.md).
+
 Active scope is [essential native sharing](native-essential-priorities.md).
 The user excluded previews and requested only necessary work. The comprehensive
 capability matrix below is a long-term inventory, not the active implementation

@@ -113,3 +113,10 @@ After a successful actual Pixel 6a→Ubuntu BLE→TCP physical transfer (all nin
 - This is an **engineering backlog deferral**, not a broad acceptance of residual risks for publishing a production security claim or bypassing release review. Retain a visible release/security gate that evaluates this documented risk explicitly.
 - Reopen the architectural investigation when a Google-compatible documented pre-commit proof or trustworthy hardware evidence appears, or when the user expressly authorizes a different trade-off. Google upstream behavior may change and has not been proved permanently incapable of addressing the weakness.
 - Next independent work: requested native GTK Devices attention/focus and incoming counter, issue #13. Docs and executable commits remain separate.
+
+
+## Updated owner decision — 2026-10-24: defer under A2.2
+
+This supersedes the *pending A2.1-vs-A2.2 decision* but not the security invariants. The owner selected **A2.2**: continue current interoperable Google BWU at existing speed, defer implementation of authenticated pre-consumption TCP ownership until a compatible proof is established. The broader, previously approved Option A remains the future architecture. Keep #8 **OPEN / DEFERRED / NOT FIXED** in the backlog; do not change wire messages, BWU routing, or Linux package as part of this decision.
+
+Known risk is route-consumption/upgrade denial by a falsely claimed plaintext current or previous endpoint ID; this is **not** proven file decryption. The two `should_panic` loopback sentinels now execute in CI and intentionally reproduce the vulnerability; **783 passed/0 ignored** at source `6974da5e` means diagnostic execution, not secure admission. Revisit if documented Google-compatible on-TCP session binding emerges, trusted hardware traces support it, or the owner changes the compatibility policy. An eventual release still needs a **separate visible security review**; this backlog deferral alone does not authorize claiming P0 resolved or security acceptance. Details: [Option A decision and A2.2](bwu-option-a-admission-design-2026-10-24.md).

@@ -77,3 +77,12 @@ Final executable source SHA: `6974da5e9f0453a86395acd7c1cce088c01f1313`.
 - Neither authenticated TCP candidate staging nor route-owner proof was added to the executable. A2 **STOP** and the user-facing compatibility decision remain pending. Tests alone cannot close P0 #8.
 
 This closes only the A1 reproducibility/CI repair. Global Mode B Stage 12 and hardware Google Android/Windows acceptance remain unresolved.
+
+
+## Owner decision — 2026-10-24: A2.2 selected, BWU remediation deferred to backlog
+
+**Decision: A2.2.** Preserve the existing Google Quick Share-compatible BLE→TCP bandwidth upgrade and its current fast-transfer behavior while a genuinely compatible cryptographic proof on the new TCP socket is researched. Do **not** switch Google peers to BLE-only fallback, invent a proprietary mandatory challenge, or substitute IP/name/endpoint-ID matching for authentication. The previously approved high-level **Option A (two-phase authenticated candidate admission)** remains the **future target**, not a current implementation.
+
+**Status: P0 #8 OPEN / DEFERRED / NOT FIXED.** This is a prioritization and compatibility decision, **not** evidence that the observed unauthenticated route-consumption risk is resolved, not approval to mark the release fully secure, and not a waiver of a future security/release review. Existing two expected-panic tests reproduce the known failure; they must not be reported as passing security controls. Normal functionality and existing test gates remain unchanged.
+
+**Reopen criteria:** authoritative Google Nearby protocol update, reproducible redacted Pixel/Windows protocol trace showing a pre-commit cryptographic TCP binding, or explicit owner request to revisit the throughput vs security trade-off. Future Mode A work must require TCP-socket-specific proof, authenticated ownership commit and retry/rollback tests, and Android/Windows compatibility acceptance. Continue unrelated backlog tasks; localization remains the last feature before the final 1.0.0 gate. GitHub issue #8 is the canonical task tracker.
