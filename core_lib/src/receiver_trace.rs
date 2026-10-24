@@ -150,7 +150,8 @@ mod startup_timeline_contract_tests {
     use super::{line, Event};
 
     #[test]
-    fn given_cold_discovery_markers_when_rendered_then_names_are_distinct_and_no_peer_data_is_logged() {
+    fn given_cold_discovery_markers_when_rendered_then_names_are_distinct_and_no_peer_data_is_logged(
+    ) {
         let markers = [
             (Event::RuntimeStartRequested, "runtime_start_requested"),
             (Event::RuntimeCoreReady, "runtime_core_ready"),
