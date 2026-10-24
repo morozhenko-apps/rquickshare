@@ -1,3 +1,20 @@
+## 2026-10-24 installed diagnostic: Pixel Declined 3/3; correlated frame-stage evidence
+
+The operator supplied a full local build-and-reinstall transcript and filtered, privacy-safe daemon trace (support artifact **Pasted text(10).txt**, October 24). Build from **dev `29ce6d3db1e1df037da9dbdbccf7613505236a97`**, containing executable trace changes `afce867644baab8e4f5e9ffa66e70b9a27b09ff9` and docs-only follow-ups. The operator's preflight script checked **all 6** source-exact GitHub check-runs SUCCESS (independently verified now: [Preflight 40115424146](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424146), [Native GTK 40115424114](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424114)). Core stable: **796 passed, 0 failed, 8 filtered**, 4/4 and 4/4 integration; GTK SUCCESS. Local build/embedded `.deb` verifier and independently checked package SHA-256 **OK**. Original rollback `0.9.0-1` SHA **OK**. `apt install --reinstall` completed with 0 removals; version `0.9.0-1.debug`; **all three installed ELF executables `cmp` MATCH** extracted local diagnostic `.deb`. The `_apt` permission warning is nonfatal.
+
+**Owner explicitly reports all three Pixel→KDE→Decline attempts now display `Declined` on Pixel (3/3 PASS).** The earlier build with essentially the same wire/drain logic had **3/3 Failed**, so this is **not enough to claim permanent/causal repair**. The new build's code is principally fixed-stage instrumentation and enhanced test proof, **not a protocol schema or timeout change**. Do not credit tracing itself as a valid protocol fix or claim GMS acknowledged a frame.
+
+Filtered `RQUICKSHARE_RECEIVER_TRACE=1` output reported for each observed consent:
+| Attempt | reject_consent | reject_write_start | reject_payload_flushed | reject_last_chunk_flushed | reject_peer_eof | Last chunk → EOF |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 34383 ms | 34383 | 34384 | 34385 | 34792 | **407 ms** |
+| 2 | 135685 ms | 135685 | 135686 | 135686 | 136130 | **444 ms** |
+| 3 | 140736 ms | 140736 | 140737 | 140738 | 141213 | **475 ms** |
+
+There are **no** `reject_write_failed`, `reject_peer_read_error` or `reject_drain_deadline` markers in these 3 filtered attempts. The daemon locally flushed **both** encrypted Sharing Response payload and LAST_CHUNK. The peer then signaled EOF approximately 0.4–0.5 s later. Sender peer EOF **does not independently prove Google Android decrypted/accepted either message**; the UI's `Declined` is separate operator observation. The operator ran `systemctl --user unset-environment RQUICKSHARE_RECEIVER_TRACE` after collecting diagnostics; **no permanent debugging environment is requested**. Settings, files, history and protocol unchanged.
+
+**Disposition:** keep [#18](https://github.com/morozhenko-apps/rquickshare/issues/18) OPEN for intermittent reproducibility and cold/warm discovery measurement. With 3 prior failures and 3 latest successes, a high-confidence reliability/causal gate needs repeat cold-start tests across daemon restarts and ideally a matched FAIL trace (if it recurs); check especially partial/absent `reject_last_chunk_flushed`, unexpected `reject_drain_deadline` vs peer EOF and BWU route. Avoid adding arbitrary delays, changing Reject to Cancel or attributing unproved failure to Pixel UI. Normal Core 796/796 + GTK check gate is green, but **no release-wide 10x Mode B / 8 filtered races** yet. No master/tag/APT/R2 operations.
+
 ## Current source-exact stable verification — 2026-10-24
 
 Executable source **`afce867644baab8e4f5e9ffa66e70b9a27b09ff9`**; final source [Preflight 40115424146](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424146) and [GTK 40115424114](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424114).
