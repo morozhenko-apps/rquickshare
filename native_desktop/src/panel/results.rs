@@ -164,12 +164,20 @@ mod tests {
         );
     }
     #[test]
-    fn given_a_finished_inbound_when_another_consent_arrives_then_old_card_row_retires_but_reveal_remains()
-    {
+    fn given_a_finished_inbound_when_another_consent_arrives_then_old_card_row_retires_but_reveal_remains(
+    ) {
         let mut results = Results::default();
         observe(&mut results, 5, &[]);
-        observe(&mut results, 5, &[("old", Direction::Inbound, Phase::Receiving)]);
-        observe(&mut results, 5, &[("old", Direction::Inbound, Phase::Finished)]);
+        observe(
+            &mut results,
+            5,
+            &[("old", Direction::Inbound, Phase::Receiving)],
+        );
+        observe(
+            &mut results,
+            5,
+            &[("old", Direction::Inbound, Phase::Finished)],
+        );
         assert!(results.visible("old"));
         assert_eq!(results.pending.len(), 1);
 
@@ -200,7 +208,11 @@ mod tests {
         assert!(!results.visible("old"));
         assert!(results.phases.contains_key("old"));
         assert_eq!(
-            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            results
+                .pending
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             vec!["old"],
             "completion reveal must not be lost when a new peer requests consent"
         );
@@ -230,7 +242,11 @@ mod tests {
         assert!(!results.visible("old"));
         assert!(results.visible("new"));
         assert_eq!(
-            results.pending.iter().map(String::as_str).collect::<Vec<_>>(),
+            results
+                .pending
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             vec!["old", "new"],
             "fresh completion is presented once without replaying the old row"
         );
@@ -241,8 +257,16 @@ mod tests {
     ) {
         let mut results = Results::default();
         observe(&mut results, 12, &[]);
-        observe(&mut results, 12, &[("a", Direction::Inbound, Phase::Receiving)]);
-        observe(&mut results, 12, &[("a", Direction::Inbound, Phase::Finished)]);
+        observe(
+            &mut results,
+            12,
+            &[("a", Direction::Inbound, Phase::Receiving)],
+        );
+        observe(
+            &mut results,
+            12,
+            &[("a", Direction::Inbound, Phase::Finished)],
+        );
         assert!(results.visible("a"));
 
         // Newly observed terminal-only records are historical and must not
