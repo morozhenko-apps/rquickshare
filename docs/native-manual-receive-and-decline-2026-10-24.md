@@ -28,3 +28,7 @@ Production map: `core_lib/src/settings.rs` (fresh install default); `core_lib/sr
 - Pixel displaying Declined after Linux Decline is **operator PASS for one direction**; outbound Pixel Decline on KDE currently **operator FAIL for card feedback** pending new UI.
 - #20 fixed source/CI and package matched earlier installed `e2304e9`, but new row-retirement physical acceptance still unconfirmed; do not auto-close.
 - Confirm exact source job SHA, physical packet/UI behavior and user-visible result after a fresh package installation. Rollback installer from `rquickshare-acceptance-0.9.0.8RY0pX` retained. No master/tag/R2.
+
+## Executable checkpoint 2026-10-24
+
+Code `17f59c767379eb2cce414833233f3e3086a872dd`: source defaults Hidden; both service startup branches use the same fail-closed `startup_core` regardless of saved mode; GTK live outbound nonterminal→Rejected shows terminal `Declined`, dismiss/retry/epoch cases tested. New Rust tests include three saved modes with preserved port/root, default/missing settings and two GTK transition matrices. Test-only nightly rustfmt changes `74ed2dac645c12b71435fff750e3b33ca721c78c` (Core) and `e47e6a9c7a1d37d095b2c8fa6b2627048200aa6c` (GTK). First exact-source jobs failed *formatting only* as prescribed; **latest six-check suite was still in progress at docs checkpoint**. Do not call source green until each terminal conclusion is read. No owner installation of new source and no manual 60-second re-test yet.
