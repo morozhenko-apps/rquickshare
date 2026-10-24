@@ -283,7 +283,7 @@ mod lifecycle_tests {
             "fixture.local.",
             "192.0.2.20",
             4242,
-            &[("n", encoded)],
+            &[("n", encoded)][..],
         )
         .unwrap()
     }
@@ -379,7 +379,7 @@ mod lifecycle_tests {
             "fixture.local.",
             "192.0.2.20",
             4242,
-            &[("other", "x")],
+            &[("other", "x")][..],
         )
         .unwrap();
         let result = run_fixture(
