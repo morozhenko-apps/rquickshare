@@ -4,3 +4,19 @@ Cargo.lock
 gen
 __pycache__/
 .wrangler/
+
+# Local editor and assistant state; retain shared Rust project discovery.
+/.vscode/*
+!/.vscode/settings.json
+/.idea/
+/.cursor/
+/.claude/
+/.codex/
+/.gemini/
+/.aider*
+/.github/agents/
+/CLAUDE.md
+/GEMINI.md
+/*.code-workspace
+.DS_Store
+Thumbs.db
