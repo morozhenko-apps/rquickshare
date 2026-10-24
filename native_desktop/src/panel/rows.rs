@@ -86,6 +86,11 @@ fn card_transfer_visible(
 }
 fn payload_label(details: &TransferDetails) -> String {
     use rqs_lib::sessions::details::PayloadKind;
+    match details.status {
+        DetailsStatus::Unavailable => return "Waiting for details".into(),
+        DetailsStatus::Unsupported => return "Unsupported content".into(),
+        DetailsStatus::Ready => {}
+    }
     match details.kind {
         PayloadKind::Files if details.files.len() == 1 => details.files[0]
             .name
@@ -99,6 +104,14 @@ fn payload_label(details: &TransferDetails) -> String {
         PayloadKind::Files => format!("{} files", details.files.len()),
         PayloadKind::Text => "Text".into(),
         PayloadKind::Url => "Link".into(),
+    }
+}
+/// Missing metadata is an in-progress handshake, not an anonymous file.
+fn peer_title<'a>(name: &'a str, status: DetailsStatus) -> &'a str {
+    if name.is_empty() && status == DetailsStatus::Unavailable {
+        "Connecting…"
+    } else {
+        name
     }
 }
 fn transferring(phase: Phase) -> bool {
@@ -419,10 +432,13 @@ impl Panel {
                 self.transfer_card(transfer, ready, true)
             };
             let root = transfer_row(
-                transfer
-                    .recipient
-                    .as_deref()
-                    .unwrap_or(&transfer.details.sender),
+                peer_title(
+                    transfer
+                        .recipient
+                        .as_deref()
+                        .unwrap_or(&transfer.details.sender),
+                    transfer.details.status,
+                ),
                 transfer.details.device,
                 transfer.phase,
                 &details,
@@ -776,6 +792,58 @@ impl Panel {
             arrange(&self.box_widget(page), &desired);
         }
         rows.entries.retain(|key, _| used.contains(key));
+    }
+}
+
+#[cfg(test)]
+mod metadata_label_tests {
+    use super::*;
+    use rqs_lib::sessions::details::{FileDetail, PayloadKind};
+
+    #[test]
+    fn given_missing_or_unsupported_metadata_when_card_is_rendered_then_no_fake_zero_files() {
+        let mut details = TransferDetails::default();
+        assert_eq!(details.status, DetailsStatus::Unavailable);
+        assert_eq!(payload_label(&details), "Waiting for details");
+        assert_eq!(peer_title("", details.status), "Connecting…");
+        assert_eq!(peer_title("Sender", details.status), "Sender");
+
+        details.status = DetailsStatus::Unsupported;
+        assert_eq!(payload_label(&details), "Unsupported content");
+        assert_eq!(peer_title("", details.status), "");
+        assert_eq!(peer_title("Sender", details.status), "Sender");
+    }
+
+    #[test]
+    fn given_metadata_becomes_ready_when_rendering_then_actual_payload_kind_and_count_appear() {
+        let mut details = TransferDetails {
+            status: DetailsStatus::Ready,
+            ..TransferDetails::default()
+        };
+        details.files = vec![FileDetail {
+            name: "photo.jpg".into(),
+            size: 8,
+        }]
+        .into();
+        assert_eq!(payload_label(&details), "JPG");
+        details.files = vec![
+            FileDetail {
+                name: "a.txt".into(),
+                size: 1,
+            },
+            FileDetail {
+                name: "b.txt".into(),
+                size: 2,
+            },
+        ]
+        .into();
+        assert_eq!(payload_label(&details), "2 files");
+        details.kind = PayloadKind::Text;
+        details.files = std::sync::Arc::default();
+        assert_eq!(payload_label(&details), "Text");
+        details.kind = PayloadKind::Url;
+        assert_eq!(payload_label(&details), "Link");
+        assert_eq!(peer_title("", details.status), "");
     }
 }
 
