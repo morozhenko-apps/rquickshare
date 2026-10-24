@@ -30,7 +30,7 @@ Risks: hiding a completed row when new unrelated inbound request arrives; accept
 ## Completion gate
 
 1. [x] Physical observation and root-cause / alternative hypotheses documented, issue #20 opened. Android `Failed` on Linux Decline belongs to #18 separately: `inbound.rs::apply_consent(false)` already sends encrypted Sharing `ConnectionResponse::Reject`, and updates Linux `Rejected`. Google Android's UI mapping is unproven without a protocol trace; do not send false `Cancel`/failure codes by guess.
-2. [ ] Source change limited to new nonterminal inbound ID admission and tests in `Results`; one code commit separate from this docs plan.
+2. [x] Source change limited to new nonterminal inbound ID admission and tests in `Results`; source commit `d886146aafd0b479eb5efad7fc44101c40090bb9`, one code commit separate from docs plan. CI pending at checkpoint.
 3. [ ] Source-exact nightly formatting, GTK strict Clippy/test and stable preflight final terminal results; full Mode B later.
 4. [ ] Operator installs candidate after existing debug package with controlled rollback, visually verifies new consent does not show prior Completed row, but History retains original. Old installed package cannot prove new fix; do not close #20 without physical updated version.
 5. [ ] Backlog + issue completion evidence update, no `master` promotion, tag, cloud or auto-install.
