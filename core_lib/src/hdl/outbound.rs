@@ -1583,8 +1583,16 @@ impl OutboundRequest {
                     }
                 }
             }
-            sharing_nearby::connection_response_frame::Status::Reject
-            | sharing_nearby::connection_response_frame::Status::NotEnoughSpace
+            sharing_nearby::connection_response_frame::Status::Reject => {
+                // An explicit peer refusal is a terminal user decision, not
+                // an I/O disconnect. Preserve it through session retirement
+                // so the native sender can display "Declined".
+                self.update_state(|state| state.state = State::Rejected, true)
+                    .await;
+                self.disconnection().await?;
+                return Err(anyhow!(crate::errors::AppError::NotAnError));
+            }
+            sharing_nearby::connection_response_frame::Status::NotEnoughSpace
             | sharing_nearby::connection_response_frame::Status::UnsupportedAttachmentType
             | sharing_nearby::connection_response_frame::Status::TimedOut => {
                 warn!("Cannot process: consent denied: {:?}", consent_status);
@@ -3374,9 +3382,32 @@ mod security_tests {
     }
 
     #[tokio::test]
-    async fn denied_consent_disconnects_cleanly() {
+    async fn given_explicit_remote_reject_when_processing_outbound_consent_then_state_is_declined_and_wire_disconnect_is_clean(
+    ) {
+        let (mut request, mut peer) = test_request(vec![]);
+        let result = request
+            .process_consent(&consent_frame(
+                sharing_nearby::connection_response_frame::Status::Reject,
+            ))
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(request.state.state, State::Rejected);
+        assert!(crate::sessions::terminal(&request.state.state));
+        let disconnect = read_offline_frame(&mut peer).await;
+        assert_eq!(
+            disconnect.v1.unwrap().r#type(),
+            location_nearby_connections::v1_frame::FrameType::Disconnection
+        );
+        // A real peer Reject must not be rewritten as network failure.
+        request.record_termination(State::Disconnected);
+        assert_eq!(request.state.state, State::Rejected);
+    }
+
+    #[tokio::test]
+    async fn given_non_reject_consent_failures_when_processed_then_state_is_disconnected_and_wire_closes(
+    ) {
         for status in [
-            sharing_nearby::connection_response_frame::Status::Reject,
             sharing_nearby::connection_response_frame::Status::NotEnoughSpace,
             sharing_nearby::connection_response_frame::Status::UnsupportedAttachmentType,
             sharing_nearby::connection_response_frame::Status::TimedOut,
