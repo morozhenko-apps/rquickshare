@@ -4966,8 +4966,8 @@ mod inbound_file_progress_trace_tests {
     }
 
     #[test]
-    fn given_cumulative_multifile_progress_when_crossing_exact_boundaries_then_one_event_per_stage()
-    {
+    fn given_cumulative_multifile_progress_when_crossing_exact_boundaries_then_one_event_per_stage(
+    ) {
         let mut trace = InboundFileProgressTrace::default();
         assert_eq!(
             record(&mut trace, 1, 100),
