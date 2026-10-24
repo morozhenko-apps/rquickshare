@@ -54,17 +54,29 @@ const REJECTION_PEER_DRAIN_LIMIT: Duration = Duration::from_secs(2);
 /// the peer closes or the bounded grace interval expires. Ignore any further
 /// peer bytes: the terminal consent decision must not admit new payloads.
 /// Managed worker cancellation still interrupts this future on shutdown.
-async fn drain_rejected_peer<S: AsyncRead + Unpin>(socket: &mut S) {
+#[derive(Debug, PartialEq, Eq)]
+enum RejectionDrainOutcome {
+    PeerEof,
+    PeerReadError,
+    Deadline,
+}
+
+async fn drain_rejected_peer<S: AsyncRead + Unpin>(socket: &mut S) -> RejectionDrainOutcome {
     let mut buffer = [0_u8; 512];
-    let _ = tokio::time::timeout(REJECTION_PEER_DRAIN_LIMIT, async {
+    match tokio::time::timeout(REJECTION_PEER_DRAIN_LIMIT, async {
         loop {
             match tokio::io::AsyncReadExt::read(socket, &mut buffer).await {
-                Ok(0) | Err(_) => break,
+                Ok(0) => break RejectionDrainOutcome::PeerEof,
+                Err(_) => break RejectionDrainOutcome::PeerReadError,
                 Ok(_) => {}
             }
         }
     })
-    .await;
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => RejectionDrainOutcome::Deadline,
+    }
 }
 
 const MAX_RECEIVED_FILENAME_BYTES: usize = 255;
@@ -1895,6 +1907,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         if accept {
             return self.accept_transfer().await;
         }
+        crate::receiver_trace::event(crate::receiver_trace::Event::RejectConsent);
         self.update_state(|state| state.state = State::Rejected, true)
             .await;
         self.reject_transfer(Some(
@@ -1903,7 +1916,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         .await?;
         // Closing the BLE/TCP worker here can race the sender's processing of
         // the encrypted response; peer EOF or this deadline ends the drain.
-        drain_rejected_peer(&mut self.socket).await;
+        let result = drain_rejected_peer(&mut self.socket).await;
+        let marker = match result {
+            RejectionDrainOutcome::PeerEof => crate::receiver_trace::Event::RejectPeerEof,
+            RejectionDrainOutcome::PeerReadError => {
+                crate::receiver_trace::Event::RejectPeerReadError
+            }
+            RejectionDrainOutcome::Deadline => crate::receiver_trace::Event::RejectDrainDeadline,
+        };
+        crate::receiver_trace::event(marker);
         Err(anyhow!(crate::errors::AppError::NotAnError))
     }
 
@@ -1929,7 +1950,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }),
         };
 
-        self.send_encrypted_frame(&frame).await?;
+        self.send_encrypted_frame_with_trace(
+            &frame,
+            sreason == sharing_nearby::connection_response_frame::Status::Reject,
+        )
+        .await?;
 
         Ok(())
     }
@@ -2042,6 +2067,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         &mut self,
         frame: &sharing_nearby::Frame,
     ) -> Result<(), anyhow::Error> {
+        self.send_encrypted_frame_with_trace(frame, false).await
+    }
+
+    /// Trace both encrypted payload chunks only for a deliberate REJECT.
+    /// All other Sharing frames retain their existing wire behavior.
+    async fn send_encrypted_frame_with_trace(
+        &mut self,
+        frame: &sharing_nearby::Frame,
+        trace_reject: bool,
+    ) -> Result<(), anyhow::Error> {
+        if trace_reject {
+            crate::receiver_trace::event(crate::receiver_trace::Event::RejectWriteStart);
+        }
         let frame_data = frame.encode_to_vec();
         let body_size = frame_data.len();
 
@@ -2075,8 +2113,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }),
         };
 
-        // Encrypt and send offline
-        self.encrypt_and_send(&wrapper).await?;
+        // The first flush is not a complete response until LAST_CHUNK arrives.
+        if let Err(error) = self.encrypt_and_send(&wrapper).await {
+            if trace_reject {
+                crate::receiver_trace::event(crate::receiver_trace::Event::RejectWriteFailed);
+            }
+            return Err(error);
+        }
+        if trace_reject {
+            crate::receiver_trace::event(crate::receiver_trace::Event::RejectPayloadFlushed);
+        }
 
         // Send lastChunk
         let transfer = PayloadTransferFrame {
@@ -2101,8 +2147,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }),
         };
 
-        // Encrypt and send offline
-        self.encrypt_and_send(&wrapper).await?;
+        if let Err(error) = self.encrypt_and_send(&wrapper).await {
+            if trace_reject {
+                crate::receiver_trace::event(crate::receiver_trace::Event::RejectWriteFailed);
+            }
+            return Err(error);
+        }
+        if trace_reject {
+            crate::receiver_trace::event(crate::receiver_trace::Event::RejectLastChunkFlushed);
+        }
 
         Ok(())
     }
@@ -2477,16 +2530,14 @@ mod security_tests {
             v1.r#type(),
             location_nearby_connections::v1_frame::FrameType::PayloadTransfer
         );
-        let sharing = sharing_nearby::Frame::decode(
-            v1.payload_transfer
-                .unwrap()
-                .payload_chunk
-                .unwrap()
-                .body
-                .as_deref()
-                .unwrap(),
-        )
-        .unwrap();
+        let first = v1.payload_transfer.unwrap();
+        let header = first.payload_header.unwrap();
+        let first_chunk = first.payload_chunk.unwrap();
+        assert_eq!(first_chunk.offset(), 0);
+        assert_eq!(first_chunk.flags(), 0);
+        let sharing =
+            sharing_nearby::Frame::decode(first_chunk.body.as_deref().unwrap()).unwrap();
+        assert_eq!(header.total_size(), first_chunk.body().len() as i64);
         let message = sharing.v1.unwrap();
         assert_eq!(
             message.r#type(),
@@ -2496,6 +2547,25 @@ mod security_tests {
             message.connection_response.unwrap().status(),
             sharing_nearby::connection_response_frame::Status::Reject
         );
+
+        // The sender cannot process a fully completed bytes payload until
+        // it also receives the independently encrypted LAST_CHUNK frame.
+        peer.socket.read_exact(&mut length).await.unwrap();
+        let count = u32::from_be_bytes(length) as usize;
+        assert!(count > 0 && count <= SANE_FRAME_LENGTH as usize);
+        let mut bytes = vec![0_u8; count];
+        peer.socket.read_exact(&mut bytes).await.unwrap();
+        let last = SecureMessage::decode(bytes.as_slice()).unwrap();
+        let end = peer.decrypt_secure_message(&last).await.unwrap();
+        let transfer = end.v1.unwrap().payload_transfer.unwrap();
+        let last_header = transfer.payload_header.unwrap();
+        let last_chunk = transfer.payload_chunk.unwrap();
+        assert_eq!(last_header.id, header.id);
+        assert_eq!(last_header.total_size, header.total_size);
+        assert_eq!(last_chunk.offset(), header.total_size());
+        assert_eq!(last_chunk.flags(), 1);
+        assert!(last_chunk.body().is_empty());
+
         // The actual response is visible, but closing was not yet initiated:
         // no immediate EOF is allowed to race the sender's UI decision.
         assert!(!responder.is_finished());
@@ -2532,7 +2602,7 @@ mod security_tests {
             "unexpected bytes must not end grace"
         );
         tokio::time::advance(Duration::from_secs(2)).await;
-        draining.await.unwrap();
+        assert_eq!(draining.await.unwrap(), RejectionDrainOutcome::Deadline);
         // The first drain is bounded even while the peer stays connected.
         drop(peer);
 
@@ -2544,7 +2614,7 @@ mod security_tests {
         assert!(!draining.is_finished());
         drop(peer);
         // EOF retires immediately without waiting for a wall-clock delay.
-        draining.await.unwrap();
+        assert_eq!(draining.await.unwrap(), RejectionDrainOutcome::PeerEof);
     }
 
     #[tokio::test]

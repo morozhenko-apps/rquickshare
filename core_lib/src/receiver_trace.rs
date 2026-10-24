@@ -33,6 +33,14 @@ pub enum Event {
     BwuPriorDrainStarted,
     BwuPriorSafeToClose,
     BwuTcpSwitched,
+    RejectConsent,
+    RejectWriteStart,
+    RejectPayloadFlushed,
+    RejectLastChunkFlushed,
+    RejectWriteFailed,
+    RejectPeerEof,
+    RejectPeerReadError,
+    RejectDrainDeadline,
 }
 impl Event {
     fn name(self) -> &'static str {
@@ -68,6 +76,14 @@ impl Event {
             Self::BwuPriorDrainStarted => "bwu_prior_drain_started",
             Self::BwuPriorSafeToClose => "bwu_prior_safe_to_close",
             Self::BwuTcpSwitched => "bwu_tcp_switched",
+            Self::RejectConsent => "reject_consent",
+            Self::RejectWriteStart => "reject_write_start",
+            Self::RejectPayloadFlushed => "reject_payload_flushed",
+            Self::RejectLastChunkFlushed => "reject_last_chunk_flushed",
+            Self::RejectWriteFailed => "reject_write_failed",
+            Self::RejectPeerEof => "reject_peer_eof",
+            Self::RejectPeerReadError => "reject_peer_read_error",
+            Self::RejectDrainDeadline => "reject_drain_deadline",
         }
     }
 }
@@ -138,6 +154,14 @@ mod tests {
             Event::BwuPriorDrainStarted,
             Event::BwuPriorSafeToClose,
             Event::BwuTcpSwitched,
+            Event::RejectConsent,
+            Event::RejectWriteStart,
+            Event::RejectPayloadFlushed,
+            Event::RejectLastChunkFlushed,
+            Event::RejectWriteFailed,
+            Event::RejectPeerEof,
+            Event::RejectPeerReadError,
+            Event::RejectDrainDeadline,
         ] {
             for elapsed in [0, 1, u128::MAX] {
                 let message = line(stage, elapsed);
@@ -179,5 +203,28 @@ mod startup_timeline_contract_tests {
             );
         }
         assert_eq!(unique.len(), 7);
+    }
+
+    #[test]
+    fn given_decline_trace_markers_when_rendered_then_only_known_stages_and_monotonic_numbers_appear(
+    ) {
+        let cases = [
+            (Event::RejectConsent, "reject_consent"),
+            (Event::RejectWriteStart, "reject_write_start"),
+            (Event::RejectPayloadFlushed, "reject_payload_flushed"),
+            (Event::RejectLastChunkFlushed, "reject_last_chunk_flushed"),
+            (Event::RejectWriteFailed, "reject_write_failed"),
+            (Event::RejectPeerEof, "reject_peer_eof"),
+            (Event::RejectPeerReadError, "reject_peer_read_error"),
+            (Event::RejectDrainDeadline, "reject_drain_deadline"),
+        ];
+        let mut unique = std::collections::BTreeSet::new();
+        for (event, name) in cases {
+            assert!(unique.insert(name));
+            let line = line(event, 42);
+            assert_eq!(line, format!("rqs-receiver event={name} elapsed_ms=42"));
+            assert_eq!(line.split_whitespace().count(), 3);
+        }
+        assert_eq!(unique.len(), 8);
     }
 }
