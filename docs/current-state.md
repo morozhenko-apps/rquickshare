@@ -1,5 +1,7 @@
 # Current implementation and continuation state
 
+> **Historical evidence journal, not the live backlog.** For authoritative up-to-date priorities, issue status, CI checkpoint, security decisions and release gates, use [Active backlog and release handoff](active-backlog.md). Dated entries below represent earlier checkpoints and are intentionally retained; do not treat older pending/failed CI text as the current outcome.
+
 ## 2026-10-19 — MODE A discovery generation restart (user chose Option B)
 
 The user explicitly approved **Option B** for discovery lifecycle: cancel and join the previous worker + mDNS SDK shutdown before publishing a new discovery generation. See [documented decision, branch map, rollback and regression strategy](mode-b-p0-discovery-lifecycle-2026-10-19.md) and [P0 issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12). This is an authorized bounded production behavior change, not MODE B test-only work.

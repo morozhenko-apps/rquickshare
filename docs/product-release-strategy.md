@@ -1,5 +1,7 @@
 # rQuickShare product identity, platform direction and release distribution
 
+> **Current release readiness, native tag namespace and blockers:** [Active backlog and release handoff](active-backlog.md) and [issue #14](https://github.com/morozhenko-apps/rquickshare/issues/14). Dated `v0.9.0` suggestions elsewhere in this journal are **superseded** by the user-selected native tag `native/v0.9.0`; do not create or replace the upstream `v0.9.0` tag. No production publish is authorized by the strategy document.
+
 Decision: 2026-10-18. Owner-approved product direction; documentation only.
 This contract supersedes earlier Linux-only product-positioning language. It does
 not supersede dated implementation evidence, user-approved short-term priorities,
