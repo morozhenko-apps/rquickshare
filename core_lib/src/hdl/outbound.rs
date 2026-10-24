@@ -3384,7 +3384,7 @@ mod security_tests {
     #[tokio::test]
     async fn given_explicit_remote_reject_when_processing_outbound_consent_then_state_is_declined_and_wire_disconnect_is_clean(
     ) {
-        let (mut request, mut peer) = test_request(vec![]);
+        let (mut request, mut peer) = test_request(vec![]).await;
         let result = request
             .process_consent(&consent_frame(
                 sharing_nearby::connection_response_frame::Status::Reject,
