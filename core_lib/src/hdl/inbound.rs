@@ -2527,7 +2527,10 @@ mod security_tests {
 
         peer.write_all(b"late post-rejection bytes").await.unwrap();
         tokio::task::yield_now().await;
-        assert!(!draining.is_finished(), "unexpected bytes must not end grace");
+        assert!(
+            !draining.is_finished(),
+            "unexpected bytes must not end grace"
+        );
         tokio::time::advance(Duration::from_secs(2)).await;
         draining.await.unwrap();
         // The first drain is bounded even while the peer stays connected.
