@@ -1952,7 +1952,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         };
 
         self.send_encrypted_frame(&frame).await?;
-        crate::receiver_trace::event(crate::receiver_trace::Event::InboundAcceptFlushed);
+        if !self.state.transferred_files.is_empty() {
+            crate::receiver_trace::event(crate::receiver_trace::Event::InboundAcceptFlushed);
+        }
 
         self.update_state(
             |e| {
