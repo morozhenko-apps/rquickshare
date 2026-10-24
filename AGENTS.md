@@ -56,7 +56,7 @@ and current independent development instead of rebuilding it as another live SSO
    `.vscode/settings.json` linking the actual Core/Tauri Cargo manifests.
    No disposable tracked model preset was found. Keep BUILD, component
    changelogs, D-Bus text inputs, preview fixtures, keys and signing recovery.
-5. [ ] Final gate: existing workflow-policy guard and native release-tag unit
+5. [x] Final gate: existing workflow-policy guard and native release-tag unit
    contracts once, source/hash/body/catalog/link/anchor/ignore checks and diff.
    No Rust/GTK/installed package/device/10x/signing/R2 gate is required for docs.
    Commit docs/config separately and normal-push dev after a fresh expected-SHA
@@ -66,3 +66,18 @@ Risk is lost provenance, stale installed/source claims or interfering with the
 active functional queue. Preserve original bytes, qualify historical candidate
 facts and record actual checks. Rollback uses inverse shared-branch commits;
 no source, device, signer, artifact, key or runtime-state restoration is needed.
+
+Final housekeeping evidence: `bash scripts/ci-check-workflow-policy.sh` exits0;
+`PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p
+test_native_release_tag.py -v` exits0, three existing tests passed once.
+External static validation exits0: 1,237 checks,591 local links, no broken links,
+650 protected original file SHA-256 values unchanged, all46 Mode B records
+preserved and135 distinct recorded commit objects verified. The1,731-line
+historical journal, original live-backlog body and all original README lines
+remain intact. Final baseline-to-HEAD whitespace check exits0; an initial index
+EOF blank-line finding was fixed before publication. No source/test assertion
+was changed and no unrelated functional gate was rerun or labelled passing.
+The pre-existing source-exact Rust format failure remains separate from these
+passing documentation checks; issue24, hardware and full release gates stay open.
+All owned commands completed; no running service/device or private artifact was
+touched. Publication is normal dev-only push; rollback uses inverse commits.
