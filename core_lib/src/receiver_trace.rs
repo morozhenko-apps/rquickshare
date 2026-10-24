@@ -155,14 +155,20 @@ mod startup_timeline_contract_tests {
         let markers = [
             (Event::RuntimeStartRequested, "runtime_start_requested"),
             (Event::RuntimeCoreReady, "runtime_core_ready"),
-            (Event::RuntimeDiscoveryWorkerReady, "runtime_discovery_worker_ready"),
+            (
+                Event::RuntimeDiscoveryWorkerReady,
+                "runtime_discovery_worker_ready",
+            ),
             (Event::MdnsBrowseStarted, "mdns_browse_started"),
             (Event::FirstMdnsRouteAdmitted, "first_mdns_route_admitted"),
         ];
         let mut unique = std::collections::BTreeSet::new();
         for (event, name) in markers {
             assert!(unique.insert(name));
-            assert_eq!(line(event, 17), format!("rqs-receiver event={name} elapsed_ms=17"));
+            assert_eq!(
+                line(event, 17),
+                format!("rqs-receiver event={name} elapsed_ms=17")
+            );
         }
         assert_eq!(unique.len(), 5);
     }
