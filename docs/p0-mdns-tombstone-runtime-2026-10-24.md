@@ -41,9 +41,17 @@ Applicability: Positive plus N1 malformed/empty, N2 0/1/128 endpoints, N3 stale/
 
 - [x] Source scan, multiple-cause analysis, fail-closed route contract and rollback.
 - [x] GitHub issue #19 and documentation-first plan.
-- [ ] Production changes and comprehensive focused tests.
+- [x] Production changes and three focused test methods committed (source plus formatting-only test correction).
 - [ ] One final source-exact Preflight (Core+Tauri+frontend/format/Clippy) and Native GTK; failed/cancelled predecessors tracked separately, not counted as tests.
 - [ ] Hardware verification: Pixel disappears from long Devices list after peer goes offline; no unintended deletion of another device; reconnect yields current route. Only then consider closing #19.
 - [ ] #9, #12, #16 and release 1.0 full matrix independently remain OPEN where their own acceptance is not met.
 
 The doc commit is intentionally independent of executable/test commits. Source and tests will not alter settings, installed KDE services, user files, R2, signing, tags or protected master.
+
+## 2026-10-24 implementation and first quality-gate evidence
+
+- Production / test source `470b1f5245714e0bcb660a3845de7e915f973db3` modifies four Core files: `hdl/mdns_discovery.rs`, `service/runtime.rs`, `service/runtime/tests.rs` and `receiver_trace.rs`. Both SDK `ServiceRemoved` and SDK-worker shutdown call a single `publish_withdrawal` contract preserving fullname/id and setting `present: Some(false)`. It omits name, IP, port and type. Unknown or duplicate events publish nothing. A successful Core retirement emits a fixed opt-in `mdns_route_retired` event; a produced tombstone emits `mdns_withdrawal_emitted` (not proof a listener consumed it).
+- Three separate test methods: mDNS cached named/unknown/duplicate withdrawal, actual NativeRuntime two identically labelled/socket-routed peers with exact tombstone and re-admission, and rejected empty-key legacy tombstone. The original stop-order test now asserts exact fullname + explicit `false` on both removed routes and blank metadata. Existing pending/queued transfer withdrawal tests remain untouched.
+- Initial Preflight [40080720223](https://github.com/morozhenko-apps/rquickshare/actions/runs/40080720223) exhibited a real **Rust format** failure with two multiline layouts in the new mDNS test, established by exact job `120833515337` log. No security behavior or assertion changes were justified. Corrected exactly as nightly rustfmt requested in test-only `b63a69f487c436abf166627946dc3cbb9477e1ab`.
+- Final-source [Preflight 40080796430](https://github.com/morozhenko-apps/rquickshare/actions/runs/40080796430) and [Native GTK 40080796275](https://github.com/morozhenko-apps/rquickshare/actions/runs/40080796275) were **IN PROGRESS** at the source checkpoint. No success claim until an exact-source completed job and relevant test names can be verified.
+- No installed-package change and no hardware Pixel/KDE acceptance. #19 remains OPEN, as do #9/#16; one route removal is not proof of authenticated identity equivalence.
