@@ -64,3 +64,16 @@ The approved Option A is retained. The remaining question is what to do with **p
 A speculative mandatory challenge/proprietary packet before CLIENT_INTRODUCTION_ACK is **not** presented as a sound third option: available upstream frames contain no such commitment, so claiming Google compatibility without a cooperating peer would be technically false. Likewise, choosing source-IP equality or waiting for a BLE-only encrypted message is not proof the candidate TCP socket belongs to that session.
 
 The preferred decision is **A2.1** if secure staged BWU must ship before there is an interoperable proof mechanism. If full-speed Google Quick Share BWU is a non-negotiable 1.0.0 invariant, choose **A2.2** and leave the security gate formally OPEN while a genuine protocol-level solution is researched. Explicit owner decision is required because this changes the throughput/backward-compatibility contract independently from selecting Option A.
+
+
+## 6. A1 source-exact CI completion
+
+Final executable source SHA: `6974da5e9f0453a86395acd7c1cce088c01f1313`.
+
+- [Preflight 40087230904](https://github.com/morozhenko-apps/rquickshare/actions/runs/40087230904): **completed/success**. Strict Rust format, Core Rust stable tests, Core Clippy, Tauri Clippy and frontend all succeeded.
+- [Native GTK 40087230963](https://github.com/morozhenko-apps/rquickshare/actions/runs/40087230963): **completed/success**, independently.
+- Core job `120852660106` actual log: **783 passed, 0 failed, 0 ignored, 8 filtered** plus 4/4 modern-protocol and 4/4 native-daemon integration suites.
+- Both `manager::tests::given_forged_*_then_known_pre_auth_theft_is_detected` methods ran and logged `should panic ... ok`. Their `Ok` outcome means **expected reproduction of the current unverified TCP route-consumption defect**, **NOT** authenticated admission success. They must become ordinary no-panic security assertions during A3.
+- Neither authenticated TCP candidate staging nor route-owner proof was added to the executable. A2 **STOP** and the user-facing compatibility decision remain pending. Tests alone cannot close P0 #8.
+
+This closes only the A1 reproducibility/CI repair. Global Mode B Stage 12 and hardware Google Android/Windows acceptance remain unresolved.

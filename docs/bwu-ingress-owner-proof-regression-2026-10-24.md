@@ -73,3 +73,16 @@ The owner explicitly approved Option A: **provisionally stage a TCP candidate an
 The first two `#[ignore]` fail-closed oracle tests at `f6e36cf4` made [Preflight 40086572309](https://github.com/morozhenko-apps/rquickshare/actions/runs/40086572309) **FAIL** its deliberate stable inventory: **781 passed, 2 ignored, 8 filtered** versus exactly **783 passed, 0 ignored** required by `scripts/ci-core-test-groups.sh`. This is a genuine CI policy failure even though 781 independent test methods succeeded. The correct resolution is not to modify the test-group script or exclude vulnerabilities silently. Test-only `c4dc1f3ed8bd5ee87d511e7fb31508e03ee6d135` changed the two metadata annotations to `#[should_panic(expected = ...)]`, renamed them to explicitly signify detection of **known** unsafe routing, and preserved the actual fail-closed assertions byte-for-byte. This makes the risk reproducible rather than ignored: the expected panic confirms the security gap persists, and when the actual authenticated admission fix lands those two methods must be converted into normal non-panicking safety tests. **Passing a should-panic test here is not security acceptance**.
 
 Initial `c4dc1f3e` source CI caught exactly two nightly rustfmt attribute-layout changes; those were applied as test-only `6974da5e9f0453a86395acd7c1cce088c01f1313`. Pending source-exact [Preflight](https://github.com/morozhenko-apps/rquickshare/actions) and Native GTK terminal results for `6974da5e`. The security admission failure remains OPEN under issue #8; Stage 12 is NOT complete.
+
+
+## 6. A1 source-exact CI completion
+
+Final executable source SHA: `6974da5e9f0453a86395acd7c1cce088c01f1313`.
+
+- [Preflight 40087230904](https://github.com/morozhenko-apps/rquickshare/actions/runs/40087230904): **completed/success**. Strict Rust format, Core Rust stable tests, Core Clippy, Tauri Clippy and frontend all succeeded.
+- [Native GTK 40087230963](https://github.com/morozhenko-apps/rquickshare/actions/runs/40087230963): **completed/success**, independently.
+- Core job `120852660106` actual log: **783 passed, 0 failed, 0 ignored, 8 filtered** plus 4/4 modern-protocol and 4/4 native-daemon integration suites.
+- Both `manager::tests::given_forged_*_then_known_pre_auth_theft_is_detected` methods ran and logged `should panic ... ok`. Their `Ok` outcome means **expected reproduction of the current unverified TCP route-consumption defect**, **NOT** authenticated admission success. They must become ordinary no-panic security assertions during A3.
+- Neither authenticated TCP candidate staging nor route-owner proof was added to the executable. A2 **STOP** and the user-facing compatibility decision remain pending. Tests alone cannot close P0 #8.
+
+This closes only the A1 reproducibility/CI repair. Global Mode B Stage 12 and hardware Google Android/Windows acceptance remain unresolved.
