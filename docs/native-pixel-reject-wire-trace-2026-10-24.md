@@ -1,3 +1,15 @@
+## 2026-10-24 diagnostic code validation handoff
+
+Current **executable source SHA** `afce867644baab8e4f5e9ffa66e70b9a27b09ff9`. Only docs will follow until evidence arrives. Four distinct code/test commits since the previous fully-validated package:
+- `43d9e3ab`: two scoped source files, privacy-safe rejection markers, full two-frame encrypted delivery test and discriminating EOF/timeout drain outcomes; **no packet/timeout or consent behavior changes**.
+- `17de08b0`: nightly test-format-only one-line adjustment.
+- `8a7c5e8f`: tests return the `RejectionDrainOutcome` from Tokio spawned closure rather than `()`; first CI exposed this compile problem.
+- `afce8676`: nightly test-only closure formatting correction to one line for exact formatting profile.
+
+CI on `43d9e3ab` had rustfmt failure; CI on `17de08b0` had *test-only* `expected (), found RejectionDrainOutcome` compile error; CI on `8a7c5e8f` required the final nightly closure formatting. **Do not report these intermediate CI runs as successful.** [Final exact-source Preflight 40115424146](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424146) and [GTK 40115424114](https://github.com/morozhenko-apps/rquickshare/actions/runs/40115424114) are running at this checkpoint; verify **all six** check-run terminal SUCCESS before asking the operator to rebuild/install. No new device test has been performed; Pixel still FAILED on 3/3 previous release attempts. No local artifact path, contents hash, installed executable or journal for this new diagnostic source is verified.
+
+Once CI is green, request one diagnostic dry-run package built from current dev, preserving old `0.9.0-1` rollback and passing extracted-vs-installed binary comparisons, then restart user services under `systemctl --user set-environment RQUICKSHARE_RECEIVER_TRACE=1` before the app starts. User supplies ONLY `rqs-receiver event=... elapsed_ms=...` lines filtered from journal, not raw logs; `systemctl --user unset-environment` after testing. A line `reject_last_chunk_flushed` confirms local write/flush of final encrypted frame, **not application-level receipt by Pixel**. Absence of that marker localizes failure earlier; `reject_peer_eof/read_error/deadline` shows how our transport observed completion, not GMS result. Full root cause remains OPEN.
+
 ## 2026-10-24 SECOND PHYSICAL FAILURE (3 of 3) — protocol proof investigation
 
 Operator response after installing previous two-second-drain candidate: **all three Pixel→KDE→Decline attempts still showed `Failed` on Pixel**. The previous delay hypothesis **did not resolve observed behavior**. KDE→Pixel→Decline already PASS; manual-only Receiver and compact repeat/history remain accepted. #20 closed with user acceptance; #18 remains OPEN.
@@ -39,7 +51,7 @@ Reuse **existing** `RQUICKSHARE_RECEIVER_TRACE=1`, unchanged line protocol `rqs-
 
 - [x] User three failures recorded; earlier 2s fix falsified as sufficient.
 - [x] Plan documented before source changes, Source=unchanged at docs checkpoint; separate docs and code commits.
-- [x] Add opt-in fixed-event markers and cross-stream dual-chunk regression; code `43d9e3ab`, test-only nightly format `17de08b0`. Final strict CI still pending.
+- [x] Add opt-in fixed-event markers and cross-stream dual-chunk regression; code `43d9e3ab`, test-only nightly formatter `17de08b0` and `afce8676`, test-only corrected async fixture return `8a7c5e8f`. Final strict CI still pending.
 - [ ] One final exact-source stable Core/GTK/format/Clippy/frontend CI; race-sensitive suite separated for full final Mode B (existing 8 filtered). Do not repeatedly poll pending CI.
 - [ ] User rebuilds **one** debug package only after green CI, with preserved verified rollback; install only after user-controlled idle+Quit and byte compare packaged executable. No automatic `master`, release or R2.
 - [ ] One isolated Pixel→KDE→Decline under `RQUICKSHARE_RECEIVER_TRACE=1`; extract **only** allowlisted `rqs-receiver event=... elapsed_ms=...` lines from user journal, then unset env. Do not request raw journal, user addresses, pairing codes, raw logs or file content.
