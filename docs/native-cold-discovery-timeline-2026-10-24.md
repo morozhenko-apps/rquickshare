@@ -28,6 +28,13 @@ For a voluntary physical trial, capture **only** the allowlisted `rqs-receiver e
 
 - [x] Architecture/repo scan and root-cause hypothesis inventory.
 - [x] Scoped plan, event contracts, privacy guard and rollback documented ahead of coding.
-- [ ] Source instrumentation and output-shape tests on `dev`.
+- [x] Source instrumentation and output-shape tests on `dev`: `a09ce9c3632661e3c9f51b05bfed4ded6a06cfba` (three Core production/test files) and `02e4d6a53352a7fdfa1ceb272846fc1a011948d3` (format-only test declaration).
 - [ ] Final exact-source stable CI and independent targeted event-shape evidence.
 - [ ] Real owner-host cold/warm stage measurements; then only evidence-driven performance fix.
+
+
+## Post-implementation source checkpoint
+
+The five fixed events are declared, named and checked in `core_lib/src/receiver_trace.rs`. `NativeRuntime::start` emits attempt / successful transport / successful worker markers in order. `MDnsDiscovery::run_inner` emits browse success only after the SDK acknowledges `browse`. `NativeRuntime::discovered` emits the first route marker only after the first-ever accepted new route is inserted; `endpoint_sequence == 0` prevents re-emission from later duplicate, rename, removal/re-admission, or restart within the same runtime. There is no peer name, IP or identifier in the line formatter. A new test verifies exact names/format and uniqueness; the pre-existing event-matrix fixture now covers each stage with boundary elapsed values.
+
+Code changes are **committed**; no local `cargo` execution or live endpoint/Pixel test is claimed. GitHub Actions results must be matched to the actual final source SHA `02e4d6a5` or later source-identical documentation commit. The installed 0.9.0-1 remains untouched. Keep issue #18 OPEN. This docs-only commit is independent of code/test commits.
