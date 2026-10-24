@@ -33,11 +33,8 @@ impl Results {
         self.phases.retain(|id, _| present.contains(id));
         self.visible.retain(|id| present.contains(id));
         self.pending.retain(|id| present.contains(id));
-        // The nearby card shows current work and only the latest received
-        // result. Each new inbound transfer has its own capability and consent
-        // even when the device display name matches an earlier transfer.
-        // Retire only its old card presentation, never History or the
-        // independent completed-result reveal queue.
+        // A fresh incoming session retires the prior completion from the
+        // compact card, never the History or pending result-reveal queue.
         if !baseline
             && rows.iter().any(|(id, direction, phase)| {
                 *direction == Direction::Inbound
@@ -47,15 +44,28 @@ impl Results {
         {
             self.visible.clear();
         }
+        // New outgoing work retires only old outgoing Declined feedback; it
+        // must not suppress the most recent successfully received result.
+        if !baseline
+            && rows.iter().any(|(id, direction, phase)| {
+                *direction == Direction::Outbound
+                    && !phase.is_terminal()
+                    && !self.phases.contains_key(id)
+            })
+        {
+            self.visible.retain(|id| self.phases.get(id) != Some(&Phase::Rejected));
+        }
         for (id, direction, phase) in rows {
             let previous = self.phases.insert(id.clone(), phase);
-            if !baseline
-                && direction == Direction::Inbound
-                && phase == Phase::Finished
-                && previous.is_some_and(|old| !old.is_terminal())
-            {
-                self.visible.insert(id.clone());
-                self.pending.push_back(id);
+            if !baseline && previous.is_some_and(|old| !old.is_terminal()) {
+                if direction == Direction::Inbound && phase == Phase::Finished {
+                    self.visible.insert(id.clone());
+                    self.pending.push_back(id);
+                } else if direction == Direction::Outbound && phase == Phase::Rejected {
+                    // This was a real, live peer decline; show the terminal
+                    // status instead of silently erasing the outgoing row.
+                    self.visible.insert(id.clone());
+                }
             }
         }
     }
@@ -163,6 +173,102 @@ mod tests {
                 .map(|(id, direction, phase)| ((*id).into(), *direction, *phase)),
         );
     }
+    #[test]
+    fn given_live_outbound_peer_decline_when_observed_then_compact_card_shows_declined_once_without_replaying_history(
+    ) {
+        let mut results = Results::default();
+        observe(
+            &mut results,
+            42,
+            &[("historical", Direction::Outbound, Phase::Rejected)],
+        );
+        assert!(!results.visible("historical"));
+        observe(
+            &mut results,
+            42,
+            &[
+                ("historical", Direction::Outbound, Phase::Rejected),
+                ("in-rejected", Direction::Inbound, Phase::Rejected),
+                ("out", Direction::Outbound, Phase::Active),
+            ],
+        );
+        assert!(!results.visible("in-rejected"));
+        observe(
+            &mut results,
+            42,
+            &[
+                ("historical", Direction::Outbound, Phase::Rejected),
+                ("out", Direction::Outbound, Phase::Rejected),
+            ],
+        );
+        assert!(results.visible("out"));
+        assert!(!results.visible("historical"));
+        assert!(results.pending_empty());
+        // Repeated terminal snapshots do not create a second message.
+        observe(
+            &mut results,
+            42,
+            &[("out", Direction::Outbound, Phase::Rejected)],
+        );
+        assert!(results.visible("out"));
+        assert_eq!(results.visible.len(), 1);
+        results.hide_rows();
+        observe(
+            &mut results,
+            42,
+            &[("out", Direction::Outbound, Phase::Rejected)],
+        );
+        assert!(!results.visible("out"));
+    }
+
+    #[test]
+    fn given_new_outbound_when_previous_declined_and_inbound_completed_then_only_declined_feedback_retires(
+    ) {
+        let mut results = Results::default();
+        observe(&mut results, 4, &[]);
+        observe(
+            &mut results,
+            4,
+            &[
+                ("in", Direction::Inbound, Phase::Receiving),
+                ("out", Direction::Outbound, Phase::Active),
+            ],
+        );
+        observe(
+            &mut results,
+            4,
+            &[
+                ("in", Direction::Inbound, Phase::Finished),
+                ("out", Direction::Outbound, Phase::Rejected),
+            ],
+        );
+        assert!(results.visible("in"));
+        assert!(results.visible("out"));
+        assert_eq!(results.pending.len(), 1);
+        observe(
+            &mut results,
+            4,
+            &[
+                ("in", Direction::Inbound, Phase::Finished),
+                ("out", Direction::Outbound, Phase::Rejected),
+                ("retry", Direction::Outbound, Phase::Active),
+            ],
+        );
+        assert!(!results.visible("out"));
+        assert!(results.visible("in"));
+        assert_eq!(results.pending.len(), 1);
+        observe(
+            &mut results,
+            5,
+            &[
+                ("in", Direction::Inbound, Phase::Finished),
+                ("out", Direction::Outbound, Phase::Rejected),
+            ],
+        );
+        assert!(!results.has_visible());
+        assert!(results.pending_empty());
+    }
+
     #[test]
     fn given_a_finished_inbound_when_another_consent_arrives_then_old_card_row_retires_but_reveal_remains(
     ) {

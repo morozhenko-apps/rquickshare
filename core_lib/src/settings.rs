@@ -39,7 +39,7 @@ pub struct StartupSettings {
 impl Default for StartupSettings {
     fn default() -> Self {
         Self {
-            visibility: Visibility::Visible,
+            visibility: Visibility::Invisible,
             visibility_recovered: false,
             port: None,
             download_path: None,
@@ -50,7 +50,7 @@ impl Default for StartupSettings {
 
 pub fn visibility_setting(value: Option<&Value>) -> (Visibility, bool) {
     match value {
-        None => (Visibility::Visible, false),
+        None => (Visibility::Invisible, false),
         Some(value) => match value.as_u64().and_then(Visibility::try_from_raw_value) {
             Some(visibility) => (visibility, false),
             None => (Visibility::Invisible, true),
