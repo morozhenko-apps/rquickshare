@@ -526,7 +526,6 @@ pub fn peek_client_introduction(
     Ok(validate_client_introduction(&buffer[4..total]).ok())
 }
 
-
 #[derive(Debug, Default)]
 struct InboundFileProgressTrace {
     first_chunk_seen: bool,
@@ -4968,19 +4967,28 @@ mod inbound_file_progress_trace_tests {
     }
 
     #[test]
-    fn given_cumulative_multifile_progress_when_crossing_exact_boundaries_then_one_event_per_stage(
-    ) {
+    fn given_cumulative_multifile_progress_when_crossing_exact_boundaries_then_one_event_per_stage()
+    {
         let mut trace = InboundFileProgressTrace::default();
         assert_eq!(
             record(&mut trace, 1, 100),
             vec![Event::InboundFirstFileChunkPersisted]
         );
         assert!(record(&mut trace, 24, 100).is_empty());
-        assert_eq!(record(&mut trace, 25, 100), vec![Event::InboundFileProgress25]);
+        assert_eq!(
+            record(&mut trace, 25, 100),
+            vec![Event::InboundFileProgress25]
+        );
         assert!(record(&mut trace, 49, 100).is_empty());
-        assert_eq!(record(&mut trace, 50, 100), vec![Event::InboundFileProgress50]);
+        assert_eq!(
+            record(&mut trace, 50, 100),
+            vec![Event::InboundFileProgress50]
+        );
         assert!(record(&mut trace, 74, 100).is_empty());
-        assert_eq!(record(&mut trace, 75, 100), vec![Event::InboundFileProgress75]);
+        assert_eq!(
+            record(&mut trace, 75, 100),
+            vec![Event::InboundFileProgress75]
+        );
         assert!(record(&mut trace, 100, 100).is_empty());
         assert!(record(&mut trace, 100, 100).is_empty());
     }
