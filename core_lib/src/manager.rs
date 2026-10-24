@@ -411,6 +411,63 @@ mod tests {
         framed
     }
 
+    // P0 #8: Deliberately ignored until the authenticated BWU admission
+    // contract is approved and implemented. These oracles document the
+    // *required* fail-closed outcome, not the current insecure behavior.
+    // The ordinary green route tests only prove syntactic plaintext matching.
+    async fn assert_untrusted_claim_preserves_original_bwu_owner(
+        current: &str,
+        previous: Option<&str>,
+    ) {
+        let router = BwuRouter::new();
+        let mut owner = router.register("established-ble-session".into()).await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut untrusted_peer = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (incoming, _) = listener.accept().await.unwrap();
+
+        // The peer only knows a copy of the claimed plaintext route id. It
+        // has no authenticated binding to the established BLE session.
+        let introduction = client_introduction_with_last(current, previous);
+        untrusted_peer.write_all(&introduction).await.unwrap();
+        let _classification = route_bandwidth_upgrade_if_pending(incoming, &router)
+            .await
+            .unwrap();
+
+        // This currently fails: the one-shot owner is consumed before a
+        // cryptographic proof. Keep this oracle red and ignored until #8.
+        assert!(
+            router.has_pending().await,
+            "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner"
+        );
+        assert!(
+            matches!(
+                owner.try_recv(),
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+            ),
+            "P0 #8: an untrusted socket was delivered to the BLE owner"
+        );
+        router.cancel("established-ble-session").await;
+    }
+
+    #[tokio::test]
+    #[ignore = "P0 #8: no protocol-compatible authenticated TCP admission gate yet"]
+    async fn given_forged_current_bwu_id_when_classified_then_established_owner_is_not_consumed() {
+        assert_untrusted_claim_preserves_original_bwu_owner("established-ble-session", None).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "P0 #8: no protocol-compatible authenticated TCP admission gate yet"]
+    async fn given_forged_previous_bwu_id_when_classified_then_established_owner_is_not_consumed()
+    {
+        assert_untrusted_claim_preserves_original_bwu_owner(
+            "untrusted-dynamic-id",
+            Some("established-ble-session"),
+        )
+        .await;
+    }
+
     #[tokio::test]
     async fn routes_bwu_socket_without_consuming_client_introduction() {
         let router = BwuRouter::new();
