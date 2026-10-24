@@ -34,9 +34,20 @@ Coverage estimate: the new lifecycle test can prove the real Core ownership/join
 ## Completion gates
 
 - [x] Source scan and root-cause differential, plan and risk inventory
-- [ ] Source correction and focused Core lifecycle regression
-- [ ] Exact-source Preflight, Native GTK, strict Rust format / Clippy with logged test method
+- [x] Source correction and two focused real-RQS Core lifecycle regression methods
+- [x] Exact-source Preflight, Native GTK, strict Rust format / Clippy with logged test method
 - [ ] Physical test: daemon closed-browser fault / normal cancellation and device retirement, where reproducible (not required to corrupt OS state)
 - [ ] Full Mode B Stage 12, injected SDK coverage, #8/#9/#11/#16 security + lifecycle hardening, 20 locales, release 1.0: still OPEN
 
 This task affects only failure cleanup and prevents a potentially unbounded loop. A green preflight alone never constitutes physical acceptance.
+
+## Exact-source CI completion (2026-10-24)
+
+Code SHA `424a3a54a907cea425875185af614a142461a913` has **both workflows completed/success**:
+
+- [Preflight #40085426478](https://github.com/morozhenko-apps/rquickshare/actions/runs/40085426478): Rust format, Core Rust tests, Core Clippy, Tauri Clippy and frontend all passed.
+- [Native GTK #40085426477](https://github.com/morozhenko-apps/rquickshare/actions/runs/40085426477): native GTK widget tests and strict lint passed independently.
+- Core Rust log job `120847265664`: **781 passed, 0 failed, 0 ignored, 8 filtered** in the main stable group, plus 4/4 and 4/4 integration groups. Both new real-Core owner tests explicitly printed `ok`: `lifecycle_tests::given_worker_fault_when_replacing_then_no_new_discovery_is_spawned` and `lifecycle_tests::given_worker_fault_when_stopped_then_discovery_is_joined_and_core_survives`.
+- No source changes after this code SHA. Subsequent docs-only commits do not alter the code and intentionally do not re-trigger CI.
+
+The mDNS browser-receiver closed-event **direct injected SDK regression** is still not proved because #9 event port has not been approved. Actual KDE/Pixel disappearance/restart and SDK failure acceptance are separate OPEN requirements. This is a scoped completed implementation/CI slice, **not** a completed project-wide Mode B Stage 12 or release-ready statement.
