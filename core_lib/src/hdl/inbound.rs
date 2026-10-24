@@ -2535,8 +2535,7 @@ mod security_tests {
         let first_chunk = first.payload_chunk.unwrap();
         assert_eq!(first_chunk.offset(), 0);
         assert_eq!(first_chunk.flags(), 0);
-        let sharing =
-            sharing_nearby::Frame::decode(first_chunk.body.as_deref().unwrap()).unwrap();
+        let sharing = sharing_nearby::Frame::decode(first_chunk.body.as_deref().unwrap()).unwrap();
         assert_eq!(header.total_size(), first_chunk.body().len() as i64);
         let message = sharing.v1.unwrap();
         assert_eq!(
