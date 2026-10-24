@@ -1,3 +1,22 @@
+## Documentation housekeeping CI readback — 2026-10-24
+
+Latest inspected executable/test source `f61a6735837d2829500af86089158fd81a14df40`
+has **five terminal successes and one failure**, not six-green acceptance:
+[Preflight40132406104](https://github.com/morozhenko-apps/rquickshare/actions/runs/40132406104)
+passes Core Rust, frontend and both Clippy jobs; its
+[Rust format job120986828602](https://github.com/morozhenko-apps/rquickshare/actions/runs/40132406104/job/120986828602)
+fails specifically at **Check formatting**. Subsequent policy/Python steps in
+that job were skipped, not passing. The independent
+[Native GTK40132406060](https://github.com/morozhenko-apps/rquickshare/actions/runs/40132406060)
+passes. This readback supersedes only the old "not independently verified"
+statement below; it does not replace any failed/physical evidence.
+
+Issue24 remains OPEN. No throughput improvement, new installed package,
+physical trial, issue closure, master promotion or signing/publication is
+claimed. Nightly-format failure is pre-existing functional-source work and was
+not changed or hidden by this documentation-only cleanup. The original live
+backlog body remains verbatim below; [navigation](README.md) groups dated evidence.
+
 ## 2026-10-24 #24 inbound throughput diagnostic source checkpoint
 
 **Physical observation:** owner measured approximately 55 MB transferred in ~8 seconds after Accept with normal receiver settings (roughly 6.9 MB/s end-to-end by eye); connection on that run was prompt. Same file had subjectively faster progress on previous occasions. Existing trace on a **different** physical run proves BLE->TCP upgrade before consent; do not infer the latest 8-second run used that route without matching evidence.

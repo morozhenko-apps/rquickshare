@@ -44,15 +44,15 @@ and current independent development instead of rebuilding it as another live SSO
    issue24 and source-exact check runs. Dev is clean/synchronized, one worktree,
    no open PR and no observed active competing writer. Recheck expected tip
    before each ref mutation; no speculative branch or protected-master change.
-2. [ ] Add a noncanonical docs navigation index: group all46 Mode B records by
+2. [x] Add a noncanonical docs navigation index: group all46 Mode B records by
    subsystem and include verified local Git commit references with provenance.
    Keep every inventory, branch/negative/interaction map, failure and physical
    acceptance record unchanged. Do not claim current coverage from old counts.
-3. [ ] Correct README's live entrypoint; retain the old native29 paragraph
+3. [x] Correct README's live entrypoint; retain the old native29 paragraph
    verbatim behind an explicit historical boundary. Add bounded CI readback to
    the live handoff without deleting/reclassifying its original source evidence.
    Functional issues and hardware/signing/publication gates remain open.
-4. [ ] Ignore future local IDE/assistant state; retain shared
+4. [x] Ignore future local IDE/assistant state; retain shared
    `.vscode/settings.json` linking the actual Core/Tauri Cargo manifests.
    No disposable tracked model preset was found. Keep BUILD, component
    changelogs, D-Bus text inputs, preview fixtures, keys and signing recovery.

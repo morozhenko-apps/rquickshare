@@ -8,6 +8,16 @@ show explicit Decline/Accept controls and a verification code; admitted transfer
 continue when the card is hidden. The Transfers window keeps bounded operation
 metadata and provides checked access to received results.
 
+Current implementation, open issues, source-exact CI and installed-device
+acceptance belong to the [active backlog](docs/active-backlog.md). Start with
+[repository rules](AGENTS.md) and the [documentation index](docs/README.md).
+Source success, a built package, installed executables and physical peer tests
+are distinct gates; this README does not select a new candidate or authorize
+release. The latest source CI/readback is recorded in the live handoff.
+
+<details>
+<summary>Earlier native29 README checkpoint — historical source context</summary>
+
 The current local candidate is native29, tested on Ubuntu 26.04 amd64 with KDE
 Wayland. It adds a frame-prefix interruption repair to the accepted native28 UI.
 The user has confirmed Android discovery and successful transfers on earlier
@@ -15,6 +25,9 @@ candidates. The broader Android/Google Quick Share for
 Windows, interruption and desktop lifecycle checklist remains open. See the
 [current state](docs/current-state.md) and
 [acceptance checklist](docs/native-essential-acceptance.md) for exact evidence.
+
+
+</details>
 
 ## Product direction and release identity
 
