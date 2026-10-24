@@ -1,6 +1,6 @@
 //! Explicit local discovery diagnostics: static stage names and monotonic time only.
 use std::{ffi::OsStr, sync::OnceLock, time::Instant};
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     Start,
     RuntimeStartRequested,
@@ -30,6 +30,13 @@ pub enum Event {
     InboundConnectionRequestDecoded,
     InboundUkey2ClientInit,
     InboundConsentEntered,
+    InboundAcceptFlushed,
+    InboundFirstFileChunkPersisted,
+    InboundFileProgress25,
+    InboundFileProgress50,
+    InboundFileProgress75,
+    InboundLastFilePublished,
+    InboundFilesCompleted,
     MdnsRegister,
     MdnsResend,
     BwuOfferSent,
@@ -83,6 +90,13 @@ impl Event {
             Self::InboundConnectionRequestDecoded => "inbound_connection_request_decoded",
             Self::InboundUkey2ClientInit => "inbound_ukey2_client_init",
             Self::InboundConsentEntered => "inbound_consent_entered",
+            Self::InboundAcceptFlushed => "inbound_accept_flushed",
+            Self::InboundFirstFileChunkPersisted => "inbound_first_file_chunk_persisted",
+            Self::InboundFileProgress25 => "inbound_file_progress_25",
+            Self::InboundFileProgress50 => "inbound_file_progress_50",
+            Self::InboundFileProgress75 => "inbound_file_progress_75",
+            Self::InboundLastFilePublished => "inbound_last_file_published",
+            Self::InboundFilesCompleted => "inbound_files_completed",
             Self::MdnsRegister => "mdns_register",
             Self::MdnsResend => "mdns_resend",
             Self::BwuOfferSent => "bwu_offer_sent",
@@ -171,6 +185,13 @@ mod tests {
             Event::InboundConnectionRequestDecoded,
             Event::InboundUkey2ClientInit,
             Event::InboundConsentEntered,
+            Event::InboundAcceptFlushed,
+            Event::InboundFirstFileChunkPersisted,
+            Event::InboundFileProgress25,
+            Event::InboundFileProgress50,
+            Event::InboundFileProgress75,
+            Event::InboundLastFilePublished,
+            Event::InboundFilesCompleted,
             Event::MdnsRegister,
             Event::MdnsResend,
             Event::BwuOfferSent,
@@ -261,6 +282,36 @@ mod startup_timeline_contract_tests {
             );
         }
         assert_eq!(names.len(), 10);
+    }
+
+    #[test]
+    fn given_file_throughput_trace_markers_when_rendered_then_only_static_redacted_stages_exist() {
+        let markers = [
+            (Event::InboundAcceptFlushed, "inbound_accept_flushed"),
+            (
+                Event::InboundFirstFileChunkPersisted,
+                "inbound_first_file_chunk_persisted",
+            ),
+            (Event::InboundFileProgress25, "inbound_file_progress_25"),
+            (Event::InboundFileProgress50, "inbound_file_progress_50"),
+            (Event::InboundFileProgress75, "inbound_file_progress_75"),
+            (
+                Event::InboundLastFilePublished,
+                "inbound_last_file_published",
+            ),
+            (Event::InboundFilesCompleted, "inbound_files_completed"),
+        ];
+        let mut unique = std::collections::BTreeSet::new();
+        for (event, name) in markers {
+            assert!(unique.insert(name));
+            assert_eq!(
+                line(event, 55),
+                format!("rqs-receiver event={name} elapsed_ms=55")
+            );
+            assert!(!line(event, 55).contains('/'));
+            assert!(!line(event, 55).contains('@'));
+        }
+        assert_eq!(unique.len(), 7);
     }
 
     #[test]
