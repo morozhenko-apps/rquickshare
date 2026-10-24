@@ -50,10 +50,17 @@ Question-mark cells above are explicitly `planned` and are not counted as achiev
 
 - [x] Source scan and 5–7 causal hypotheses, user-approved limits/STOP
 - [x] Doc-first test inventory, interaction, N-matrix and per-production-file coverage
-- [ ] Add two ignored, deterministic real-loopback fail-closed oracles
+- [x] Add two ignored, deterministic real-loopback fail-closed oracles in one test-only commit
 - [ ] Source-exact final Preflight and Native GTK; verify test compiles and remains visible as ignored, not passed
 - [ ] Mode A approved and real authenticated admission implemented
 - [ ] Re-enable and actually pass both spoof cases; real Android/Windows physical gate
 - [ ] Repo-wide Mode B Stage 12 full branch/interaction/mutation evidence and 1.0 release acceptance
 
 Mutation analysis: removing any future credential check or allowing early route removal must make the oracle fail; an unknown ID test does **not** prove this. The current unapproved security behavior means Stage 12 **NO**. Revert the test-only commit independently; no new protocol fields, APIs or installed process changes.
+
+## 2026-10-24 implementation checkpoint
+
+- Test-only change on `dev`: `f6e36cf491e7b4d41c5a7eeda119631a5b61cef0`, `core_lib/src/manager.rs` only. Two independently named `#[ignore]` Tokio tests are `given_forged_current_bwu_id_when_classified_then_established_owner_is_not_consumed` and `given_forged_previous_bwu_id_when_classified_then_established_owner_is_not_consumed`. They share an actual TCP loopback socket+real `BwuRouter`, not a mocked classifier.
+- Inputs are synthetic `established-ble-session` and `untrusted-dynamic-id`. The malicious frame contains valid protobuf but no credential-bound ownership proof. Each oracle expects the pending registration and original one-shot receiver to remain intact; because current classifier consumes by plain string matching, the oracle is **deliberately ignored/expected red** pending the MODE A architecture decision. The test comments explicitly state the unresolved issue. No source function, Rust public API, protocol message, certificate source or timeouts changed.
+- Automatic final-source [Preflight 40086478024](https://github.com/morozhenko-apps/rquickshare/actions/runs/40086478024) and [Native GTK 40086478029](https://github.com/morozhenko-apps/rquickshare/actions/runs/40086478029) were **IN PROGRESS** at commit checkpoint. Verify terminal statuses and exact ignored test names/count in Core output; a build passing does not mean both ignored oracles are passing.
+- No injected real Android/Windows adversarial test, no exploit claim against payload confidentiality or privacy, no additional production remediation. Source-level availability risk and the #8 architectural STOP remain OPEN.
