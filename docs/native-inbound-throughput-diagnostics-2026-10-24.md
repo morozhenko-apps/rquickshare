@@ -53,6 +53,6 @@ Rollback: revert only the diagnostic source changes without reverting accepted s
 
 - [x] Repo rules, issue, source paths, and exact baseline read.
 - [x] Plan and invariant inventory recorded before code.
-- [ ] Diagnostic code and deterministic focused tests.
-- [ ] Source-exact CI final gate.
+- [x] Source instrumentation and deterministic focused tests: `faad6733` trace enum, `8ca32262` inbound milestones and five regression tests, `8dd06353` nightly-format test-only follow-up.
+- [ ] Source-exact CI final gate: final executable/test source `8dd06353ff49d43e858b2937c0022053c397f4b9`. Current GitHub connector exposes no push-workflow-run listing (PR-only workflow lookup) and legacy combined statuses are empty; **do not claim green or start hardware installation without six terminal source checks**.
 - [ ] New physical package / Pixel trial with quantifiable intervals.
