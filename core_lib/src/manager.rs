@@ -420,7 +420,10 @@ mod tests {
         previous: Option<&str>,
     ) {
         let router = BwuRouter::new();
-        let mut owner = router.register("established-ble-session".into()).await.unwrap();
+        let mut owner = router
+            .register("established-ble-session".into())
+            .await
+            .unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mut untrusted_peer = TcpStream::connect(listener.local_addr().unwrap())
             .await
@@ -459,8 +462,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "P0 #8: no protocol-compatible authenticated TCP admission gate yet"]
-    async fn given_forged_previous_bwu_id_when_classified_then_established_owner_is_not_consumed()
-    {
+    async fn given_forged_previous_bwu_id_when_classified_then_established_owner_is_not_consumed() {
         assert_untrusted_claim_preserves_original_bwu_owner(
             "untrusted-dynamic-id",
             Some("established-ble-session"),
