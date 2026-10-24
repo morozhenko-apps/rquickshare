@@ -457,13 +457,17 @@ mod tests {
     // This test must STOP passing when a real authorization fix lands:
     // switch back to a normal fail-closed regression, not an expected panic.
     #[tokio::test]
-    #[should_panic(expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner")]
+    #[should_panic(
+        expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner"
+    )]
     async fn given_forged_current_bwu_id_when_classified_then_known_pre_auth_theft_is_detected() {
         assert_untrusted_claim_preserves_original_bwu_owner("established-ble-session", None).await;
     }
 
     #[tokio::test]
-    #[should_panic(expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner")]
+    #[should_panic(
+        expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner"
+    )]
     async fn given_forged_previous_bwu_id_when_classified_then_known_pre_auth_theft_is_detected() {
         assert_untrusted_claim_preserves_original_bwu_owner(
             "untrusted-dynamic-id",
