@@ -107,7 +107,7 @@ fn payload_label(details: &TransferDetails) -> String {
     }
 }
 /// Missing metadata is an in-progress handshake, not an anonymous file.
-fn peer_title<'a>(name: &'a str, status: DetailsStatus) -> &'a str {
+fn peer_title(name: &str, status: DetailsStatus) -> &str {
     if name.is_empty() && status == DetailsStatus::Unavailable {
         "Connecting…"
     } else {
