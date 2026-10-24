@@ -1168,8 +1168,11 @@ mod untrusted_payload_label_tests {
     use rqs_lib::sessions::details::PayloadKind;
 
     fn summary(kind: PayloadKind, names: &[&str]) -> String {
+        // These label-sanitization fixtures exercise metadata that has
+        // arrived. Unavailable metadata has a separate privacy-safe label.
         let details = TransferDetails {
             kind,
+            status: DetailsStatus::Ready,
             files: names
                 .iter()
                 .map(|name| FileDetail {
