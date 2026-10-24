@@ -94,3 +94,14 @@ User ran the documented **local** build on Alcotester from clean `dev` HEAD `87a
 - **No local installation was reported**; no user service restart, test transfer, or previous-package rollback artifact verified. Do not infer these steps succeeded. Next gate: locate and independently verify the old `0.9.0-1` rollback `.deb`, then an explicit idle user-controlled package replacement and actual test matrix.
 
 This checkpoint is *operator-supplied physical-host packaging evidence*, not a GitHub Actions artifact. Keep old/new package hashes locally; avoid committing host paths with private identifiers, peer/device secrets or full verbose journal.
+
+## 2026-10-24 rollback artifact located — operator evidence
+
+Before installing the current debug build, the operator searched only their local Downloads, native build output and APT cache and supplied the following **non-mutating terminal evidence**:
+
+- Old installer found: `~/Downloads/rquickshare-acceptance-0.9.0.8RY0pX/rquickshare-native_0.9.0-1_amd64.deb` with dpkg metadata `Package: rquickshare-native`, `Version: 0.9.0-1`, `Architecture: amd64`.
+- Old package SHA-256: `51f22e38d2b11efdb064a4835ac96fd49be0cd26077db511e8c502178fe51e00` (observed from local `sha256sum`, **not yet matched to an independent trusted distribution digest**). Before install, also verify the old archive can be read via `dpkg-deb --contents` and keep this file unchanged for rollback.
+- New installer: `~/Downloads/rquickshare-candidate-87af15c/rquickshare-native_0.9.0-1.debug_amd64.deb` with metadata `Package: rquickshare-native`, `Version: 0.9.0-1.debug`, `Architecture: amd64`. The new package's own SHA-256/metadata/contents checks already passed in the preceding build checkpoint.
+- Installation, user daemon/client stop/restart, Pixel test and real BWU **NOT YET REPORTED**. Never mark installed/native peer smoke PASS from these two packaging outputs alone.
+
+**Next physical gate:** operator quits tray/desktop after all transfers idle, gracefully stops their own systemd user services, checks no binary remains, and uses `sudo apt install -- ./absolute/path/to/new.debug.deb`, then validates package version and both service owners. A downgrade to `0.9.0-1` is deliberate and requires the preserved original file; do not delete settings or source paths. The owner must report actual status before physical acceptance scoring.
