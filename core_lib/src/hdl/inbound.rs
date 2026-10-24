@@ -2588,9 +2588,7 @@ mod security_tests {
         use tokio::io::AsyncWriteExt;
 
         let (mut local, mut peer) = tokio::io::duplex(128);
-        let draining = tokio::spawn(async move {
-            drain_rejected_peer(&mut local).await
-        });
+        let draining = tokio::spawn(async move { drain_rejected_peer(&mut local).await });
         tokio::task::yield_now().await;
         assert!(!draining.is_finished(), "must retain socket during grace");
 
@@ -2606,9 +2604,7 @@ mod security_tests {
         drop(peer);
 
         let (mut local, peer) = tokio::io::duplex(32);
-        let draining = tokio::spawn(async move {
-            drain_rejected_peer(&mut local).await
-        });
+        let draining = tokio::spawn(async move { drain_rejected_peer(&mut local).await });
         tokio::task::yield_now().await;
         assert!(!draining.is_finished());
         drop(peer);
