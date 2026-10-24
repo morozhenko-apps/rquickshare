@@ -1,4 +1,84 @@
 #[tokio::test]
+async fn given_worker_fault_when_replacing_then_no_new_discovery_is_spawned() {
+    scenario(async {
+        let mut core = RQS::new(Visibility::Invisible, None, None);
+        let (tracker, lifetime, guard) = core.begin_startup().unwrap();
+        guard.disarm();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        core.replace_discovery_with(|_token| {
+            Ok(async move {
+                started.send(()).unwrap();
+                Err(anyhow!("simulated mDNS browser closure"))
+            })
+        })
+        .await
+        .unwrap();
+        ready.await.unwrap();
+        let old_token = core.discovery_ctk.as_ref().unwrap().clone();
+
+        let (created, mut create_called) = tokio::sync::oneshot::channel();
+        let result = core
+            .replace_discovery_with(|token| {
+                created.send(()).unwrap();
+                Ok(async move {
+                    token.cancelled().await;
+                    Ok(())
+                })
+            })
+            .await;
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "simulated mDNS browser closure"
+        );
+        assert!(old_token.is_cancelled());
+        assert!(core.discovery_ctk.is_none());
+        assert!(core.discovery_task.is_none());
+        assert!(create_called.try_recv().is_err());
+        assert!(!lifetime.is_cancelled());
+        assert!(!tracker.is_closed());
+        core.stop().await;
+        assert!(tracker.is_closed() && tracker.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn given_worker_fault_when_stopped_then_discovery_is_joined_and_core_survives() {
+    scenario(async {
+        let mut core = RQS::new(Visibility::Invisible, None, None);
+        let (tracker, lifetime, guard) = core.begin_startup().unwrap();
+        guard.disarm();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        core.replace_discovery_with(|_token| {
+            Ok(async move {
+                started.send(()).unwrap();
+                Err(anyhow!("simulated browser receiver disconnect"))
+            })
+        })
+        .await
+        .unwrap();
+        ready.await.unwrap();
+        let former = core.discovery_ctk.as_ref().unwrap().clone();
+        assert!(!former.is_cancelled());
+
+        let result = core.stop_discovery_and_wait().await;
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "simulated browser receiver disconnect"
+        );
+        assert!(former.is_cancelled());
+        assert!(core.discovery_ctk.is_none());
+        assert!(core.discovery_task.is_none());
+        assert!(!lifetime.is_cancelled());
+        assert_eq!(core.subscribe_visibility().current(), Visibility::Invisible);
+        core.stop_discovery_and_wait().await.unwrap();
+        core.stop().await;
+        assert!(tracker.is_closed() && tracker.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn given_active_discovery_when_replaced_then_old_worker_is_joined_before_new_generation_starts(
 ) {
     scenario(async {

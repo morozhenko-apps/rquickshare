@@ -236,7 +236,13 @@ impl MDnsDiscovery {
                                 _ => {}
                             }
                         },
-                        Err(err) => error!("MDnsDiscovery: error: {}", err),
+                        Err(err) => {
+                            // A closed SDK browser is terminal. Re-reading an
+                            // already closed receiver would spin and flood logs.
+                            // run() still retires cached peers and awaits SDK shutdown.
+                            error!("MDnsDiscovery: browser channel closed: {err}");
+                            return Err(err.into());
+                        },
                     }
                 }
             }
