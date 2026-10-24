@@ -55,3 +55,13 @@ The doc commit is intentionally independent of executable/test commits. Source a
 - Initial Preflight [40080720223](https://github.com/morozhenko-apps/rquickshare/actions/runs/40080720223) exhibited a real **Rust format** failure with two multiline layouts in the new mDNS test, established by exact job `120833515337` log. No security behavior or assertion changes were justified. Corrected exactly as nightly rustfmt requested in test-only `b63a69f487c436abf166627946dc3cbb9477e1ab`.
 - Final-source [Preflight 40080796430](https://github.com/morozhenko-apps/rquickshare/actions/runs/40080796430) and [Native GTK 40080796275](https://github.com/morozhenko-apps/rquickshare/actions/runs/40080796275) were **IN PROGRESS** at the source checkpoint. No success claim until an exact-source completed job and relevant test names can be verified.
 - No installed-package change and no hardware Pixel/KDE acceptance. #19 remains OPEN, as do #9/#16; one route removal is not proof of authenticated identity equivalence.
+
+
+## Exact compiler diagnostic and repair
+
+Source `b63a69f4` passed nightly `Rust format`, but Core Clippy job [120833802225](https://github.com/morozhenko-apps/rquickshare/actions/runs/40080796430/job/120833802225) **FAILED** in compilation with two precise errors:
+
+1. `E0596`, `mdns_discovery.rs`: `cache` inside `run_inner` is already an `&mut HashMap`; passing `&mut cache` unnecessarily attempts to mutably borrow the binding. Pass `cache` directly to the helper, retaining the original mutable owner.
+2. `E0609`, newly added `service/runtime/tests.rs`: a `service::Snapshot` exposes coordinator revision, not an `endpoints` member. Assert the actual public `NativeRuntime::endpoints()` count (already present) and assert the authenticated client snapshot revision advances on retirement, instead of inventing a field.
+
+Both corrections are isolated in `c384e8e2123e6c1d0eceb14f3d6b2af277f34eb7`. The mDNS/fullname + explicit `Some(false)` protocol repair, focused negative assertions and opt-in privacy trace semantics are unchanged. Source-exact CI for `c384e8e2` must still complete; do not inherit a green result from any predecessor, including the formatter-only pass or previous diagnostics.
