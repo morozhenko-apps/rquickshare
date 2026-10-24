@@ -117,7 +117,6 @@ impl MDnsDiscovery {
         )
         .await
     }
-
 }
 
 // Only SDK events and TCP reachability are injectable. Domain admission,
@@ -273,7 +272,6 @@ where
     Ok(())
 }
 
-
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
@@ -318,8 +316,8 @@ mod lifecycle_tests {
     }
 
     #[tokio::test]
-    async fn given_real_sdk_resolve_and_remove_events_when_driven_then_exact_route_and_tombstone_emit()
-    {
+    async fn given_real_sdk_resolve_and_remove_events_when_driven_then_exact_route_and_tombstone_emit(
+    ) {
         let (sender, mut reader) = broadcast::channel(16);
         let mut cache = HashMap::new();
         let info = sample_service(
@@ -334,12 +332,22 @@ mod lifecycle_tests {
             vec![
                 ServiceEvent::SearchStarted("_FC9F5ED42C8A._tcp.local.".to_owned()),
                 ServiceEvent::ServiceResolved(info),
-                ServiceEvent::ServiceRemoved("_FC9F5ED42C8A._tcp.local.".to_owned(), fullname.clone()),
-                ServiceEvent::ServiceRemoved("_FC9F5ED42C8A._tcp.local.".to_owned(), fullname.clone()),
+                ServiceEvent::ServiceRemoved(
+                    "_FC9F5ED42C8A._tcp.local.".to_owned(),
+                    fullname.clone(),
+                ),
+                ServiceEvent::ServiceRemoved(
+                    "_FC9F5ED42C8A._tcp.local.".to_owned(),
+                    fullname.clone(),
+                ),
             ],
             true,
-        ).await;
-        assert!(result.is_err(), "fixture closes after the finite event stream");
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "fixture closes after the finite event stream"
+        );
         assert!(cache.is_empty());
         let added = reader.try_recv().unwrap();
         assert_eq!(added.fullname, fullname);
@@ -361,13 +369,11 @@ mod lifecycle_tests {
     }
 
     #[tokio::test]
-    async fn given_missing_or_bad_txt_and_unreachable_candidate_when_driven_then_no_false_peer()
-    {
+    async fn given_missing_or_bad_txt_and_unreachable_candidate_when_driven_then_no_false_peer() {
         let (sender, mut reader) = broadcast::channel(16);
         let mut cache = HashMap::new();
-        let mut missing = sample_service("missing-txt", "ignored");
         // Build a real ServiceInfo without n=, rather than mocking its getter.
-        missing = mdns_sd::ServiceInfo::new(
+        let missing = mdns_sd::ServiceInfo::new(
             "_FC9F5ED42C8A._tcp.local.",
             "missing-txt",
             "fixture.local.",
@@ -389,7 +395,8 @@ mod lifecycle_tests {
                 )),
             ],
             false,
-        ).await;
+        )
+        .await;
         assert!(result.is_err());
         assert!(cache.is_empty());
         assert!(reader.try_recv().is_err());
@@ -416,7 +423,8 @@ mod lifecycle_tests {
                 async move { Ok(candidate.expect("cancelled event must not be polled")) }
             },
             |_addr| async move { Ok(()) },
-        ).await;
+        )
+        .await;
         assert!(result.is_ok());
         assert!(cache.is_empty());
         assert!(reader.try_recv().is_err());
@@ -446,7 +454,8 @@ mod lifecycle_tests {
                 cancellation.cancel();
                 async move { std::future::pending::<std::io::Result<()>>().await }
             },
-        ).await;
+        )
+        .await;
         assert!(result.is_ok());
         assert!(cache.is_empty());
         assert!(reader.try_recv().is_err());
