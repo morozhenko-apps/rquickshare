@@ -521,7 +521,7 @@ async fn weave_session(
             Ok(selected) => {
                 crate::receiver_trace::event(crate::receiver_trace::Event::GattConnectParsed);
                 break selected;
-            },
+            }
             Err(error) => {
                 debug!("{INNER_NAME}: ignoring pre-handshake packet: {error}");
             }
@@ -776,12 +776,19 @@ mod tests {
         assert!(is_weave_connection_write(&connect));
         assert!(is_weave_connection_write(&connect[..1]));
         assert!(!is_weave_connection_write(&[]));
-        assert!(!is_weave_connection_write(&[WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM]));
-        assert!(!is_weave_connection_write(&[WEAVE_CONTROL | WEAVE_CMD_ERROR]));
+        assert!(!is_weave_connection_write(&[
+            WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM
+        ]));
+        assert!(!is_weave_connection_write(&[
+            WEAVE_CONTROL | WEAVE_CMD_ERROR
+        ]));
         assert!(!is_weave_connection_write(&[WEAVE_FIRST_BIT]));
         let permits = Arc::new(Semaphore::new(1));
         let first = reserve_weave_bridge(&permits).unwrap();
-        assert!(reserve_weave_bridge(&permits).is_none(), "second active peer must never share the write queue");
+        assert!(
+            reserve_weave_bridge(&permits).is_none(),
+            "second active peer must never share the write queue"
+        );
         drop(first);
         let second = reserve_weave_bridge(&permits).unwrap();
         assert!(reserve_weave_bridge(&permits).is_none());

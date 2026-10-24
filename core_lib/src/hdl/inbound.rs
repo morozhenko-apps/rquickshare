@@ -818,9 +818,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 debug!("Handling State::ReceivedConnectionRequest frame");
                 let msg = Ukey2Message::decode(&*frame_data)?;
                 self.process_ukey2_client_init(&msg).await?;
-                crate::receiver_trace::event(
-                    crate::receiver_trace::Event::InboundUkey2ClientInit,
-                );
+                crate::receiver_trace::event(crate::receiver_trace::Event::InboundUkey2ClientInit);
 
                 self.update_state(
                     |e: &mut InnerState| {
