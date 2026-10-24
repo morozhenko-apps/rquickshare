@@ -196,6 +196,72 @@ fn given_existing_discovery_when_name_or_route_changes_then_shared_revision_chan
 }
 
 #[test]
+fn given_duplicate_named_routes_when_minimal_mdns_tombstone_arrives_then_only_matching_route_is_retired(
+) {
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    let client = runtime.connect().unwrap();
+    runtime.discovered(advertisement("peer-a.local.")).unwrap();
+    runtime.discovered(advertisement("peer-b.local.")).unwrap();
+    let first = runtime.endpoints();
+    assert_eq!(first.len(), 2);
+    assert_eq!(first[0].name, first[1].name);
+    let first_id = first[0].id.clone();
+    let second_id = first[1].id.clone();
+
+    // A real mDNS tombstone carries no name, IP or port. Its cached fullname
+    // must still revoke the exact matching route, never a same-named neighbor.
+    let removed = EndpointInfo {
+        fullname: "peer-a.local.".into(),
+        id: "127.0.0.1:1234".into(),
+        present: Some(false),
+        ..Default::default()
+    };
+    runtime.discovered(removed.clone()).unwrap();
+    let remaining = runtime.endpoints();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].id, second_id);
+    assert!(!runtime.routes.contains_key(&first_id));
+    assert!(runtime.routes.contains_key(&second_id));
+    assert_eq!(runtime.snapshot(client).unwrap().endpoints.len(), 1);
+
+    // Duplicate or unknown tombstones must not withdraw another device.
+    runtime.discovered(removed).unwrap();
+    runtime
+        .discovered(EndpointInfo {
+            fullname: "unknown.local.".into(),
+            present: Some(false),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(runtime.endpoints(), remaining);
+
+    // Re-admission creates a new addressable endpoint without stealing the
+    // unchanged route id of the other physical advertisement.
+    runtime.discovered(advertisement("peer-a.local.")).unwrap();
+    let current = runtime.endpoints();
+    assert_eq!(current.len(), 2);
+    assert!(current.iter().any(|endpoint| endpoint.id == second_id));
+    assert!(current.iter().all(|endpoint| endpoint.id != first_id));
+}
+
+#[test]
+fn given_empty_fullname_tombstone_when_received_then_live_routes_remain_unmodified() {
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    runtime.discovered(advertisement("live.local.")).unwrap();
+    let before = runtime.endpoints();
+    runtime
+        .discovered(EndpointInfo {
+            id: "127.0.0.1:1234".into(),
+            present: Some(false),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(runtime.endpoints(), before);
+}
+
+#[test]
 fn given_exhausted_revision_when_discovery_mutates_then_existing_route_and_endpoint_sequence_remain_unchanged(
 ) {
     // Arrange

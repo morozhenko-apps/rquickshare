@@ -398,6 +398,7 @@ impl NativeRuntime {
                         .collect(),
                 )?;
                 self.routes.remove(&id);
+                crate::receiver_trace::event(crate::receiver_trace::Event::MdnsRouteRetired);
             }
         } else if info.present == Some(true) {
             let Some(addr) = info

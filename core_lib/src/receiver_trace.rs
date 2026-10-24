@@ -8,6 +8,8 @@ pub enum Event {
     RuntimeDiscoveryWorkerReady,
     MdnsBrowseStarted,
     FirstMdnsRouteAdmitted,
+    MdnsWithdrawalEmitted,
+    MdnsRouteRetired,
     Visible,
     Hidden,
     AdvertisementStarted,
@@ -41,6 +43,8 @@ impl Event {
             Self::RuntimeDiscoveryWorkerReady => "runtime_discovery_worker_ready",
             Self::MdnsBrowseStarted => "mdns_browse_started",
             Self::FirstMdnsRouteAdmitted => "first_mdns_route_admitted",
+            Self::MdnsWithdrawalEmitted => "mdns_withdrawal_emitted",
+            Self::MdnsRouteRetired => "mdns_route_retired",
             Self::Visible => "visible",
             Self::Hidden => "hidden",
             Self::AdvertisementStarted => "advertisement_started",
@@ -109,6 +113,8 @@ mod tests {
             Event::RuntimeDiscoveryWorkerReady,
             Event::MdnsBrowseStarted,
             Event::FirstMdnsRouteAdmitted,
+            Event::MdnsWithdrawalEmitted,
+            Event::MdnsRouteRetired,
             Event::Visible,
             Event::Hidden,
             Event::AdvertisementStarted,
@@ -161,6 +167,8 @@ mod startup_timeline_contract_tests {
             ),
             (Event::MdnsBrowseStarted, "mdns_browse_started"),
             (Event::FirstMdnsRouteAdmitted, "first_mdns_route_admitted"),
+            (Event::MdnsWithdrawalEmitted, "mdns_withdrawal_emitted"),
+            (Event::MdnsRouteRetired, "mdns_route_retired"),
         ];
         let mut unique = std::collections::BTreeSet::new();
         for (event, name) in markers {
@@ -170,6 +178,6 @@ mod startup_timeline_contract_tests {
                 format!("rqs-receiver event={name} elapsed_ms=17")
             );
         }
-        assert_eq!(unique.len(), 5);
+        assert_eq!(unique.len(), 7);
     }
 }

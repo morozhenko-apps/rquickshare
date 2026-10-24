@@ -22,17 +22,44 @@ pub struct EndpointInfo {
     pub present: Option<bool>,
 }
 
+// The runtime indexes discovered routes by fullname, not by the endpoint's
+// transport id. Publish the same identity key on removal without exposing
+// the cached name, address or port.
+fn publish_withdrawal(
+    sender: &broadcast::Sender<EndpointInfo>,
+    fullname: String,
+    endpoint: EndpointInfo,
+) {
+    let _ = sender.send(EndpointInfo {
+        fullname,
+        id: endpoint.id,
+        present: Some(false),
+        ..Default::default()
+    });
+    crate::receiver_trace::event(crate::receiver_trace::Event::MdnsWithdrawalEmitted);
+}
+
+// Unknown and already removed services have no cached route to retire.
+fn withdraw_cached_endpoint(
+    cache: &mut HashMap<String, EndpointInfo>,
+    sender: &broadcast::Sender<EndpointInfo>,
+    fullname: &str,
+) -> bool {
+    let Some(endpoint) = cache.remove(fullname) else {
+        return false;
+    };
+    publish_withdrawal(sender, fullname.to_owned(), endpoint);
+    true
+}
+
 // Emit one removal per previously advertised peer. Draining the cache is
 // essential: a later generation may rediscover the same peer identity.
 fn withdraw_cached_endpoints(
     cache: &mut HashMap<String, EndpointInfo>,
     sender: &broadcast::Sender<EndpointInfo>,
 ) {
-    for (_fullname, endpoint) in cache.drain() {
-        let _ = sender.send(EndpointInfo {
-            id: endpoint.id,
-            ..Default::default()
-        });
+    for (fullname, endpoint) in cache.drain() {
+        publish_withdrawal(sender, fullname, endpoint);
     }
 }
 
@@ -201,15 +228,8 @@ impl MDnsDiscovery {
                                 }
                                 ServiceEvent::ServiceRemoved(_, fullname) => {
                                     trace!("ServiceRemoved: checking if should remove {}", fullname);
-                                    let should_remove = cache.get(&fullname).map(|ei| ei.id.clone());
-
-                                    if let Some(id) = should_remove {
-                                        info!("ServiceRemoved: Remove a previous service: {}", fullname);
-                                        cache.remove(&fullname);
-                                        let _ = self.sender.send(EndpointInfo {
-                                            id,
-                                            ..Default::default()
-                                        });
+                                    if withdraw_cached_endpoint(&mut cache, &self.sender, &fullname) {
+                                        info!("MDnsDiscovery: cached service removed");
                                     }
                                 }
                                 ServiceEvent::SearchStarted(_) | ServiceEvent::SearchStopped(_) => {}
@@ -272,16 +292,19 @@ mod lifecycle_tests {
         let mut removed = Vec::new();
         for _ in 0..2 {
             let event = reader.try_recv().unwrap();
-            assert_eq!(event.present, None);
+            assert_eq!(event.present, Some(false));
             assert_eq!(event.name, None);
             assert_eq!(event.ip, None);
             assert_eq!(event.port, None);
-            removed.push(event.id);
+            removed.push((event.fullname, event.id));
         }
         removed.sort();
         assert_eq!(
             removed,
-            ["192.0.2.1:1024".to_owned(), "192.0.2.2:2048".to_owned()]
+            [
+                ("old-a.local.".to_owned(), "192.0.2.1:1024".to_owned()),
+                ("old-b.local.".to_owned(), "192.0.2.2:2048".to_owned()),
+            ]
         );
         let fresh = reader.try_recv().unwrap();
         assert_eq!(fresh.id, "192.0.2.3:3072");
@@ -291,6 +314,38 @@ mod lifecycle_tests {
 
         // A second stop must not duplicate removals.
         withdraw_cached_endpoints(&mut cache, &sender);
+        assert!(reader.try_recv().is_err());
+    }
+
+    #[test]
+    fn given_unknown_and_duplicate_mdns_removals_when_processed_then_only_cached_route_is_withdrawn(
+    ) {
+        let (sender, mut reader) = broadcast::channel(8);
+        let mut cache = HashMap::from([(
+            "peer.local.".to_owned(),
+            EndpointInfo {
+                id: "192.0.2.10:3456".to_owned(),
+                fullname: "peer.local.".to_owned(),
+                name: Some("Private peer name".to_owned()),
+                ip: Some("192.0.2.10".to_owned()),
+                port: Some("3456".to_owned()),
+                present: Some(true),
+                ..Default::default()
+            },
+        )]);
+
+        assert!(!withdraw_cached_endpoint(&mut cache, &sender, "other.local."));
+        assert!(withdraw_cached_endpoint(&mut cache, &sender, "peer.local."));
+        assert!(!withdraw_cached_endpoint(&mut cache, &sender, "peer.local."));
+        assert!(cache.is_empty());
+        let event = reader.try_recv().unwrap();
+        assert_eq!(event.fullname, "peer.local.");
+        assert_eq!(event.id, "192.0.2.10:3456");
+        assert_eq!(event.present, Some(false));
+        assert!(event.name.is_none());
+        assert!(event.ip.is_none());
+        assert!(event.port.is_none());
+        assert!(event.rtype.is_none());
         assert!(reader.try_recv().is_err());
     }
 }
