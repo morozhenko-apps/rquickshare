@@ -35,8 +35,8 @@ Positive: known valid resolved probe routes then removed; N1 malformed/missing T
 ## Implementation / completion gates
 
 1. [x] Source/issue scan, minimal DI architecture, risk and scenarios written **before** implementation.
-2. [ ] Extract production event loop to private generic event+probe ports, preserve SDK `browse` and outer shutdown, keep same run ordering.
-3. [ ] Add original end-to-end event-loop regression methods with real `ServiceInfo` but controlled external event/reachability, including fault and cancellation; assess test fixture generated TXT and ordinary Android naming correctness.
+2. [x] Extract production event loop to private generic event+probe ports, preserve SDK `browse` and outer shutdown, keep same run ordering.
+3. [x] Add four end-to-end event-loop regression methods using real `ServiceInfo`/`ServiceEvent` with controlled external event/reachability, including closure and cancellation; fake OS TCP and real Android remain separate.
 4. [ ] Final strict fmt, Core stable once, Core+Tauri Clippy, frontend and Native GTK exact-source CI; separate sensitive-race checks only at mandated stage, no redundant heavy 10× loop.
 5. [ ] Record executed test names, outcomes/coverage evidence, code SHA, rollback; issue update. Physical mDNS SDK/Pixel/Windows remains OPEN; no closed claim without installed acceptance.
 
@@ -45,3 +45,10 @@ Do not use green unit fixtures as proof of real SDK multicast timing or Google p
 ## Implementation checkpoint (CI pending)
 
 Production+test `c444ca84c1b5746d47477777631deca49b02c6b7` extracts one real `run_event_loop` for both SDK and tests, with event+reachability future ports. Four real `ServiceEvent`+real `ServiceInfo`-based Tokio tests cover resolved+removed/duplicate/unknown, missing/bad TXT or unreachable probe, cancellation-before-event and cancellation-during-pending-reachability. `df502aa89064f37b1ec2dc9e9dfb31543c8ad2c2` applied exact nightly rustfmt and removed an unused fixture assignment; `2545e0519bb8f236e1948993eef28b31d2e58ac0` corrected `IntoTxtProperties` argument types (requires `&[T]`, not `&[T; 1]`) after a real CI compile diagnostic. This **does not** assert that the final source has passed. No changes to installed daemon, SDK lifetime finalizer or real multicast acceptance. Next: inspect final CI, fix only proven compile/test issues; update issue and checkpoint; leave issue OPEN pending real SDK/hardware verification.
+
+
+## Final-source automated gate checkpoint
+
+Code SHA `2545e0519bb8f236e1948993eef28b31d2e58ac0` contains the earlier #11 address correction plus this private #9 port refactor; no later executable changes at this checkpoint. [Preflight run 40093504811](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504811) and [Native GTK run 40093504760](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504760) were inspected individually.
+
+At checkpoint, **Core Rust tests SUCCESS (job 120871102186)**: `790 passed, 0 failed, 0 ignored, 8 filtered`, both separate integration binaries `4/4`; all **seven new methods** from #11 and #9 printed `ok`. Rust format SUCCESS, Core Clippy SUCCESS, frontend SUCCESS, Native GTK SUCCESS. **Tauri Clippy still IN PROGRESS**, so this is **5/6 verified, NOT a complete all-green CI claim**. Inspect terminal Tauri job `120871102157` before marking the final source fully green; preserve this specific SHA/run proof rather than relying on the GitHub latest badge. No hardware or real-SDK multicast acceptance has been performed. A2.2 BWU #8 remains unresolved by design.
