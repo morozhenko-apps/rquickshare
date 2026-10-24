@@ -1,7 +1,6 @@
 # Full Quick Share roadmap
 
-Current implementation, selected distribution/signing bindings and remaining gates:
-[current state](current-state.md). Dated checkpoints below retain historical observations.
+**Live backlog and release gates:** [active-backlog.md](active-backlog.md). Historical implementation evidence: [current state](current-state.md). Dated checkpoints below retain historical observations.
 
 _Last updated: 2026-10-18 for product direction; dated implementation checkpoints retained._
 
