@@ -104,7 +104,7 @@ async fn consent(accept: bool) {
         if accept {
             State::Finished
         } else {
-            State::Disconnected
+            State::Rejected
         }
     );
     assert_eq!(control.snapshot().id, snapshot.id);
