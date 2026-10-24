@@ -21,6 +21,12 @@ pub enum Event {
     GattRead,
     GattHeaderReady,
     GattWeaveConnectWrite,
+    GattNotifyRequested,
+    GattFirstDataWriteQueued,
+    GattWriteQueueRejected,
+    GattFirstDataPacketReceived,
+    GattFirstDataLastFragment,
+    GattNotifyWorkerExited,
     GattNotifyOpened,
     GattBridgeBusy,
     GattSessionOpened,
@@ -81,6 +87,12 @@ impl Event {
             Self::GattRead => "gatt_slot0_read",
             Self::GattHeaderReady => "gatt_header_ready",
             Self::GattWeaveConnectWrite => "gatt_weave_connect_write",
+            Self::GattNotifyRequested => "gatt_notify_requested",
+            Self::GattFirstDataWriteQueued => "gatt_first_data_write_queued",
+            Self::GattWriteQueueRejected => "gatt_write_queue_rejected",
+            Self::GattFirstDataPacketReceived => "gatt_first_data_packet_received",
+            Self::GattFirstDataLastFragment => "gatt_first_data_last_fragment",
+            Self::GattNotifyWorkerExited => "gatt_notify_worker_exited",
             Self::GattNotifyOpened => "gatt_notify_opened",
             Self::GattBridgeBusy => "gatt_bridge_busy",
             Self::GattSessionOpened => "gatt_session_opened",
@@ -176,6 +188,12 @@ mod tests {
             Event::GattRead,
             Event::GattHeaderReady,
             Event::GattWeaveConnectWrite,
+            Event::GattNotifyRequested,
+            Event::GattFirstDataWriteQueued,
+            Event::GattWriteQueueRejected,
+            Event::GattFirstDataPacketReceived,
+            Event::GattFirstDataLastFragment,
+            Event::GattNotifyWorkerExited,
             Event::GattNotifyOpened,
             Event::GattBridgeBusy,
             Event::GattSessionOpened,
@@ -312,6 +330,34 @@ mod startup_timeline_contract_tests {
             assert!(!line(event, 55).contains('@'));
         }
         assert_eq!(unique.len(), 7);
+    }
+
+    #[test]
+    fn given_first_weave_payload_boundaries_when_rendered_then_only_allowlisted_static_names_exist() {
+        let markers = [
+            (Event::GattNotifyRequested, "gatt_notify_requested"),
+            (Event::GattFirstDataWriteQueued, "gatt_first_data_write_queued"),
+            (Event::GattWriteQueueRejected, "gatt_write_queue_rejected"),
+            (
+                Event::GattFirstDataPacketReceived,
+                "gatt_first_data_packet_received",
+            ),
+            (
+                Event::GattFirstDataLastFragment,
+                "gatt_first_data_last_fragment",
+            ),
+            (Event::GattNotifyWorkerExited, "gatt_notify_worker_exited"),
+        ];
+        let mut unique = std::collections::BTreeSet::new();
+        for (event, name) in markers {
+            assert!(unique.insert(name));
+            let output = line(event, 123);
+            assert_eq!(output, format!("rqs-receiver event={name} elapsed_ms=123"));
+            assert_eq!(output.split_whitespace().count(), 3);
+            assert!(!output.contains('@'));
+            assert!(!output.contains('/'));
+        }
+        assert_eq!(unique.len(), 6);
     }
 
     #[test]
