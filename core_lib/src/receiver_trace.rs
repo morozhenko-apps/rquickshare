@@ -336,10 +336,14 @@ mod startup_timeline_contract_tests {
     }
 
     #[test]
-    fn given_first_weave_payload_boundaries_when_rendered_then_only_allowlisted_static_names_exist() {
+    fn given_first_weave_payload_boundaries_when_rendered_then_only_allowlisted_static_names_exist()
+    {
         let markers = [
             (Event::GattNotifyRequested, "gatt_notify_requested"),
-            (Event::GattFirstDataWriteQueued, "gatt_first_data_write_queued"),
+            (
+                Event::GattFirstDataWriteQueued,
+                "gatt_first_data_write_queued",
+            ),
             (Event::GattWriteQueueRejected, "gatt_write_queue_rejected"),
             (
                 Event::GattFirstDataPacketReceived,
