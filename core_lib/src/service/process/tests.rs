@@ -48,7 +48,6 @@ fn given_saved_visible_temporary_or_hidden_when_daemon_core_starts_then_receivin
     }
 }
 
-
 #[test]
 fn given_native_settings_check_when_missing_corrupt_or_directory_identity_changes_then_check_is_read_only_and_never_defaults_corruption(
 ) {
