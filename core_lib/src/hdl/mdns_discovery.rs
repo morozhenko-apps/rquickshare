@@ -228,7 +228,7 @@ impl MDnsDiscovery {
                                 }
                                 ServiceEvent::ServiceRemoved(_, fullname) => {
                                     trace!("ServiceRemoved: checking if should remove {}", fullname);
-                                    if withdraw_cached_endpoint(&mut cache, &self.sender, &fullname) {
+                                    if withdraw_cached_endpoint(cache, &self.sender, &fullname) {
                                         info!("MDnsDiscovery: cached service removed");
                                     }
                                 }

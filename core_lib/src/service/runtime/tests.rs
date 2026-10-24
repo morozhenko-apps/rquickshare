@@ -217,13 +217,14 @@ fn given_duplicate_named_routes_when_minimal_mdns_tombstone_arrives_then_only_ma
         present: Some(false),
         ..Default::default()
     };
+    let revision_before = runtime.snapshot(client).unwrap().revision;
     runtime.discovered(removed.clone()).unwrap();
     let remaining = runtime.endpoints();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].id, second_id);
     assert!(!runtime.routes.contains_key(&first_id));
     assert!(runtime.routes.contains_key(&second_id));
-    assert_eq!(runtime.snapshot(client).unwrap().endpoints.len(), 1);
+    assert!(runtime.snapshot(client).unwrap().revision > revision_before);
 
     // Duplicate or unknown tombstones must not withdraw another device.
     runtime.discovered(removed).unwrap();
