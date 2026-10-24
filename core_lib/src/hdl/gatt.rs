@@ -89,16 +89,14 @@ fn is_weave_connection_write(packet: &[u8]) -> bool {
 }
 
 fn is_weave_data_write(packet: &[u8]) -> bool {
-    packet.first().is_some_and(|header| header & WEAVE_CONTROL == 0)
+    packet
+        .first()
+        .is_some_and(|header| header & WEAVE_CONTROL == 0)
 }
 
 /// Best-effort single-server ingress epoch, not a peer identity or admission
 /// decision. Never use this passive observer to grant transport ownership.
-fn first_data_queued_after_connect(
-    seen: &AtomicBool,
-    is_connect: bool,
-    is_data: bool,
-) -> bool {
+fn first_data_queued_after_connect(seen: &AtomicBool, is_connect: bool, is_data: bool) -> bool {
     if is_connect {
         seen.store(false, Ordering::Relaxed);
         false
@@ -429,32 +427,33 @@ impl ReceiverGattServer {
                                     debug!("{INNER_NAME}: weave notify subscription started");
                                     let worker_tasks = tasks.clone();
                                     let lifetime = tasks.lifetime();
-                                    let admitted = start_managed_notify_worker(&tasks, async move {
-                                        let _bridge = bridge;
-                                        let result = crate::manager::session::until_stopped(
-                                            &lifetime,
-                                            weave_session(
-                                                notifier,
-                                                packet_receiver,
-                                                channel_sender,
-                                                bwu_router,
-                                                tcp_port,
-                                                worker_tasks,
-                                                admission,
-                                            ),
-                                        )
-                                        .await;
-                                        if let Some(Err(error)) = result {
-                                            warn!(
-                                            "{INNER_NAME}: weave session ended with error: {error}"
-                                        );
-                                        }
-                                        let _ = refresh_sender
-                                            .send(ReceiverAdvertisingRefresh::Immediate);
-                                        crate::receiver_trace::event(
-                                            crate::receiver_trace::Event::GattNotifyWorkerExited,
-                                        );
-                                    });
+                                    let admitted =
+                                        start_managed_notify_worker(&tasks, async move {
+                                            let _bridge = bridge;
+                                            let result = crate::manager::session::until_stopped(
+                                                &lifetime,
+                                                weave_session(
+                                                    notifier,
+                                                    packet_receiver,
+                                                    channel_sender,
+                                                    bwu_router,
+                                                    tcp_port,
+                                                    worker_tasks,
+                                                    admission,
+                                                ),
+                                            )
+                                            .await;
+                                            if let Some(Err(error)) = result {
+                                                warn!(
+                                                "{INNER_NAME}: weave session ended with error: {error}"
+                                            );
+                                            }
+                                            let _ = refresh_sender
+                                                .send(ReceiverAdvertisingRefresh::Immediate);
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattNotifyWorkerExited,
+                                            );
+                                        });
                                     if let Err(error) = admitted {
                                         warn!("{INNER_NAME}: unable to start managed GATT notifier worker: {error}");
                                     }
@@ -868,7 +867,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_live_notify_worker_when_callback_admits_then_reply_is_not_blocked_by_session_lifetime() {
+    async fn given_live_notify_worker_when_callback_admits_then_reply_is_not_blocked_by_session_lifetime(
+    ) {
         let parent = CancellationToken::new();
         let tasks = SessionTasks::new(&parent, 2).unwrap();
         let slots = Arc::new(Semaphore::new(1));
@@ -892,7 +892,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_closed_managed_owner_when_notify_callback_submits_then_bridge_is_released_without_detach() {
+    async fn given_closed_managed_owner_when_notify_callback_submits_then_bridge_is_released_without_detach(
+    ) {
         let parent = CancellationToken::new();
         parent.cancel();
         let tasks = SessionTasks::new(&parent, 1).unwrap();
@@ -923,7 +924,9 @@ mod tests {
 
         assert!(!is_weave_data_write(&[]));
         assert!(!is_weave_data_write(&[WEAVE_CONTROL]));
-        assert!(!is_weave_data_write(&[WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM]));
+        assert!(!is_weave_data_write(&[
+            WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM
+        ]));
         assert!(!is_weave_data_write(&[WEAVE_CONTROL | WEAVE_CMD_ERROR]));
         assert!(is_weave_data_write(&[WEAVE_FIRST_BIT, 0]));
         assert!(is_weave_data_write(&[WEAVE_LAST_BIT, 0]));
