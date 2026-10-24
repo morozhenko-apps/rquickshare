@@ -29,7 +29,7 @@ Run from the already cloned repository on Alcotester. Preserve uncommitted work:
   find "$HOME/Downloads" -maxdepth 4 -type f -name 'rquickshare-native_0.9.0-1_amd64.deb' -print
   out="$HOME/Downloads/rquickshare-candidate-$(git rev-parse --short HEAD)"
   python3 scripts/native_deb.py build --profile dev --output "$out"
-  sha256sum -c "$out/rquickshare-native_0.9.0-1.debug_amd64.deb.sha256"
+  (cd "$out" && sha256sum -c "rquickshare-native_0.9.0-1.debug_amd64.deb.sha256")
   python3 scripts/native_deb.py verify "$out/rquickshare-native_0.9.0-1.debug_amd64.deb"
   dpkg-deb --field "$out/rquickshare-native_0.9.0-1.debug_amd64.deb" Package Version Architecture
   echo "CANDIDATE=$out/rquickshare-native_0.9.0-1.debug_amd64.deb"
