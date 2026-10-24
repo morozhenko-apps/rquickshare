@@ -334,9 +334,17 @@ mod lifecycle_tests {
             },
         )]);
 
-        assert!(!withdraw_cached_endpoint(&mut cache, &sender, "other.local."));
+        assert!(!withdraw_cached_endpoint(
+            &mut cache,
+            &sender,
+            "other.local."
+        ));
         assert!(withdraw_cached_endpoint(&mut cache, &sender, "peer.local."));
-        assert!(!withdraw_cached_endpoint(&mut cache, &sender, "peer.local."));
+        assert!(!withdraw_cached_endpoint(
+            &mut cache,
+            &sender,
+            "peer.local."
+        ));
         assert!(cache.is_empty());
         let event = reader.try_recv().unwrap();
         assert_eq!(event.fullname, "peer.local.");
