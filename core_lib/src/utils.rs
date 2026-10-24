@@ -269,7 +269,14 @@ where
         let std::net::IpAddr::V4(ip) = address else {
             continue;
         };
-        if ip.is_loopback() || ip.is_link_local() {
+        // BWU advertises a TCP unicast destination, never an unspecified,
+        // multicast, or limited-broadcast address.
+        if ip.is_loopback()
+            || ip.is_link_local()
+            || ip.is_unspecified()
+            || ip.is_multicast()
+            || ip.is_broadcast()
+        {
             continue;
         }
 
@@ -540,6 +547,72 @@ mod tests {
         for name in ["Docker0", "Wg0", "TAILSCALE0", "Warp0"] {
             assert!(is_virtual_interface(name));
         }
+    }
+
+    #[test]
+    fn given_special_non_unicast_ipv4_when_selecting_then_no_tcp_destination_is_advertised() {
+        let unusable = [
+            "0.0.0.0",
+            "224.0.0.0",
+            "224.0.0.1",
+            "239.255.255.255",
+            "255.255.255.255",
+        ];
+        for address in unusable {
+            let parsed = address.parse::<std::net::IpAddr>().unwrap();
+            assert_eq!(
+                select_lan_ipv4([("wlan0".to_owned(), parsed)]),
+                None,
+                "address={address}"
+            );
+        }
+
+        assert_eq!(
+            select_lan_ipv4(
+                unusable
+                    .iter()
+                    .map(|ip| ("wlan0".to_owned(), ip.parse().unwrap()))
+            ),
+            None,
+            "no special address may be treated as a fallback"
+        );
+    }
+
+    #[test]
+    fn given_special_ipv4_before_or_after_eligible_fallback_when_selecting_then_valid_unicast_wins()
+    {
+        for special in [
+            "0.0.0.0",
+            "224.0.0.0",
+            "224.0.0.1",
+            "239.255.255.255",
+            "255.255.255.255",
+        ] {
+            let invalid = special.parse::<std::net::IpAddr>().unwrap();
+            let public = "203.0.113.10".parse::<std::net::IpAddr>().unwrap();
+            let later = "198.51.100.20".parse::<std::net::IpAddr>().unwrap();
+            for addresses in [[invalid, public, later], [public, invalid, later]] {
+                assert_eq!(
+                    select_lan_ipv4(
+                        addresses.into_iter().map(|ip| ("eth0".to_owned(), ip))
+                    ),
+                    Some([203, 0, 113, 10]),
+                    "special={special}, order={addresses:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn given_invalid_ipv4_and_private_lan_when_selecting_then_private_preference_is_preserved() {
+        let selected = select_lan_ipv4([
+            ("eth0".to_owned(), "224.1.2.3".parse().unwrap()),
+            ("eth1".to_owned(), "198.51.100.9".parse().unwrap()),
+            ("wlan0".to_owned(), "192.168.42.7".parse().unwrap()),
+            ("eth2".to_owned(), "255.255.255.255".parse().unwrap()),
+            ("eth3".to_owned(), "10.0.0.7".parse().unwrap()),
+        ]);
+        assert_eq!(selected, Some([192, 168, 42, 7]));
     }
 
     #[test]
