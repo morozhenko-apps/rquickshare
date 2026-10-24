@@ -427,8 +427,9 @@ impl ReceiverGattServer {
                                     debug!("{INNER_NAME}: weave notify subscription started");
                                     let worker_tasks = tasks.clone();
                                     let lifetime = tasks.lifetime();
-                                    let admitted =
-                                        start_managed_notify_worker(&tasks, async move {
+                                    let admitted = start_managed_notify_worker(
+                                        &tasks,
+                                        async move {
                                             let _bridge = bridge;
                                             let result = crate::manager::session::until_stopped(
                                                 &lifetime,
@@ -453,7 +454,8 @@ impl ReceiverGattServer {
                                             crate::receiver_trace::event(
                                                 crate::receiver_trace::Event::GattNotifyWorkerExited,
                                             );
-                                        });
+                                        },
+                                    );
                                     if let Err(error) = admitted {
                                         warn!("{INNER_NAME}: unable to start managed GATT notifier worker: {error}");
                                     }
