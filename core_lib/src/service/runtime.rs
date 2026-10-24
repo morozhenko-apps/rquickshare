@@ -218,14 +218,17 @@ impl NativeRuntime {
     /// After abandonment or failure, await shutdown and construct a fresh runtime.
     pub async fn start(&mut self) -> Result<(), RuntimeError> {
         let startup = self.startup.take().ok_or(RuntimeError::CoreUnavailable)?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::RuntimeStartRequested);
         if self.core.start(startup.receiver).await.is_err() {
             self.core.stop().await;
             return Err(RuntimeError::CoreUnavailable);
         }
+        crate::receiver_trace::event(crate::receiver_trace::Event::RuntimeCoreReady);
         if self.core.discovery(startup.discovery_sender).await.is_err() {
             self.core.stop().await;
             return Err(RuntimeError::CoreUnavailable);
         }
+        crate::receiver_trace::event(crate::receiver_trace::Event::RuntimeDiscoveryWorkerReady);
         self.started = true;
         Ok(())
     }
@@ -415,6 +418,7 @@ impl NativeRuntime {
             if name.len() > 256 || name.chars().any(char::is_control) {
                 return Ok(());
             }
+            let first_admitted = existing.is_none() && self.endpoint_sequence == 0;
             let id = match existing {
                 Some(id) => {
                     let route = &self.routes[&id];
@@ -450,6 +454,9 @@ impl NativeRuntime {
                     addr,
                 },
             );
+            if first_admitted {
+                crate::receiver_trace::event(crate::receiver_trace::Event::FirstMdnsRouteAdmitted);
+            }
         }
         Ok(())
     }

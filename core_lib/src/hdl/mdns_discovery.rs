@@ -74,6 +74,7 @@ impl MDnsDiscovery {
 
         let service_type = "_FC9F5ED42C8A._tcp.local.";
         let receiver = self.daemon.browse(service_type)?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::MdnsBrowseStarted);
 
         loop {
             tokio::select! {

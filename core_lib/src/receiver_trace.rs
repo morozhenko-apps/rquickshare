@@ -3,6 +3,11 @@ use std::{ffi::OsStr, sync::OnceLock, time::Instant};
 #[derive(Clone, Copy)]
 pub enum Event {
     Start,
+    RuntimeStartRequested,
+    RuntimeCoreReady,
+    RuntimeDiscoveryWorkerReady,
+    MdnsBrowseStarted,
+    FirstMdnsRouteAdmitted,
     Visible,
     Hidden,
     AdvertisementStarted,
@@ -31,6 +36,11 @@ impl Event {
     fn name(self) -> &'static str {
         match self {
             Self::Start => "start",
+            Self::RuntimeStartRequested => "runtime_start_requested",
+            Self::RuntimeCoreReady => "runtime_core_ready",
+            Self::RuntimeDiscoveryWorkerReady => "runtime_discovery_worker_ready",
+            Self::MdnsBrowseStarted => "mdns_browse_started",
+            Self::FirstMdnsRouteAdmitted => "first_mdns_route_admitted",
             Self::Visible => "visible",
             Self::Hidden => "hidden",
             Self::AdvertisementStarted => "advertisement_started",
@@ -94,6 +104,11 @@ mod tests {
         assert!(enabled(Some(OsStr::new("1"))));
         for stage in [
             Event::Start,
+            Event::RuntimeStartRequested,
+            Event::RuntimeCoreReady,
+            Event::RuntimeDiscoveryWorkerReady,
+            Event::MdnsBrowseStarted,
+            Event::FirstMdnsRouteAdmitted,
             Event::Visible,
             Event::Hidden,
             Event::AdvertisementStarted,
@@ -127,5 +142,27 @@ mod tests {
                 assert!(!message.contains('@'));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod startup_timeline_contract_tests {
+    use super::{line, Event};
+
+    #[test]
+    fn given_cold_discovery_markers_when_rendered_then_names_are_distinct_and_no_peer_data_is_logged() {
+        let markers = [
+            (Event::RuntimeStartRequested, "runtime_start_requested"),
+            (Event::RuntimeCoreReady, "runtime_core_ready"),
+            (Event::RuntimeDiscoveryWorkerReady, "runtime_discovery_worker_ready"),
+            (Event::MdnsBrowseStarted, "mdns_browse_started"),
+            (Event::FirstMdnsRouteAdmitted, "first_mdns_route_admitted"),
+        ];
+        let mut unique = std::collections::BTreeSet::new();
+        for (event, name) in markers {
+            assert!(unique.insert(name));
+            assert_eq!(line(event, 17), format!("rqs-receiver event={name} elapsed_ms=17"));
+        }
+        assert_eq!(unique.len(), 5);
     }
 }
