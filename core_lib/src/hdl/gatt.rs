@@ -1,5 +1,6 @@
 mod slot;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -84,6 +85,25 @@ fn is_weave_connection_write(packet: &[u8]) -> bool {
     packet.first().is_some_and(|header| {
         header & WEAVE_CONTROL != 0 && header & WEAVE_CMD_MASK == WEAVE_CMD_CONN_REQUEST
     })
+}
+
+fn is_weave_data_write(packet: &[u8]) -> bool {
+    packet.first().is_some_and(|header| header & WEAVE_CONTROL == 0)
+}
+
+/// Best-effort single-server ingress epoch, not a peer identity or admission
+/// decision. Never use this passive observer to grant transport ownership.
+fn first_data_queued_after_connect(
+    seen: &AtomicBool,
+    is_connect: bool,
+    is_data: bool,
+) -> bool {
+    if is_connect {
+        seen.store(false, Ordering::Relaxed);
+        false
+    } else {
+        is_data && !seen.swap(true, Ordering::Relaxed)
+    }
 }
 
 /// A notifier is the single owner of Weave inbound packets until it stops.
@@ -253,6 +273,7 @@ impl ReceiverGattServer {
 
         const MAX_PENDING_GATT_WRITES: usize = 64;
         let (packet_sender, packet_receiver) = channel::<Vec<u8>>(MAX_PENDING_GATT_WRITES);
+        let first_data_queued = Arc::new(AtomicBool::new(true));
         let packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>> =
             Arc::new(Mutex::new(Some(packet_receiver)));
         let channel_sender = self.sender.clone();
@@ -332,18 +353,33 @@ impl ReceiverGattServer {
                             method: CharacteristicWriteMethod::Fun(Box::new(
                                 move |value, _request| {
                                     let packet_sender = packet_sender.clone();
+                                    let first_data_queued = first_data_queued.clone();
                                     Box::pin(async move {
-                                        if is_weave_connection_write(&value) {
+                                        let is_connect = is_weave_connection_write(&value);
+                                        let is_data = is_weave_data_write(&value);
+                                        if is_connect {
                                             crate::receiver_trace::event(
                                                 crate::receiver_trace::Event::GattWeaveConnectWrite,
                                             );
                                         }
                                         packet_sender.try_send(value).map_err(|error| {
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattWriteQueueRejected,
+                                            );
                                             warn!(
                                                 "{INNER_NAME}: rejecting GATT write because the weave queue is full or closed: {error}"
                                             );
                                             ReqError::Failed
                                         })?;
+                                        if first_data_queued_after_connect(
+                                            &first_data_queued,
+                                            is_connect,
+                                            is_data,
+                                        ) {
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattFirstDataWriteQueued,
+                                            );
+                                        }
                                         Ok(())
                                     })
                                 },
@@ -358,6 +394,9 @@ impl ReceiverGattServer {
                             notify: true,
                             indicate: true,
                             method: CharacteristicNotifyMethod::Fun(Box::new(move |notifier| {
+                                crate::receiver_trace::event(
+                                    crate::receiver_trace::Event::GattNotifyRequested,
+                                );
                                 let packet_receiver = packet_receiver.clone();
                                 let channel_sender = channel_sender.clone();
                                 let bwu_router = bwu_router.clone();
@@ -400,6 +439,9 @@ impl ReceiverGattServer {
                                         }
                                         let _ = refresh_sender
                                             .send(ReceiverAdvertisingRefresh::Immediate);
+                                        crate::receiver_trace::event(
+                                            crate::receiver_trace::Event::GattNotifyWorkerExited,
+                                        );
                                     });
                                     if let Ok(started) = started {
                                         let _ = started.await;
@@ -565,6 +607,8 @@ async fn weave_session(
     let mut outbound_buffer = Vec::new();
     let mut send_counter: u8 = 1;
     let mut first_frame_forwarded = false;
+    let mut first_data_packet_received = false;
+    let mut first_data_last_fragment = false;
     let mut read_buffer = [0_u8; 2048];
 
     // A peer can disappear without sending a final weave control packet. Observe
@@ -592,6 +636,12 @@ async fn weave_session(
                     continue;
                 }
 
+                if !first_data_packet_received {
+                    first_data_packet_received = true;
+                    crate::receiver_trace::event(
+                        crate::receiver_trace::Event::GattFirstDataPacketReceived,
+                    );
+                }
                 if header & WEAVE_FIRST_BIT != 0 {
                     reassembly.clear();
                 }
@@ -607,6 +657,12 @@ async fn weave_session(
 
                 if header & WEAVE_LAST_BIT == 0 {
                     continue;
+                }
+                if !first_data_last_fragment {
+                    first_data_last_fragment = true;
+                    crate::receiver_trace::event(
+                        crate::receiver_trace::Event::GattFirstDataLastFragment,
+                    );
                 }
 
                 if reassembly.len() < 3 {
@@ -794,6 +850,26 @@ mod tests {
         assert!(reserve_weave_bridge(&permits).is_none());
         drop(second);
         assert!(reserve_weave_bridge(&permits).is_some());
+    }
+
+    #[test]
+    fn given_queued_gatt_write_kinds_when_observed_then_first_data_marker_only_follows_connect() {
+        let seen = AtomicBool::new(true);
+        assert!(!first_data_queued_after_connect(&seen, false, true));
+        assert!(!first_data_queued_after_connect(&seen, false, false));
+        assert!(!first_data_queued_after_connect(&seen, true, false));
+        assert!(first_data_queued_after_connect(&seen, false, true));
+        assert!(!first_data_queued_after_connect(&seen, false, true));
+        assert!(!first_data_queued_after_connect(&seen, false, false));
+        assert!(!first_data_queued_after_connect(&seen, true, false));
+        assert!(first_data_queued_after_connect(&seen, false, true));
+
+        assert!(!is_weave_data_write(&[]));
+        assert!(!is_weave_data_write(&[WEAVE_CONTROL]));
+        assert!(!is_weave_data_write(&[WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM]));
+        assert!(!is_weave_data_write(&[WEAVE_CONTROL | WEAVE_CMD_ERROR]));
+        assert!(is_weave_data_write(&[WEAVE_FIRST_BIT, 0]));
+        assert!(is_weave_data_write(&[WEAVE_LAST_BIT, 0]));
     }
 
     #[test]
