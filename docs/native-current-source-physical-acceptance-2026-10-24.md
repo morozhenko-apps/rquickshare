@@ -81,3 +81,16 @@ Mode B applicable Positive/N1–N12: basic BLE/TCP transfer, empty/malformed dis
 An executable source bug requires reproducible symptom, alternative hypotheses and a scoped root-cause fix/regression plan **before changing production code**. For #16, authenticated route alias proof remains an architectural STOP and must never be faked by name/IP. For #8, owner chose A2.2; preserve fast BWU and leave security concern open. For actual fixed issues, update their trackers and the [active backlog](active-backlog.md) with true user acceptance, preserving source/build/installed SHA and exact operator observation; close only issues with fully passed applicable gates. Release #14 requires separate authorization, not a side effect of testing.
 
 **Current checkpoint:** operator hardware/build actions **NOT YET EXECUTED** in this chat. A documentation-only physical plan does not add a test and should not trigger heavy Rust CI.
+
+
+## 2026-10-24 operator-built candidate — completed offline build gate
+
+User ran the documented **local** build on Alcotester from clean `dev` HEAD `87af15c7e9776c93eba6d519249fd8143131027d` (only documentation differs after the tested executable source `2545e051`). Their supplied terminal output is direct evidence of:
+- Previous installed `rquickshare-native` version: `0.9.0-1`.
+- Real `cargo +stable build` finished for `rqs_lib` and Native GTK, package assembled at `~/Downloads/rquickshare-candidate-87af15c/rquickshare-native_0.9.0-1.debug_amd64.deb`.
+- `scripts/native_deb.py build --profile dev` ran its internal package verifier (PASS); the operator's independent `sha256sum -c` printed `OK`; subsequent `scripts/native_deb.py verify` printed PASS.
+- `dpkg-shlibdeps` noted merged-usr libc6 loader diversions; the packaging operation succeeded and validated. A nonfatal `bluer v0.17.3` future Rust incompatibility warning appeared. **No Rust future-incompatibility report collected yet**; do not assert its specific cause.
+- Native GTK compiles `rqs_lib` separately with `default-features = false`, so that compile displays nine `unused` warnings including `local_lan_ipv4`; **the daemon is built from core_lib with default `experimental` enabled** and `inbound.rs::send_upgrade_path_available` uses `local_lan_ipv4` for `WIFI_LAN`. Thus the warnings do not independently establish a dead BWU path. Source structure supports the call, but live BWU remains **UNTESTED** until Pixel transfer and trace evidence.
+- **No local installation was reported**; no user service restart, test transfer, or previous-package rollback artifact verified. Do not infer these steps succeeded. Next gate: locate and independently verify the old `0.9.0-1` rollback `.deb`, then an explicit idle user-controlled package replacement and actual test matrix.
+
+This checkpoint is *operator-supplied physical-host packaging evidence*, not a GitHub Actions artifact. Keep old/new package hashes locally; avoid committing host paths with private identifiers, peer/device secrets or full verbose journal.
