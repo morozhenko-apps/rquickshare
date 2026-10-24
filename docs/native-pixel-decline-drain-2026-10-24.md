@@ -44,7 +44,7 @@ Per-production-file coverage: `core_lib/src/hdl/inbound.rs` (real `apply_consent
 
 1. [x] Root cause source scan and external design reference; user physical outcomes captured.
 2. [x] Docs-first minimal plan and invariants; preserve rollback of one production+test commit.
-3. [ ] Modify only inbound reject terminal path to add bounded peer drain and deterministic crypto/EOF/deadline tests.
+3. [x] Modify only inbound reject terminal path to add bounded peer drain and deterministic crypto/EOF/deadline tests: production+tests `57739042`, strict rustfmt test-only `3a35097f`; CI and Pixel recheck pending.
 4. [ ] Source-exact fmt, stable Core, two Clippy, GTK, frontend; separate flaky-sensitive tests as final global release gate. Do not busy-poll CI.
 5. [ ] User rebuilds an **uninstalled** candidate from new source only after exact CI is verified, then explicitly reinstalls with original rollback intact and all 3 executable comparisons. Pixel→KDE Decline should report `Declined` repeatedly; both directions, one accepted transfer and manual visibility remain green. Physical result required before closing the remaining part of #18.
 6. [ ] Update #18 and active backlog with source SHA/CI and hardware acceptance. #18 still includes cold/warm discovery measurement outside this regression. `master`, production tags and R2 untouched.
