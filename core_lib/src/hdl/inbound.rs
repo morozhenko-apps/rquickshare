@@ -799,6 +799,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 debug!("Handling State::Initial frame");
                 let frame = location_nearby_connections::OfflineFrame::decode(&*frame_data)?;
                 let rdi = self.process_connection_request(&frame)?;
+                crate::receiver_trace::event(
+                    crate::receiver_trace::Event::InboundConnectionRequestDecoded,
+                );
                 info!("Remote device introduction received");
 
                 // Advance current state
@@ -815,6 +818,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 debug!("Handling State::ReceivedConnectionRequest frame");
                 let msg = Ukey2Message::decode(&*frame_data)?;
                 self.process_ukey2_client_init(&msg).await?;
+                crate::receiver_trace::event(
+                    crate::receiver_trace::Event::InboundUkey2ClientInit,
+                );
 
                 self.update_state(
                     |e: &mut InnerState| {
@@ -1635,6 +1641,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             false,
         )
         .await;
+        crate::receiver_trace::event(crate::receiver_trace::Event::InboundConsentEntered);
 
         if !introduction.file_metadata.is_empty() && introduction.text_metadata.is_empty() {
             trace!("process_introduction: handling file_metadata");

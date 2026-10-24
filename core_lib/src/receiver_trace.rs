@@ -20,6 +20,16 @@ pub enum Event {
     AdvertisementPeriodic,
     GattRead,
     GattHeaderReady,
+    GattWeaveConnectWrite,
+    GattNotifyOpened,
+    GattBridgeBusy,
+    GattSessionOpened,
+    GattConnectParsed,
+    GattConfirmSent,
+    GattFirstFrameForwarded,
+    InboundConnectionRequestDecoded,
+    InboundUkey2ClientInit,
+    InboundConsentEntered,
     MdnsRegister,
     MdnsResend,
     BwuOfferSent,
@@ -63,6 +73,16 @@ impl Event {
             Self::AdvertisementPeriodic => "advertisement_periodic",
             Self::GattRead => "gatt_slot0_read",
             Self::GattHeaderReady => "gatt_header_ready",
+            Self::GattWeaveConnectWrite => "gatt_weave_connect_write",
+            Self::GattNotifyOpened => "gatt_notify_opened",
+            Self::GattBridgeBusy => "gatt_bridge_busy",
+            Self::GattSessionOpened => "gatt_session_opened",
+            Self::GattConnectParsed => "gatt_connect_parsed",
+            Self::GattConfirmSent => "gatt_confirm_sent",
+            Self::GattFirstFrameForwarded => "gatt_first_frame_forwarded",
+            Self::InboundConnectionRequestDecoded => "inbound_connection_request_decoded",
+            Self::InboundUkey2ClientInit => "inbound_ukey2_client_init",
+            Self::InboundConsentEntered => "inbound_consent_entered",
             Self::MdnsRegister => "mdns_register",
             Self::MdnsResend => "mdns_resend",
             Self::BwuOfferSent => "bwu_offer_sent",
@@ -141,6 +161,16 @@ mod tests {
             Event::AdvertisementPeriodic,
             Event::GattRead,
             Event::GattHeaderReady,
+            Event::GattWeaveConnectWrite,
+            Event::GattNotifyOpened,
+            Event::GattBridgeBusy,
+            Event::GattSessionOpened,
+            Event::GattConnectParsed,
+            Event::GattConfirmSent,
+            Event::GattFirstFrameForwarded,
+            Event::InboundConnectionRequestDecoded,
+            Event::InboundUkey2ClientInit,
+            Event::InboundConsentEntered,
             Event::MdnsRegister,
             Event::MdnsResend,
             Event::BwuOfferSent,
@@ -203,6 +233,34 @@ mod startup_timeline_contract_tests {
             );
         }
         assert_eq!(unique.len(), 7);
+    }
+
+    #[test]
+    fn given_weave_stage_markers_when_rendered_then_events_are_unique_and_redacted() {
+        let stages = [
+            (Event::GattWeaveConnectWrite, "gatt_weave_connect_write"),
+            (Event::GattNotifyOpened, "gatt_notify_opened"),
+            (Event::GattBridgeBusy, "gatt_bridge_busy"),
+            (Event::GattSessionOpened, "gatt_session_opened"),
+            (Event::GattConnectParsed, "gatt_connect_parsed"),
+            (Event::GattConfirmSent, "gatt_confirm_sent"),
+            (Event::GattFirstFrameForwarded, "gatt_first_frame_forwarded"),
+            (
+                Event::InboundConnectionRequestDecoded,
+                "inbound_connection_request_decoded",
+            ),
+            (Event::InboundUkey2ClientInit, "inbound_ukey2_client_init"),
+            (Event::InboundConsentEntered, "inbound_consent_entered"),
+        ];
+        let mut names = std::collections::BTreeSet::new();
+        for (event, name) in stages {
+            assert!(names.insert(name));
+            assert_eq!(
+                line(event, 1234),
+                format!("rqs-receiver event={name} elapsed_ms=1234")
+            );
+        }
+        assert_eq!(names.len(), 10);
     }
 
     #[test]

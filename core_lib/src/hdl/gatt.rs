@@ -12,7 +12,7 @@ use bluer::{Adapter, Uuid, UuidExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use crate::channel::{ChannelDirection, ChannelMessage, TransferType};
@@ -78,6 +78,18 @@ fn receiver_discovery_refresh(
         resend_mdns: true,
         advertising: deferred_advertising_enabled.then_some(ReceiverAdvertisingRefresh::Deferred),
     })
+}
+
+fn is_weave_connection_write(packet: &[u8]) -> bool {
+    packet.first().is_some_and(|header| {
+        header & WEAVE_CONTROL != 0 && header & WEAVE_CMD_MASK == WEAVE_CMD_CONN_REQUEST
+    })
+}
+
+/// A notifier is the single owner of Weave inbound packets until it stops.
+/// Never route one shared write queue into two concurrent peer sessions.
+fn reserve_weave_bridge(slots: &Arc<Semaphore>) -> Option<OwnedSemaphorePermit> {
+    Arc::clone(slots).try_acquire_owned().ok()
 }
 
 fn parse_connection_request(packet: &[u8]) -> Result<u16, anyhow::Error> {
@@ -321,6 +333,11 @@ impl ReceiverGattServer {
                                 move |value, _request| {
                                     let packet_sender = packet_sender.clone();
                                     Box::pin(async move {
+                                        if is_weave_connection_write(&value) {
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattWeaveConnectWrite,
+                                            );
+                                        }
                                         packet_sender.try_send(value).map_err(|error| {
                                             warn!(
                                                 "{INNER_NAME}: rejecting GATT write because the weave queue is full or closed: {error}"
@@ -347,11 +364,17 @@ impl ReceiverGattServer {
                                 let refresh_sender = session_refresh_sender.clone();
                                 let tasks = callback_tasks.clone();
                                 let admission = admission.clone();
-                                let bridge = Arc::clone(&bridge_slots).try_acquire_owned();
+                                let bridge = reserve_weave_bridge(&bridge_slots);
                                 Box::pin(async move {
-                                    let Ok(bridge) = bridge else {
+                                    let Some(bridge) = bridge else {
+                                        crate::receiver_trace::event(
+                                            crate::receiver_trace::Event::GattBridgeBusy,
+                                        );
                                         return;
                                     };
+                                    crate::receiver_trace::event(
+                                        crate::receiver_trace::Event::GattNotifyOpened,
+                                    );
                                     debug!("{INNER_NAME}: weave notify subscription started");
                                     let worker_tasks = tasks.clone();
                                     let lifetime = tasks.lifetime();
@@ -486,6 +509,7 @@ async fn weave_session(
         .ok_or_else(|| anyhow!("weave packet receiver is unavailable"))?;
 
     info!("{INNER_NAME}: weave notify session opened");
+    crate::receiver_trace::event(crate::receiver_trace::Event::GattSessionOpened);
 
     let selected_packet_size = loop {
         let packet = tokio::select! {
@@ -494,7 +518,10 @@ async fn weave_session(
         };
 
         match parse_connection_request(&packet) {
-            Ok(selected) => break selected,
+            Ok(selected) => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::GattConnectParsed);
+                break selected;
+            },
             Err(error) => {
                 debug!("{INNER_NAME}: ignoring pre-handshake packet: {error}");
             }
@@ -505,6 +532,7 @@ async fn weave_session(
     notifier
         .notify(connection_confirm(selected_packet_size).to_vec())
         .await?;
+    crate::receiver_trace::event(crate::receiver_trace::Event::GattConfirmSent);
     let max_payload = usize::from(selected_packet_size.saturating_sub(1)).max(19);
 
     let (inbound_side, weave_side) = tokio::io::duplex(64 * 1024);
@@ -536,6 +564,7 @@ async fn weave_session(
     let mut reassembly = Vec::new();
     let mut outbound_buffer = Vec::new();
     let mut send_counter: u8 = 1;
+    let mut first_frame_forwarded = false;
     let mut read_buffer = [0_u8; 2048];
 
     // A peer can disappear without sending a final weave control packet. Observe
@@ -625,6 +654,12 @@ async fn weave_session(
                 }
 
                 weave_write.write_all(framed).await?;
+                if !first_frame_forwarded {
+                    first_frame_forwarded = true;
+                    crate::receiver_trace::event(
+                        crate::receiver_trace::Event::GattFirstFrameForwarded,
+                    );
+                }
                 reassembly.clear();
             }
             read_result = weave_read.read(&mut read_buffer) => {
@@ -734,6 +769,25 @@ mod managed_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn given_control_frames_and_overlapping_notify_when_admitted_then_only_one_bridge_owns_peer() {
+        let connect = [WEAVE_CONTROL, 0, 1, 0, 1, 0, 20];
+        assert!(is_weave_connection_write(&connect));
+        assert!(is_weave_connection_write(&connect[..1]));
+        assert!(!is_weave_connection_write(&[]));
+        assert!(!is_weave_connection_write(&[WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM]));
+        assert!(!is_weave_connection_write(&[WEAVE_CONTROL | WEAVE_CMD_ERROR]));
+        assert!(!is_weave_connection_write(&[WEAVE_FIRST_BIT]));
+        let permits = Arc::new(Semaphore::new(1));
+        let first = reserve_weave_bridge(&permits).unwrap();
+        assert!(reserve_weave_bridge(&permits).is_none(), "second active peer must never share the write queue");
+        drop(first);
+        let second = reserve_weave_bridge(&permits).unwrap();
+        assert!(reserve_weave_bridge(&permits).is_none());
+        drop(second);
+        assert!(reserve_weave_bridge(&permits).is_some());
+    }
 
     #[test]
     fn given_bad_weave_connection_requests_when_parsed_then_no_handshake_is_negotiated() {
