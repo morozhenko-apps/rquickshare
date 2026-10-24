@@ -1,5 +1,6 @@
 mod slot;
 
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -110,6 +111,17 @@ fn first_data_queued_after_connect(
 /// Never route one shared write queue into two concurrent peer sessions.
 fn reserve_weave_bridge(slots: &Arc<Semaphore>) -> Option<OwnedSemaphorePermit> {
     Arc::clone(slots).try_acquire_owned().ok()
+}
+
+/// BlueR awaits the returned Notify callback future before replying to
+/// StartNotify. Admission must return immediately; SessionTasks retains
+/// lifetime ownership of the worker after its JoinHandle is dropped.
+fn start_managed_notify_worker(
+    tasks: &SessionTasks,
+    worker: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), crate::sessions::SessionError> {
+    drop(tasks.spawn(worker)?);
+    Ok(())
 }
 
 fn parse_connection_request(packet: &[u8]) -> Result<u16, anyhow::Error> {
@@ -417,7 +429,7 @@ impl ReceiverGattServer {
                                     debug!("{INNER_NAME}: weave notify subscription started");
                                     let worker_tasks = tasks.clone();
                                     let lifetime = tasks.lifetime();
-                                    let started = tasks.spawn(async move {
+                                    let admitted = start_managed_notify_worker(&tasks, async move {
                                         let _bridge = bridge;
                                         let result = crate::manager::session::until_stopped(
                                             &lifetime,
@@ -443,9 +455,12 @@ impl ReceiverGattServer {
                                             crate::receiver_trace::Event::GattNotifyWorkerExited,
                                         );
                                     });
-                                    if let Ok(started) = started {
-                                        let _ = started.await;
+                                    if let Err(error) = admitted {
+                                        warn!("{INNER_NAME}: unable to start managed GATT notifier worker: {error}");
                                     }
+                                    crate::receiver_trace::event(
+                                        crate::receiver_trace::Event::GattNotifyCallbackReturning,
+                                    );
                                 })
                             })),
                             ..Default::default()
@@ -850,6 +865,48 @@ mod tests {
         assert!(reserve_weave_bridge(&permits).is_none());
         drop(second);
         assert!(reserve_weave_bridge(&permits).is_some());
+    }
+
+    #[tokio::test]
+    async fn given_live_notify_worker_when_callback_admits_then_reply_is_not_blocked_by_session_lifetime() {
+        let parent = CancellationToken::new();
+        let tasks = SessionTasks::new(&parent, 2).unwrap();
+        let slots = Arc::new(Semaphore::new(1));
+        let bridge = reserve_weave_bridge(&slots).unwrap();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+
+        // The real production admission returns synchronously. Holding the
+        // BLE permit must continue until the tracked worker exits.
+        start_managed_notify_worker(&tasks, async move {
+            let _bridge = bridge;
+            let _ = started_tx.send(());
+            let _ = release_rx.await;
+        })
+        .unwrap();
+        started_rx.await.unwrap();
+        assert!(reserve_weave_bridge(&slots).is_none());
+        release_tx.send(()).unwrap();
+        tasks.stop().await.unwrap();
+        assert!(reserve_weave_bridge(&slots).is_some());
+    }
+
+    #[tokio::test]
+    async fn given_closed_managed_owner_when_notify_callback_submits_then_bridge_is_released_without_detach() {
+        let parent = CancellationToken::new();
+        parent.cancel();
+        let tasks = SessionTasks::new(&parent, 1).unwrap();
+        let slots = Arc::new(Semaphore::new(1));
+        let bridge = reserve_weave_bridge(&slots).unwrap();
+
+        let error = start_managed_notify_worker(&tasks, async move {
+            let _bridge = bridge;
+            std::future::pending::<()>().await;
+        })
+        .unwrap_err();
+        assert_eq!(error, crate::sessions::SessionError::Closed);
+        assert!(reserve_weave_bridge(&slots).is_some());
+        tasks.stop().await.unwrap();
     }
 
     #[test]
