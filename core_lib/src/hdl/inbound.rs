@@ -526,6 +526,47 @@ pub fn peek_client_introduction(
     Ok(validate_client_introduction(&buffer[4..total]).ok())
 }
 
+
+#[derive(Debug, Default)]
+struct InboundFileProgressTrace {
+    first_chunk_seen: bool,
+    next_milestone: usize,
+}
+
+impl InboundFileProgressTrace {
+    // Per-session, allocation-free milestone decisions on persisted file bytes.
+    fn observe_committed<F>(&mut self, committed: u64, total: u64, mut emit: F)
+    where
+        F: FnMut(crate::receiver_trace::Event),
+    {
+        use crate::receiver_trace::Event;
+        if committed == 0 {
+            return;
+        }
+        if !self.first_chunk_seen {
+            self.first_chunk_seen = true;
+            emit(Event::InboundFirstFileChunkPersisted);
+        }
+        if total == 0 {
+            return;
+        }
+        const STAGES: [(u128, Event); 3] = [
+            (25, Event::InboundFileProgress25),
+            (50, Event::InboundFileProgress50),
+            (75, Event::InboundFileProgress75),
+        ];
+        let committed = u128::from(committed.min(total));
+        let total = u128::from(total);
+        while let Some(&(percent, event)) = STAGES.get(self.next_milestone) {
+            if committed * 100 < total * percent {
+                break;
+            }
+            self.next_milestone += 1;
+            emit(event);
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct InboundRequest<S = TcpStream> {
     socket: S,
@@ -538,6 +579,7 @@ pub struct InboundRequest<S = TcpStream> {
     previews: crate::preview_payload::PreviewIds,
     bandwidth_upgrade_enabled: bool,
     bwu_pending: bool,
+    file_progress_trace: InboundFileProgressTrace,
     peer_endpoint_id: Option<String>,
     receive_directory: crate::receive::Directory,
     receive_root: Option<crate::receive::Root>,
@@ -571,6 +613,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             previews: crate::preview_payload::PreviewIds::default(),
             bandwidth_upgrade_enabled: false,
             bwu_pending: false,
+            file_progress_trace: InboundFileProgressTrace::default(),
             peer_endpoint_id: None,
             receive_directory: crate::receive::ReceivePolicy::new(None).snapshot(),
             receive_root: None,
@@ -1402,6 +1445,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                 true,
                             )
                             .await;
+                            if let Some(metadata) = self.state.transfer_metadata.as_ref() {
+                                self.file_progress_trace.observe_committed(
+                                    metadata.ack_bytes,
+                                    metadata.total_bytes,
+                                    crate::receiver_trace::event,
+                                );
+                            }
                         }
 
                         if is_final_chunk {
@@ -1442,6 +1492,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                             }
                             self.state.transferred_files.remove(&payload_id);
                             if self.state.transferred_files.is_empty() {
+                                crate::receiver_trace::event(
+                                    crate::receiver_trace::Event::InboundLastFilePublished,
+                                );
                                 info!("Transfer finished");
                                 self.update_state(
                                     |e| {
@@ -1450,6 +1503,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                     true,
                                 )
                                 .await;
+                                crate::receiver_trace::event(
+                                    crate::receiver_trace::Event::InboundFilesCompleted,
+                                );
                                 self.disconnection().await?;
                                 return Err(anyhow!(crate::errors::AppError::NotAnError));
                             }
@@ -1896,6 +1952,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         };
 
         self.send_encrypted_frame(&frame).await?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::InboundAcceptFlushed);
 
         self.update_state(
             |e| {
@@ -4882,5 +4939,98 @@ mod managed_migration_tests {
         })
         .await
         .expect("managed migration deadlocked");
+    }
+}
+
+#[cfg(test)]
+mod inbound_file_progress_trace_tests {
+    use super::InboundFileProgressTrace;
+    use crate::receiver_trace::Event;
+
+    fn record(trace: &mut InboundFileProgressTrace, committed: u64, total: u64) -> Vec<Event> {
+        let mut events = Vec::new();
+        trace.observe_committed(committed, total, |event| events.push(event));
+        events
+    }
+
+    #[test]
+    fn given_empty_and_zero_total_when_observed_then_no_fake_percentage_emitted() {
+        let mut trace = InboundFileProgressTrace::default();
+        assert!(record(&mut trace, 0, 0).is_empty());
+        assert!(record(&mut trace, 0, 100).is_empty());
+        assert_eq!(
+            record(&mut trace, 1, 0),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert!(record(&mut trace, u64::MAX, 0).is_empty());
+    }
+
+    #[test]
+    fn given_cumulative_multifile_progress_when_crossing_exact_boundaries_then_one_event_per_stage()
+    {
+        let mut trace = InboundFileProgressTrace::default();
+        assert_eq!(
+            record(&mut trace, 1, 100),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert!(record(&mut trace, 24, 100).is_empty());
+        assert_eq!(record(&mut trace, 25, 100), vec![Event::InboundFileProgress25]);
+        assert!(record(&mut trace, 49, 100).is_empty());
+        assert_eq!(record(&mut trace, 50, 100), vec![Event::InboundFileProgress50]);
+        assert!(record(&mut trace, 74, 100).is_empty());
+        assert_eq!(record(&mut trace, 75, 100), vec![Event::InboundFileProgress75]);
+        assert!(record(&mut trace, 100, 100).is_empty());
+        assert!(record(&mut trace, 100, 100).is_empty());
+    }
+
+    #[test]
+    fn given_one_chunk_crossing_all_stages_when_repeated_then_all_only_once() {
+        let mut trace = InboundFileProgressTrace::default();
+        assert_eq!(
+            record(&mut trace, 2, 2),
+            vec![
+                Event::InboundFirstFileChunkPersisted,
+                Event::InboundFileProgress25,
+                Event::InboundFileProgress50,
+                Event::InboundFileProgress75,
+            ]
+        );
+        assert!(record(&mut trace, 2, 2).is_empty());
+        assert!(record(&mut trace, 3, 2).is_empty());
+    }
+
+    #[test]
+    fn given_maximum_u64_counter_when_thresholds_checked_then_u128_math_does_not_overflow() {
+        let mut trace = InboundFileProgressTrace::default();
+        let total = u64::MAX;
+        assert_eq!(
+            record(&mut trace, total / 4, total),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert_eq!(
+            record(&mut trace, total / 4 + 1, total),
+            vec![Event::InboundFileProgress25]
+        );
+        assert_eq!(
+            record(&mut trace, total / 2 + 1, total),
+            vec![Event::InboundFileProgress50]
+        );
+        assert_eq!(
+            record(&mut trace, (u128::from(total) * 3 / 4) as u64 + 1, total),
+            vec![Event::InboundFileProgress75]
+        );
+        assert!(record(&mut trace, total, total).is_empty());
+    }
+
+    #[test]
+    fn given_independent_sessions_when_observed_then_first_stage_resets_per_session() {
+        let mut first = InboundFileProgressTrace::default();
+        let mut second = InboundFileProgressTrace::default();
+        assert_eq!(record(&mut first, 100, 100).len(), 4);
+        assert_eq!(
+            record(&mut second, 1, 100),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert!(record(&mut first, 100, 100).is_empty());
     }
 }
