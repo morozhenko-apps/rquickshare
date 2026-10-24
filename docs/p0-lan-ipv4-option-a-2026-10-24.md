@@ -35,3 +35,14 @@ Source change `bb2c5ee84b51cf7f2546f4cad484f31809e1d110` excluded the three spec
 Code SHA `2545e0519bb8f236e1948993eef28b31d2e58ac0` contains the earlier #11 address correction plus this private #9 port refactor; no later executable changes at this checkpoint. [Preflight run 40093504811](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504811) and [Native GTK run 40093504760](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504760) were inspected individually.
 
 At checkpoint, **Core Rust tests SUCCESS (job 120871102186)**: `790 passed, 0 failed, 0 ignored, 8 filtered`, both separate integration binaries `4/4`; all **seven new methods** from #11 and #9 printed `ok`. Rust format SUCCESS, Core Clippy SUCCESS, frontend SUCCESS, Native GTK SUCCESS. **Tauri Clippy still IN PROGRESS**, so this is **5/6 verified, NOT a complete all-green CI claim**. Inspect terminal Tauri job `120871102157` before marking the final source fully green; preserve this specific SHA/run proof rather than relying on the GitHub latest badge. No hardware or real-SDK multicast acceptance has been performed. A2.2 BWU #8 remains unresolved by design.
+
+
+## 2026-10-24 terminal exact-source CI — supersedes interim five-check checkpoint
+
+**Executable SHA `2545e0519bb8f236e1948993eef28b31d2e58ac0`: ALL SIX CHECKS completed SUCCESS.**
+
+- [Preflight 40093504811](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504811): Rust format, Core Rust tests, Core Clippy, Tauri Clippy (`120871102157`) and frontend all completed success.
+- [Native GTK 40093504760](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504760): Native GTK widget tests and strict lint completed success.
+- Core job `120871102186`: **790 passed, 0 failed, 0 ignored, 8 filtered** in stable suite; both independent integration binaries **4/4**. All seven new named tests across #11 (three) and #9 (four) appeared individually as `ok`.
+- Combined source gate is green; prior interim `5/6` checkpoints and older cancelled Tauri job were superseded by the *newer* source-exact `6/6` run. This is not an executed release-wide full Mode B 10×, mutation-engine result or real Android/Windows/physical mDNS proof.
+- #11 remains **OPEN** until actual new-binary KDE/Pixel LAN/VPN acceptance; #9 remains **OPEN** until real SDK/physical cancellation, browse, reachability and error acceptance. No `master`, installed daemon, signing, tag or R2 work occurred. Production rollback points: #11 `bb2c5ee8` (+ rustfmt test-only `e1cf43b6`); #9 `c444ca84` (+ follow-up fixture/fmt corrections `df502aa8`, `2545e051`).
