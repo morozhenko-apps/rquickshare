@@ -175,7 +175,7 @@ pub async fn serve_native_settings(
             .unwrap_or(-1);
         let runtime = match prepared {
             Ok((settings, root)) => {
-                let mut core = startup_core(settings)?;
+                let core = startup_core(settings)?;
                 core.receive_policy.set_directory(root);
                 NativeRuntime::new(epoch, Limits::default(), core)
                     .map_err(|rejected| ProcessError::Bus(BusError::Runtime(rejected.error)))
