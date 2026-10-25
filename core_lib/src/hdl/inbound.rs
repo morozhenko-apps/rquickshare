@@ -2834,6 +2834,52 @@ mod security_tests {
     }
 
     #[tokio::test]
+    async fn given_peer_disconnect_after_first_cancel_chunk_when_last_chunk_is_written_then_no_false_delivery_is_reported(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        // A one-byte duplex buffer forces the writer to await the peer while
+        // transmitting the independently authenticated LAST_CHUNK.
+        let (socket, peer_socket) = tokio::io::duplex(1);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "cancel-mid-frame".into(), sender.clone());
+        let mut peer = InboundRequest::new(peer_socket, "phone".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+        peer.state.decrypt_key = Some(vec![0x11; 32]);
+        peer.state.recv_hmac_key = Some(vec![0x22; 32]);
+
+        let worker = tokio::spawn(async move {
+            let result = request.send_local_cancel().await;
+            (result, request.state.state)
+        });
+
+        let mut length = [0u8; 4];
+        peer.socket.read_exact(&mut length).await.unwrap();
+        let size = u32::from_be_bytes(length) as usize;
+        assert!(size > 0 && size <= SANE_FRAME_LENGTH as usize);
+        let mut bytes = vec![0u8; size];
+        peer.socket.read_exact(&mut bytes).await.unwrap();
+        let encrypted = SecureMessage::decode(bytes.as_slice()).unwrap();
+        let frame = peer.decrypt_secure_message(&encrypted).await.unwrap();
+        let chunk = frame.v1.unwrap().payload_transfer.unwrap();
+        let sharing = sharing_nearby::Frame::decode(chunk.payload_chunk.unwrap().body()).unwrap();
+        assert_eq!(
+            sharing.v1.unwrap().r#type(),
+            sharing_nearby::v1_frame::FrameType::Cancel
+        );
+
+        // Never consume any bytes of the second secure message, so its full
+        // LAST_CHUNK cannot flush into the one-byte pipe after this close.
+        drop(peer);
+        let (result, state) = worker.await.unwrap();
+        assert!(result.is_err(), "partial Cancel must not be called delivered");
+        assert_eq!(state, State::ReceivingFiles);
+    }
+
+    #[tokio::test]
     async fn given_missing_encryption_material_when_local_cancel_attempts_write_then_send_fails_closed(
     ) {
         let (socket, _peer) = tokio::io::duplex(8192);
