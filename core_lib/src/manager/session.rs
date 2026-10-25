@@ -49,7 +49,8 @@ mod local_cancel_tests {
     use super::*;
 
     #[test]
-    fn given_user_cancelled_active_inbound_when_worker_returns_then_peer_notification_is_required() {
+    fn given_user_cancelled_active_inbound_when_worker_returns_then_peer_notification_is_required()
+    {
         for state in [
             State::Initial,
             State::WaitingForUserConsent,
@@ -60,7 +61,8 @@ mod local_cancel_tests {
     }
 
     #[test]
-    fn given_absent_user_cancel_or_shutdown_when_worker_returns_then_peer_notification_is_forbidden() {
+    fn given_absent_user_cancel_or_shutdown_when_worker_returns_then_peer_notification_is_forbidden(
+    ) {
         let negative_inputs = [
             (false, false, false),
             (false, false, true),
