@@ -2754,17 +2754,96 @@ mod security_tests {
         assert_eq!(state, State::Cancelled);
     }
 
-    #[tokio::test]
-    async fn given_local_cancel_before_encryption_or_after_completion_then_no_spurious_cancel_is_sent(
+    #[tokio::test(start_paused = true)]
+    async fn given_no_authenticated_active_transfer_when_kde_cancel_is_requested_then_no_wire_bytes_are_sent(
     ) {
-        for (state, encrypted) in [(State::Initial, false), (State::Finished, true)] {
-            let (socket, _peer) = tokio::io::duplex(512);
+        use tokio::io::AsyncReadExt;
+
+        for (state, encrypted) in [
+            (State::Initial, false),
+            (State::WaitingForUserConsent, false),
+            (State::ReceivingFiles, false),
+            (State::Finished, true),
+            (State::Rejected, true),
+            (State::Cancelled, true),
+            (State::Disconnected, true),
+        ] {
+            let (socket, mut peer) = tokio::io::duplex(512);
             let (sender, _events) = tokio::sync::broadcast::channel(8);
             let mut request = InboundRequest::new(socket, "cancel-boundary".into(), sender);
-            request.state.state = state;
+            request.state.state = state.clone();
             request.state.encryption_done = encrypted;
             request.send_local_cancel().await.unwrap();
+            assert_eq!(request.state.state, state);
+            assert_eq!(request.state.server_seq, 0);
+
+            let mut byte = [0u8; 1];
+            assert!(
+                tokio::time::timeout(Duration::from_millis(1), peer.read(&mut byte))
+                    .await
+                    .is_err(),
+                "a skipped Cancel must not publish any wire bytes: {state:?}"
+            );
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn given_authenticated_kde_cancel_when_sender_keeps_socket_open_then_bounded_grace_retires(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        let (socket, mut peer) = tokio::io::duplex(8192);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "silent-peer".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+
+        let worker = tokio::spawn(async move { request.send_local_cancel().await });
+        let mut length = [0u8; 4];
+        for _ in 0..2 {
+            peer.read_exact(&mut length).await.unwrap();
+            let len = u32::from_be_bytes(length) as usize;
+            assert!(len > 0 && len <= SANE_FRAME_LENGTH as usize);
+            let mut data = vec![0u8; len];
+            peer.read_exact(&mut data).await.unwrap();
+            assert!(SecureMessage::decode(data.as_slice()).is_ok());
+        }
+        assert!(!worker.is_finished(), "Cancel must not race a premature EOF");
+
+        tokio::time::advance(REJECTION_PEER_DRAIN_LIMIT).await;
+        worker.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn given_sender_socket_closed_before_local_cancel_when_writing_then_flush_fails_without_completion(
+    ) {
+        let (socket, peer) = tokio::io::duplex(8192);
+        drop(peer);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "closed-peer".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+
+        assert!(request.send_local_cancel().await.is_err());
+        assert_eq!(request.state.state, State::ReceivingFiles);
+        assert_ne!(request.state.state, State::Finished);
+    }
+
+    #[tokio::test]
+    async fn given_missing_encryption_material_when_local_cancel_attempts_write_then_send_fails_closed(
+    ) {
+        let (socket, _peer) = tokio::io::duplex(8192);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "missing-key".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+
+        assert!(request.send_local_cancel().await.is_err());
+        assert_eq!(request.state.state, State::ReceivingFiles);
     }
 
     #[tokio::test(start_paused = true)]
