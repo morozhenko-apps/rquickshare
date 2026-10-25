@@ -1909,7 +1909,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelReadError);
             }
             RejectionDrainOutcome::Deadline => {
-                crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelDrainDeadline);
+                crate::receiver_trace::event(
+                    crate::receiver_trace::Event::LocalCancelDrainDeadline,
+                );
             }
         }
         Ok(())
@@ -2690,7 +2692,8 @@ mod security_tests {
 
         let (socket, peer_socket) = tokio::io::duplex(8192);
         let (sender, _events) = tokio::sync::broadcast::channel(8);
-        let mut request = InboundRequest::new(socket, "receiver-cancel-fixture".into(), sender.clone());
+        let mut request =
+            InboundRequest::new(socket, "receiver-cancel-fixture".into(), sender.clone());
         let mut peer = InboundRequest::new(peer_socket, "pixel-fixture".into(), sender);
         request.state.state = State::ReceivingFiles;
         request.state.encryption_done = true;
@@ -2738,7 +2741,10 @@ mod security_tests {
         assert_eq!(last.flags(), 1);
         assert!(last.body().is_empty());
 
-        assert!(!worker.is_finished(), "sender must have time to process Cancel before disconnect");
+        assert!(
+            !worker.is_finished(),
+            "sender must have time to process Cancel before disconnect"
+        );
         drop(peer);
         let (outcome, state) = tokio::time::timeout(Duration::from_secs(3), worker)
             .await
