@@ -121,3 +121,30 @@ Extract a **pure, behavior-preserving guard** `should_notify_sender_on_cancel(re
 For `send_local_cancel`, verify the *wire* with a real `tokio::io::duplex` and peer-side decryption, not mocked business logic; use paused Tokio time to complete bounded drain deterministically without sleeping. Distinguish peer read failure from a clean EOF and failure on either write, and assert never sending packets before authentication or after terminal. Every scenario should have exact terminal side effects. Tests remain in the existing Rust modules to preserve repository test conventions. Mutant review: remove complete first chunk, omit terminal LAST_CHUNK, switch Sharing Cancel to Response, disable HMAC/encryption, remove peer-drain, flip cancel-condition, remove service-priority check, issue Cancel after Finished, publish partial file. A meaningful test must fail for each applicable mutant; record unresolved mutants honestly.
 
 **Final validation only after implementation:** final source-exact Preflight 5 stable jobs + Native GTK strict job; separately note eight excluded/quarantined race-sensitive tests rather than falsely calling them green. Require physical Pixel Cancel status and same-daemon retry before issue closure. No package/release/master/tag changes in MODE B test implementation.
+
+## 2026-10-25 MODE B implementation checkpoint (tests committed, final code CI not yet verified)
+
+**New code/test HEAD:** `82767655701e38661096955ab16b3660432004f7`. This checkpoint does not amend the still-installed `af951088` native executable.
+
+**Changes since the already successful `e876e7ef` baseline:**
+- `core_lib/src/manager/session.rs`: shared pure `should_notify_sender_on_cancel()` predicate with an explicit user/service/operation/terminal truth table; three deterministic unit tests, including 7 negative cancellation combinations across 3 active states and all 8 Boolean combinations over 4 terminal states. This guards against races between daemon shutdown, duplicate user control, late terminal states and active session cancellation.
+- `core_lib/src/hdl/gatt.rs`: uses the **same** predicate as native LAN so it cannot silently diverge on shutdown or terminal handling. No BLE ownership/advertiser changes.
+- `core_lib/src/hdl/inbound.rs`: replaced the weak two-state skip test with 7-state/crypto gate and an actual no-wire-read assertion; added real duplex tests for (i) authenticated encrypted two-fragment Cancel followed by peer EOF (existing), (ii) no-peer-EOF bounded delivery grace with paused clock, (iii) remote socket closed before writing any secure Cancel, (iv) missing crypto material fails closed, (v) peer disconnect after first encrypted Cancel fragment before terminal LAST_CHUNK can flush. Real downstream decryption used where possible, no subject-under-test mocking.
+
+**Actual newly added tests in this continuation:** 3 shared guard tests + 5 inbound tests = 8. The previous patch already had 1 encrypted successful handshake test plus 1 guard skip test (the latter was replaced by a stronger table). Current source therefore includes **9 specific Cancel-focused tests** touched or added across both patches, plus earlier native runtime, managed session, file publication and Reject tests that were NOT re-counted as new. This is a static inventory only until CI confirms successful execution.
+
+**Coverage map (no invented numeric coverage):**
+
+| Production file | Scope covered by source tests | Remaining explicit risks |
+| --- | --- | --- |
+| `core_lib/src/manager/session.rs` | 3 truth-table tests for all predicate branches; existing managed TCP worker integration | full integration when a live Cancel races a partial transport write |
+| `core_lib/src/hdl/gatt.rs` | common predicate and existing managed worker/permit tests | physical BLE cancel+retry and concurrent notify/stop with user Cancel |
+| `core_lib/src/hdl/inbound.rs` | encrypted Cancel + LAST_CHUNK, benign skips, peer EOF, closed before and during send, deadline, no key | remote-side Android UI mapping, cancel-mid-BWU, file-close storage fault |
+| `core_lib/src/service/runtime.rs` | existing Cancel intent tests and token cancellation | sender-visible Cancel receipt integration in one uninterrupted native session |
+| `core_lib/src/sessions.rs` | existing idempotency/absorbing terminal status tests | simultaneous terminal completed-file commit vs Cancel full path |
+| `native_desktop/src/panel.rs` | existing Cancel action wiring; correct service runtime call | user-visible interaction on real KDE/Pixel |
+| `core_lib/src/receiver_trace.rs` | existing exhaustive static event allowlist | hardware `local_cancel_*` marker confirmation |
+
+**Mutation review (static, not executed):** remove sender Cancel first fragment → peer decrypt test fails; remove LAST_CHUNK → peer read stalls/fails; remove encryption → SecureMessage/decrypt fails; flip any Boolean predicate condition → guard matrix fails; send after terminal → sentinel no-wire assertions fail; remove 2s deadline → paused-clock test hangs; report positive delivery with peer closed before/after first frame → actual worker error assertions fail. Open mutants: cancel during BWU transport transition and midway through local socket write of unrelated encrypted frame.
+
+**Gates not complete:** No fresh CI result yet on `827676557`; test suite & real Pixel not claimed. N5 BWU race and N12 disk-write crash are not yet covered by new tests (existing file tests only). Test counts are not a coverage percentage. MODE B completion must remain **PARTIAL**, not marked done until missing critical tests and physical Cancel + BLE repeatability are addressed.
