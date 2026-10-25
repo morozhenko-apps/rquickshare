@@ -44,77 +44,6 @@ pub(crate) fn should_notify_sender_on_cancel(
     operation_cancelled && user_cancelled && !service_cancelled && !terminal(state)
 }
 
-#[cfg(test)]
-mod local_cancel_tests {
-    use super::*;
-
-    #[test]
-    fn given_user_cancelled_active_inbound_when_worker_returns_then_peer_notification_is_required()
-    {
-        for state in [
-            State::Initial,
-            State::WaitingForUserConsent,
-            State::ReceivingFiles,
-        ] {
-            assert!(should_notify_sender_on_cancel(true, true, false, &state));
-        }
-    }
-
-    #[test]
-    fn given_absent_user_cancel_or_shutdown_when_worker_returns_then_peer_notification_is_forbidden(
-    ) {
-        let negative_inputs = [
-            (false, false, false),
-            (false, false, true),
-            (false, true, false),
-            (false, true, true),
-            (true, false, false),
-            (true, false, true),
-            (true, true, true),
-        ];
-        for state in [
-            State::Initial,
-            State::WaitingForUserConsent,
-            State::ReceivingFiles,
-        ] {
-            for (operation_cancelled, user_cancelled, service_cancelled) in negative_inputs {
-                assert!(
-                    !should_notify_sender_on_cancel(
-                        operation_cancelled,
-                        user_cancelled,
-                        service_cancelled,
-                        &state
-                    ),
-                    "must not notify: {state:?} / {operation_cancelled:?} / {user_cancelled:?} / {service_cancelled:?}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn given_terminal_inbound_when_cancel_arrives_then_no_spurious_sender_notification_occurs() {
-        for state in [
-            State::Finished,
-            State::Rejected,
-            State::Cancelled,
-            State::Disconnected,
-        ] {
-            for operation_cancelled in [false, true] {
-                for user_cancelled in [false, true] {
-                    for service_cancelled in [false, true] {
-                        assert!(!should_notify_sender_on_cancel(
-                            operation_cancelled,
-                            user_cancelled,
-                            service_cancelled,
-                            &state
-                        ));
-                    }
-                }
-            }
-        }
-    }
-}
-
 pub(crate) trait Connector: Send + Sync + 'static {
     fn connect<'a>(
         &'a self,
@@ -410,4 +339,75 @@ pub(crate) async fn until_either_stops<T>(
 
 fn result_is_cancelled(service: &CancellationToken, request: &CancellationToken) -> bool {
     service.is_cancelled() || request.is_cancelled()
+}
+
+#[cfg(test)]
+mod local_cancel_tests {
+    use super::*;
+
+    #[test]
+    fn given_user_cancelled_active_inbound_when_worker_returns_then_peer_notification_is_required()
+    {
+        for state in [
+            State::Initial,
+            State::WaitingForUserConsent,
+            State::ReceivingFiles,
+        ] {
+            assert!(should_notify_sender_on_cancel(true, true, false, &state));
+        }
+    }
+
+    #[test]
+    fn given_absent_user_cancel_or_shutdown_when_worker_returns_then_peer_notification_is_forbidden(
+    ) {
+        let negative_inputs = [
+            (false, false, false),
+            (false, false, true),
+            (false, true, false),
+            (false, true, true),
+            (true, false, false),
+            (true, false, true),
+            (true, true, true),
+        ];
+        for state in [
+            State::Initial,
+            State::WaitingForUserConsent,
+            State::ReceivingFiles,
+        ] {
+            for (operation_cancelled, user_cancelled, service_cancelled) in negative_inputs {
+                assert!(
+                    !should_notify_sender_on_cancel(
+                        operation_cancelled,
+                        user_cancelled,
+                        service_cancelled,
+                        &state
+                    ),
+                    "must not notify: {state:?} / {operation_cancelled:?} / {user_cancelled:?} / {service_cancelled:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn given_terminal_inbound_when_cancel_arrives_then_no_spurious_sender_notification_occurs() {
+        for state in [
+            State::Finished,
+            State::Rejected,
+            State::Cancelled,
+            State::Disconnected,
+        ] {
+            for operation_cancelled in [false, true] {
+                for user_cancelled in [false, true] {
+                    for service_cancelled in [false, true] {
+                        assert!(!should_notify_sender_on_cancel(
+                            operation_cancelled,
+                            user_cancelled,
+                            service_cancelled,
+                            &state
+                        ));
+                    }
+                }
+            }
+        }
+    }
 }
