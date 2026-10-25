@@ -2810,7 +2810,10 @@ mod security_tests {
             peer.read_exact(&mut data).await.unwrap();
             assert!(SecureMessage::decode(data.as_slice()).is_ok());
         }
-        assert!(!worker.is_finished(), "Cancel must not race a premature EOF");
+        assert!(
+            !worker.is_finished(),
+            "Cancel must not race a premature EOF"
+        );
 
         tokio::time::advance(REJECTION_PEER_DRAIN_LIMIT).await;
         worker.await.unwrap().unwrap();
@@ -2875,7 +2878,10 @@ mod security_tests {
         // LAST_CHUNK cannot flush into the one-byte pipe after this close.
         drop(peer);
         let (result, state) = worker.await.unwrap();
-        assert!(result.is_err(), "partial Cancel must not be called delivered");
+        assert!(
+            result.is_err(),
+            "partial Cancel must not be called delivered"
+        );
         assert_eq!(state, State::ReceivingFiles);
     }
 
