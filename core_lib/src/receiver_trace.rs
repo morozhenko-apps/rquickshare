@@ -65,6 +65,11 @@ pub enum Event {
     RejectPeerEof,
     RejectPeerReadError,
     RejectDrainDeadline,
+    LocalCancelFlushed,
+    LocalCancelWriteFailed,
+    LocalCancelPeerEof,
+    LocalCancelReadError,
+    LocalCancelDrainDeadline,
 }
 impl Event {
     fn name(self) -> &'static str {
@@ -132,6 +137,11 @@ impl Event {
             Self::RejectPeerEof => "reject_peer_eof",
             Self::RejectPeerReadError => "reject_peer_read_error",
             Self::RejectDrainDeadline => "reject_drain_deadline",
+            Self::LocalCancelFlushed => "local_cancel_flushed",
+            Self::LocalCancelWriteFailed => "local_cancel_write_failed",
+            Self::LocalCancelPeerEof => "local_cancel_peer_eof",
+            Self::LocalCancelReadError => "local_cancel_read_error",
+            Self::LocalCancelDrainDeadline => "local_cancel_drain_deadline",
         }
     }
 }
@@ -234,6 +244,11 @@ mod tests {
             Event::RejectPeerEof,
             Event::RejectPeerReadError,
             Event::RejectDrainDeadline,
+            Event::LocalCancelFlushed,
+            Event::LocalCancelWriteFailed,
+            Event::LocalCancelPeerEof,
+            Event::LocalCancelReadError,
+            Event::LocalCancelDrainDeadline,
         ] {
             for elapsed in [0, 1, u128::MAX] {
                 let message = line(stage, elapsed);
