@@ -804,6 +804,15 @@ async fn run_inbound_worker(
             }
         }
     }).await;
+    if result.is_none()
+        && cancellation.is_cancelled()
+        && !lifetime.is_cancelled()
+        && !crate::sessions::terminal(&request.state.state)
+    {
+        if let Err(error) = request.send_local_cancel().await {
+            warn!("{INNER_NAME}: unable to deliver inbound sender Cancel: {error}");
+        }
+    }
     let message = match result {
         None => crate::manager::cancellation_message(
             &request.state.id,
