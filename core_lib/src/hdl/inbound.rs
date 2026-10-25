@@ -1877,6 +1877,44 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         Ok(())
     }
 
+    /// Gracefully report a locally cancelled inbound transfer to the sender.
+    /// The session cancellation token interrupts reads; it must not also
+    /// discard the encrypted terminal notification before the peer sees it.
+    /// The existing bounded reject drain is also used here: a flushed frame
+    /// is not necessarily consumed by Android before a transport EOF.
+    pub(crate) async fn send_local_cancel(&mut self) -> Result<(), anyhow::Error> {
+        if crate::sessions::terminal(&self.state.state) || !self.state.encryption_done {
+            return Ok(());
+        }
+
+        let cancel = sharing_nearby::Frame {
+            version: Some(sharing_nearby::frame::Version::V1.into()),
+            v1: Some(sharing_nearby::V1Frame {
+                r#type: Some(sharing_nearby::v1_frame::FrameType::Cancel.into()),
+                ..Default::default()
+            }),
+        };
+
+        if let Err(error) = self.send_encrypted_frame(&cancel).await {
+            crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelWriteFailed);
+            return Err(error);
+        }
+        crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelFlushed);
+
+        match drain_rejected_peer(&mut self.socket).await {
+            RejectionDrainOutcome::PeerEof => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelPeerEof);
+            }
+            RejectionDrainOutcome::PeerReadError => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelReadError);
+            }
+            RejectionDrainOutcome::Deadline => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelDrainDeadline);
+            }
+        }
+        Ok(())
+    }
+
     async fn disconnection(&mut self) -> Result<(), anyhow::Error> {
         let frame = location_nearby_connections::OfflineFrame {
             version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
@@ -2643,6 +2681,84 @@ mod security_tests {
             .downcast_ref::<crate::errors::AppError>()
             .is_some());
         assert_eq!(state, State::Rejected);
+    }
+
+    #[tokio::test]
+    async fn given_kde_cancel_mid_file_when_peer_reads_then_sender_gets_complete_encrypted_cancel_before_eof(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        let (socket, peer_socket) = tokio::io::duplex(8192);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "receiver-cancel-fixture".into(), sender.clone());
+        let mut peer = InboundRequest::new(peer_socket, "pixel-fixture".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+        peer.state.decrypt_key = Some(vec![0x11; 32]);
+        peer.state.recv_hmac_key = Some(vec![0x22; 32]);
+
+        let worker = tokio::spawn(async move {
+            let result = request.send_local_cancel().await;
+            request.record_termination(State::Cancelled);
+            (result, request.state.state)
+        });
+
+        let mut len = [0_u8; 4];
+        peer.socket.read_exact(&mut len).await.unwrap();
+        let size = u32::from_be_bytes(len) as usize;
+        assert!(size > 0 && size <= SANE_FRAME_LENGTH as usize);
+        let mut raw = vec![0_u8; size];
+        peer.socket.read_exact(&mut raw).await.unwrap();
+        let secure = SecureMessage::decode(raw.as_slice()).unwrap();
+        let start = peer.decrypt_secure_message(&secure).await.unwrap();
+        let transfer = start.v1.unwrap().payload_transfer.unwrap();
+        let header = transfer.payload_header.unwrap();
+        let first = transfer.payload_chunk.unwrap();
+        assert_eq!(first.offset(), 0);
+        assert_eq!(first.flags(), 0);
+        let sharing = sharing_nearby::Frame::decode(first.body()).unwrap();
+        assert_eq!(
+            sharing.v1.unwrap().r#type(),
+            sharing_nearby::v1_frame::FrameType::Cancel
+        );
+
+        peer.socket.read_exact(&mut len).await.unwrap();
+        let size = u32::from_be_bytes(len) as usize;
+        assert!(size > 0 && size <= SANE_FRAME_LENGTH as usize);
+        raw.resize(size, 0);
+        peer.socket.read_exact(&mut raw).await.unwrap();
+        let secure = SecureMessage::decode(raw.as_slice()).unwrap();
+        let end = peer.decrypt_secure_message(&secure).await.unwrap();
+        let transfer = end.v1.unwrap().payload_transfer.unwrap();
+        let last = transfer.payload_chunk.unwrap();
+        assert_eq!(transfer.payload_header.unwrap().id, header.id);
+        assert_eq!(last.offset(), header.total_size());
+        assert_eq!(last.flags(), 1);
+        assert!(last.body().is_empty());
+
+        assert!(!worker.is_finished(), "sender must have time to process Cancel before disconnect");
+        drop(peer);
+        let (outcome, state) = tokio::time::timeout(Duration::from_secs(3), worker)
+            .await
+            .expect("cancel worker did not retire after peer EOF")
+            .unwrap();
+        outcome.unwrap();
+        assert_eq!(state, State::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn given_local_cancel_before_encryption_or_after_completion_then_no_spurious_cancel_is_sent(
+    ) {
+        for (state, encrypted) in [(State::Initial, false), (State::Finished, true)] {
+            let (socket, _peer) = tokio::io::duplex(512);
+            let (sender, _events) = tokio::sync::broadcast::channel(8);
+            let mut request = InboundRequest::new(socket, "cancel-boundary".into(), sender);
+            request.state.state = state;
+            request.state.encryption_done = encrypted;
+            request.send_local_cancel().await.unwrap();
+        }
     }
 
     #[tokio::test(start_paused = true)]
