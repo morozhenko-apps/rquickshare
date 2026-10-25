@@ -267,6 +267,15 @@ impl<C: Connector> SessionContext<C> {
                 }
             })
             .await;
+        if result.is_none()
+            && cancellation.is_cancelled()
+            && !token.is_cancelled()
+            && !terminal(&request.state.state)
+        {
+            if let Err(error) = request.send_local_cancel().await {
+                warn!("TcpServer: unable to deliver inbound sender Cancel: {error}");
+            }
+        }
         let message = match result {
             None => cancellation_message(
                 &request.state.id,
