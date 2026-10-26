@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -24,6 +24,8 @@ pub(crate) struct RouteProof {
     pub(crate) session: SessionId,
     pub(crate) peer: crate::peer_authentication::VerifiedPeerCredential,
     pub(crate) connect_latency: Duration,
+    /// Captured at protocol authentication, not when runtime eventually wakes.
+    pub(crate) observed_at: Instant,
 }
 
 pub(crate) const EVENT_LIMIT: usize = 512;
@@ -469,6 +471,7 @@ impl SessionLease {
                         session: self.id,
                         peer,
                         connect_latency,
+                        observed_at: Instant::now(),
                     });
                 }
             }
