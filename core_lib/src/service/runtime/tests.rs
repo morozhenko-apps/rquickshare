@@ -426,6 +426,44 @@ async fn given_route_address_rotates_before_proof_arrives_then_old_session_canno
 }
 
 #[tokio::test]
+async fn given_verified_route_evidence_is_revoked_while_queue_is_full_then_pending_send_fails_without_anonymous_fallback(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let endpoint = runtime.endpoints()[0].id.clone();
+    runtime.routes.bind_test_authenticated_route(
+        &endpoint,
+        VerifiedPeerCredential::test_fixture([21; 32]),
+        Duration::from_millis(5),
+        Instant::now() + Duration::from_secs(60),
+    );
+    let client = runtime.connect().unwrap();
+    fill_transport(runtime);
+    let transfer = send(runtime, client, "bounded-expected-peer");
+    assert!(!runtime.dispatch().unwrap());
+    assert!(runtime.pending.is_some());
+
+    // Simulate peer-proof loss (e.g. a lagged authenticated event channel).
+    // A queued Send must not be silently downgraded even if the same mDNS
+    // address is still advertised and the caller has not closed the window.
+    runtime.routes.invalidate_proofs();
+    assert!(runtime.dispatch().unwrap());
+    assert!(runtime.pending.is_none());
+    assert_eq!(view(runtime, client, transfer).phase, Phase::Failed);
+    let mut jobs = 0;
+    while let Ok(job) = fx.receiver.try_recv() {
+        jobs += 1;
+        job.release();
+    }
+    assert_eq!(jobs, 10);
+}
+
+#[tokio::test]
 async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_only_one_exact_route_is_contacted(
 ) {
     use crate::utils::gen_mdns_name;
