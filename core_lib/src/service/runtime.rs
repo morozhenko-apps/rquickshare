@@ -627,6 +627,7 @@ impl NativeRuntime {
             *addr,
             proof.peer,
             proof.connect_latency,
+            proof.observed_at,
             Instant::now(),
         );
     }
