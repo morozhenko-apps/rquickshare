@@ -776,35 +776,80 @@ async fn weave_session(
 }
 
 async fn run_inbound_worker(
-    mut request: InboundRequest<MigratableStream>,
+    request: InboundRequest<MigratableStream>,
     sender: Sender<ChannelMessage>,
     router: BwuRouter,
     tcp_port: u16,
     lifetime: CancellationToken,
     native: bool,
 ) {
+    run_inbound_worker_with_resolver(
+        request,
+        sender,
+        router,
+        tcp_port,
+        lifetime,
+        native,
+        crate::utils::local_lan_ipv4,
+    )
+    .await;
+}
+
+// The resolver substitutes only interface discovery in deterministic protocol
+// tests; migration, cancellation, encryption and the worker remain production.
+pub(super) async fn run_inbound_worker_with_resolver(
+    mut request: InboundRequest<MigratableStream>,
+    sender: Sender<ChannelMessage>,
+    router: BwuRouter,
+    tcp_port: u16,
+    lifetime: CancellationToken,
+    native: bool,
+    local_ip: impl Fn() -> Option<[u8; 4]>,
+) {
     let cancellation = request.cancellation();
-    let result: Option<Result<(), anyhow::Error>> = crate::manager::session::until_either_stops(&lifetime, &cancellation, async {
-        loop {
-            request.handle().await?;
-            if request.take_bwu_pending() {
-                if let Err(error) = request.do_bandwidth_upgrade(&router, tcp_port).await {
-                    let error = match error.downcast::<super::inbound::BwuSessionError>() {
-                        Ok(session_error) => return Err(session_error.0),
-                        Err(upgrade_error) => upgrade_error,
-                    };
-                    warn!("{INNER_NAME}: Wi-Fi bandwidth upgrade failed; retaining current transport: {error}");
-                }
+    let result: Option<Result<(), anyhow::Error>> = loop {
+        match crate::manager::session::until_either_stops(
+            &lifetime,
+            &cancellation,
+            request.handle(),
+        )
+        .await
+        {
+            None => break None,
+            Some(Err(error)) => break Some(Err(error)),
+            Some(Ok(())) => {}
+        }
+        if request.take_bwu_pending() {
+            // User cancellation is observed inside optional BWU preparation.
+            // Committed migration retains its writer until completion/failure;
+            // service shutdown may still drop the entire operation immediately.
+            let upgrade = crate::manager::session::until_stopped(&lifetime, async {
+                let ip = local_ip()
+                    .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
+                request.do_bandwidth_upgrade_at(&router, tcp_port, ip).await
+            })
+            .await;
+            if cancellation.is_cancelled() || lifetime.is_cancelled() {
+                break None;
+            }
+            if let Some(Err(error)) = upgrade {
+                let error = match error.downcast::<super::inbound::BwuSessionError>() {
+                    Ok(session_error) => break Some(Err(session_error.0)),
+                    Err(upgrade_error) => upgrade_error,
+                };
+                warn!("{INNER_NAME}: Wi-Fi bandwidth upgrade failed; retaining current transport: {error}");
             }
         }
-    }).await;
+    };
     if crate::manager::session::should_notify_sender_on_cancel(
         result.is_none(),
         cancellation.is_cancelled(),
         lifetime.is_cancelled(),
         &request.state.state,
     ) {
-        if let Err(error) = request.send_local_cancel().await {
+        if let Some(Err(error)) =
+            crate::manager::session::until_stopped(&lifetime, request.send_local_cancel()).await
+        {
             warn!("{INNER_NAME}: unable to deliver inbound sender Cancel: {error}");
         }
     }

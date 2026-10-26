@@ -599,6 +599,7 @@ pub struct InboundRequest<S = TcpStream> {
     file_progress_trace: InboundFileProgressTrace,
     peer_endpoint_id: Option<String>,
     deferred_upgrade_writes: Option<Vec<OfflineFrame>>,
+    bwu_writer_unavailable: bool,
     receive_directory: crate::receive::Directory,
     receive_root: Option<crate::receive::Root>,
     #[cfg(target_os = "linux")]
@@ -636,6 +637,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             file_progress_trace: InboundFileProgressTrace::default(),
             peer_endpoint_id: None,
             deferred_upgrade_writes: None,
+            bwu_writer_unavailable: false,
             receive_directory: crate::receive::ReceivePolicy::new(None).snapshot(),
             receive_root: None,
             #[cfg(target_os = "linux")]
@@ -1940,6 +1942,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             return Ok(());
         }
 
+        if self.deferred_upgrade_writes.is_some() || self.bwu_writer_unavailable {
+            crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelWriteFailed);
+            return Err(anyhow!(
+                "BWU has no writable committed transport for Cancel"
+            ));
+        }
+
         let cancel = sharing_nearby::Frame {
             version: Some(sharing_nearby::frame::Version::V1.into()),
             v1: Some(sharing_nearby::V1Frame {
@@ -2520,17 +2529,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
     ///
     /// Optional upgrade failure leaves the BLE stream intact. Established-session
     /// errors are returned as BwuSessionError and must terminate the session.
-    pub async fn do_bandwidth_upgrade(
-        &mut self,
-        router: &crate::hdl::BwuRouter,
-        tcp_port: u16,
-    ) -> Result<(), anyhow::Error> {
-        let ip = crate::utils::local_lan_ipv4()
-            .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
-        self.do_bandwidth_upgrade_at(router, tcp_port, ip).await
-    }
-
-    async fn do_bandwidth_upgrade_at(
+    pub(super) async fn do_bandwidth_upgrade_at(
         &mut self,
         router: &crate::hdl::BwuRouter,
         tcp_port: u16,
@@ -2541,10 +2540,54 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             .peer_endpoint_id
             .clone()
             .ok_or_else(|| anyhow!("BWU session has no peer endpoint id"))?;
-        let socket_receiver = router.register(expected_endpoint_id.clone()).await?;
+        let cancellation = self.cancellation();
+        // Preparation is still optional. User cancellation may retire its TCP
+        // candidate, but must not drop a committed migration and lose its writer.
+        let prepared = crate::manager::session::until_stopped(
+            &cancellation,
+            self.prepare_bandwidth_upgrade(
+                router,
+                tcp_port,
+                ip,
+                &expected_endpoint_id,
+                bwu_started,
+            ),
+        )
+        .await;
+        router.cancel(&expected_endpoint_id).await;
+        let Some(tcp) = prepared.ok_or_else(|| {
+            anyhow!(BwuSessionError(anyhow!(
+                crate::errors::AppError::NotAnError
+            )))
+        })??
+        else {
+            return Ok(());
+        };
+
+        // The commit boundary precedes any LAST_WRITE bytes. A failed or dropped
+        // committed future cannot safely write application frames on prior BLE.
+        self.bwu_writer_unavailable = true;
+        self.deferred_upgrade_writes = Some(Vec::new());
+        let result = self.finish_bandwidth_upgrade(tcp, bwu_started).await;
+        self.deferred_upgrade_writes = None;
+        if result.is_ok() {
+            self.bwu_writer_unavailable = false;
+        }
+        result.map_err(|error| anyhow!(BwuSessionError(error)))
+    }
+
+    async fn prepare_bandwidth_upgrade(
+        &mut self,
+        router: &crate::hdl::BwuRouter,
+        tcp_port: u16,
+        ip: [u8; 4],
+        expected_endpoint_id: &str,
+        bwu_started: Instant,
+    ) -> Result<Option<TcpStream>, anyhow::Error> {
+        let socket_receiver = router.register(expected_endpoint_id.to_owned()).await?;
 
         if let Err(error) = self.send_upgrade_path_available(tcp_port, ip).await {
-            router.cancel(&expected_endpoint_id).await;
+            router.cancel(expected_endpoint_id).await;
             return Err(error);
         }
         crate::receiver_trace::event(crate::receiver_trace::Event::BwuOfferSent);
@@ -2556,14 +2599,13 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         let routed = self.wait_for_bwu_socket(socket_receiver).await;
         // Also release registrations on established-session EOF, rejection,
         // cancellation frames, authentication errors and successful completion.
-        router.cancel(&expected_endpoint_id).await;
+        router.cancel(expected_endpoint_id).await;
         let Some(mut tcp) = routed? else {
-            return Ok(());
+            return Ok(None);
         };
 
         let introduction = read_plain_frame_from(&mut tcp).await?;
         let identity = validate_client_introduction(&introduction)?;
-        let expected_endpoint_id = expected_endpoint_id.as_str();
         if !identity.matches_expected(expected_endpoint_id) {
             return Err(anyhow!(
                 "BWU CLIENT_INTRODUCTION endpoint mismatch: expected {expected_endpoint_id}, got current={} last={:?}",
@@ -2594,16 +2636,25 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         send_plain_frame_on(&mut tcp, &ack).await?;
         crate::receiver_trace::event(crate::receiver_trace::Event::BwuAckSent);
 
-        self.deferred_upgrade_writes = Some(Vec::new());
-        let result = self.finish_bandwidth_upgrade(tcp, bwu_started).await;
-        // A partial LAST_WRITE or later error cannot safely fall back to BLE.
-        if result.is_err() {
-            self.deferred_upgrade_writes = None;
-        }
-        result.map_err(|error| anyhow!(BwuSessionError(error)))
+        Ok(Some(tcp))
     }
 
     async fn finish_bandwidth_upgrade(
+        &mut self,
+        tcp: TcpStream,
+        bwu_started: Instant,
+    ) -> Result<(), anyhow::Error> {
+        // Existing phase budgets are 5s synchronization + 5s prior close. Bound
+        // their combined ownership, including backpressured control/TCP writes.
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            self.finish_bandwidth_upgrade_inner(tcp, bwu_started),
+        )
+        .await
+        .map_err(|_| anyhow!("BWU committed operation exceeded its phase budgets"))?
+    }
+
+    async fn finish_bandwidth_upgrade_inner(
         &mut self,
         tcp: TcpStream,
         bwu_started: Instant,
@@ -2634,7 +2685,11 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             };
 
             if v1.r#type() != FrameType::BandwidthUpgradeNegotiation {
-                self.process_offline_frame(offline).await?;
+                // User cancellation has already won: drain crypto framing only,
+                // never accept payloads or publish a late Finished transition.
+                if !self.cancellation().is_cancelled() {
+                    self.process_offline_frame(offline).await?;
+                }
                 continue;
             }
 
@@ -2719,6 +2774,9 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
 #[cfg(all(test, feature = "experimental", target_os = "linux"))]
 mod bwu_wait_tests;
+
+#[cfg(all(test, feature = "experimental", target_os = "linux"))]
+mod bwu_cancel_tests;
 
 #[cfg(test)]
 mod security_tests {

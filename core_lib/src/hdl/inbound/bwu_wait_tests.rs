@@ -264,7 +264,7 @@ async fn given_established_eof_after_last_write_when_full_upgrade_runs_then_work
 
 // Only the external transport is substituted; encryption, parser and state
 // transitions are the production implementations on both ends.
-fn pair() -> (
+pub(super) fn pair() -> (
     InboundRequest<MigratableStream>,
     InboundRequest<MigratableStream>,
 ) {
@@ -288,7 +288,7 @@ fn pair() -> (
     (make(socket), make(peer))
 }
 
-async fn tcp_pair() -> (TcpStream, TcpStream) {
+pub(super) async fn tcp_pair() -> (TcpStream, TcpStream) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let peer = TcpStream::connect(listener.local_addr().unwrap())
         .await
@@ -297,7 +297,7 @@ async fn tcp_pair() -> (TcpStream, TcpStream) {
     (socket, peer)
 }
 
-fn negotiation(event: EventType) -> OfflineFrame {
+pub(super) fn negotiation(event: EventType) -> OfflineFrame {
     InboundRequest::<MigratableStream>::bandwidth_upgrade_frame(event, None)
 }
 
@@ -627,4 +627,23 @@ async fn given_invalid_drain_frame_lengths_when_reading_then_allocation_is_rejec
             .to_string()
             .contains("Invalid encrypted frame length"));
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn given_deferred_bwu_writer_when_local_cancel_runs_then_delivery_fails_without_ble_bytes() {
+    // Arrange: reproduce the state left by a dropped committed migration.
+    let (mut request, mut peer) = pair();
+    request.deferred_upgrade_writes = Some(Vec::new());
+    // Act
+    let result = request.send_local_cancel().await;
+    // Assert: memory enqueue is not transport delivery.
+    assert!(
+        result.is_err(),
+        "buffered Cancel must not report successful delivery"
+    );
+    assert_eq!(request.state.server_seq, 0);
+    assert!(request.deferred_upgrade_writes.as_ref().unwrap().is_empty());
+    let read = peer.socket.read_u8();
+    tokio::pin!(read);
+    assert!(futures::poll!(read).is_pending());
 }
