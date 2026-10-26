@@ -1290,10 +1290,19 @@ impl OutboundRequest {
             .as_ref()
             .ok_or_else(|| anyhow!("Missing paired-key result"))?;
         let (_, verified) = self.authentication.finish_with_credential(result.status)?;
-        if let (Some(peer), Some(latency), Some(session)) =
-            (verified, self.connect_latency, self.session.as_ref())
-        {
-            session.record_authenticated_route(peer, latency);
+        // A previous route proof is a routing hint, NOT authorization for
+        // this new connection. Require the SAME authenticated credential in
+        // the new PairedKey before Introduction, consent or any payload.
+        if let Some(session) = self.session.as_ref() {
+            if session
+                .expected_verified_peer()
+                .is_some_and(|expected| verified.as_ref() != Some(expected))
+            {
+                return Err(crate::peer_authentication::AuthenticationError.into());
+            }
+            if let (Some(peer), Some(latency)) = (verified, self.connect_latency) {
+                session.record_authenticated_route(peer, latency);
+            }
         }
 
         let prepared_files = match &self.payload {
