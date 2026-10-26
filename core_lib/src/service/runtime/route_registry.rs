@@ -75,6 +75,39 @@ impl RouteRegistry {
         Some((route.0.as_str(), route.1))
     }
 
+    /// The runtime owner invokes this only on a live managed-session proof,
+    /// for the same exact route generation and connected socket it dispatched.
+    /// It is not callable from mDNS/IPC, and cannot elevate an advertised hint.
+    pub(super) fn bind_authenticated_route(
+        &mut self,
+        id: &str,
+        connected_addr: std::net::SocketAddr,
+        peer: VerifiedPeerCredential,
+        connect_latency: Duration,
+        now: Instant,
+    ) -> bool {
+        const PROOF_TTL: Duration = Duration::from_secs(60);
+        if !self
+            .routes
+            .get(id)
+            .is_some_and(|route| route.addr == connected_addr)
+        {
+            return false;
+        }
+        let Some(expires_at) = now.checked_add(PROOF_TTL) else {
+            return false;
+        };
+        self.authenticated.insert(
+            id.to_owned(),
+            AuthenticatedRoute {
+                peer,
+                connect_latency,
+                expires_at,
+            },
+        );
+        true
+    }
+
     #[cfg(test)]
     pub(super) fn bind_test_authenticated_route(
         &mut self,
