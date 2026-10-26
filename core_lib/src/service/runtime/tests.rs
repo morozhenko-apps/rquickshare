@@ -253,6 +253,70 @@ fn given_duplicate_named_routes_when_minimal_mdns_tombstone_arrives_then_only_ma
 }
 
 #[tokio::test]
+async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_core_chooses_one_measured_best(
+) {
+    use crate::peer_authentication::VerifiedPeerCredential;
+    use std::time::{Duration, Instant};
+
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    let mut slow = advertisement("slow");
+    slow.ip = Some("192.0.2.10".into());
+    let mut fast = advertisement("fast");
+    fast.ip = Some("192.0.2.11".into());
+    runtime.discovered(slow).unwrap();
+    runtime.discovered(fast).unwrap();
+    let endpoints = runtime.endpoints();
+    assert_eq!(endpoints.len(), 2);
+    let (slow_id, fast_id) = (endpoints[0].id.clone(), endpoints[1].id.clone());
+
+    // Synthetic *independently verified* exact-route claims test routing
+    // policy only. Current real Android sessions provide no such claims.
+    let credential = VerifiedPeerCredential::test_fixture([3; 32]);
+    let expires = Instant::now() + Duration::from_secs(120);
+    runtime.routes.bind_test_authenticated_route(
+        &slow_id,
+        credential.clone(),
+        Duration::from_millis(70),
+        expires,
+    );
+    runtime.routes.bind_test_authenticated_route(
+        &fast_id,
+        credential,
+        Duration::from_millis(10),
+        expires,
+    );
+
+    let client = runtime.connect().unwrap();
+    let selected = runtime.create_selection(client, selection()).unwrap();
+    runtime
+        .send_selection(client, selected, &slow_id, "verified-route-1")
+        .unwrap();
+    assert!(runtime.dispatch().unwrap());
+    let job = fixture.receiver.recv().await.unwrap();
+    assert_eq!(job.info.addr, "192.0.2.11:1234");
+    assert!(fixture.receiver.try_recv().is_err());
+
+    // A new mDNS route generation cannot inherit the old cryptographic
+    // association; even an identical label cannot preserve its authority.
+    let mut replacement = advertisement("fast");
+    replacement.ip = Some("192.0.2.99".into());
+    runtime.discovered(replacement).unwrap();
+    let newcomer = runtime
+        .routes
+        .iter()
+        .find(|(_, route)| route.addr.ip().to_string() == "192.0.2.99")
+        .unwrap()
+        .0
+        .clone();
+    assert_ne!(newcomer, fast_id);
+    assert_eq!(runtime.routes.preferred(&slow_id, Instant::now()).unwrap().0, slow_id);
+
+    finish(job, State::Finished);
+    runtime.step().await.unwrap();
+}
+
+#[tokio::test]
 async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_only_one_exact_route_is_contacted(
 ) {
     use crate::utils::gen_mdns_name;
