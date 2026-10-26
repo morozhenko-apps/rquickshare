@@ -255,8 +255,9 @@ fn given_duplicate_named_routes_when_minimal_mdns_tombstone_arrives_then_only_ma
 #[tokio::test]
 async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_core_chooses_one_measured_best(
 ) {
-    use crate::peer_authentication::VerifiedPeerCredential;
     use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
 
     let mut fixture = fixture();
     let runtime = &mut fixture.runtime;
@@ -310,7 +311,14 @@ async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_
         .0
         .clone();
     assert_ne!(newcomer, fast_id);
-    assert_eq!(runtime.routes.preferred(&slow_id, Instant::now()).unwrap().0, slow_id);
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&slow_id, Instant::now())
+            .unwrap()
+            .0,
+        slow_id
+    );
 
     finish(job, State::Finished);
     runtime.step().await.unwrap();
