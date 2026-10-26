@@ -611,3 +611,22 @@ fn given_expired_verified_peer_when_finishing_then_identity_fails_closed() {
         .finish_with_credential(Some(Status::Success as i32))
         .is_err());
 }
+
+#[test]
+fn given_cached_verified_route_when_new_peer_is_anonymous_rotated_or_mismatched_then_payload_authentication_fails_closed(
+) {
+    let expected = VerifiedPeerCredential::test_fixture([0x33; 32]);
+    let matching = VerifiedPeerCredential::test_fixture([0x33; 32]);
+    let wrong = VerifiedPeerCredential::test_fixture([0x44; 32]);
+
+    // Current Google anonymous sessions keep their ordinary PIN/consent path
+    // only when no *previously trusted* route assumption is being relied on.
+    assert!(enforce_expected_route_peer(None, None).is_ok());
+    assert!(enforce_expected_route_peer(None, Some(&wrong)).is_ok());
+
+    // Once Core has selected a previously authenticated route, a new
+    // PairedKey Unable/no certificate is NOT consent to downgrade.
+    assert!(enforce_expected_route_peer(Some(&expected), None).is_err());
+    assert!(enforce_expected_route_peer(Some(&expected), Some(&wrong)).is_err());
+    assert!(enforce_expected_route_peer(Some(&expected), Some(&matching)).is_ok());
+}
