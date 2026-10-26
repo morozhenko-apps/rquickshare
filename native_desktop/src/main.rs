@@ -3,6 +3,7 @@ mod card_view;
 mod cli;
 mod desktop_guard;
 mod ingress;
+mod i18n;
 mod lifecycle;
 mod login;
 mod panel;
