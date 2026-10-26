@@ -187,6 +187,62 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_peer_evidence_requires_same_socket_generation_and_expires() {
+        let now = Instant::now();
+        let mut registry = RouteRegistry::default();
+        registry.insert("one".into(), route(10));
+        registry.insert("two".into(), route(11));
+        let peer = VerifiedPeerCredential::test_fixture([13; 32]);
+        assert!(!registry.bind_authenticated_route(
+            "missing",
+            route(10).addr,
+            peer.clone(),
+            Duration::from_millis(1),
+            now,
+        ));
+        assert!(!registry.bind_authenticated_route(
+            "one",
+            route(11).addr,
+            peer.clone(),
+            Duration::from_millis(1),
+            now,
+        ));
+        assert!(registry.bind_authenticated_route(
+            "one",
+            route(10).addr,
+            peer.clone(),
+            Duration::from_millis(85),
+            now,
+        ));
+        assert!(registry.bind_authenticated_route(
+            "two",
+            route(11).addr,
+            peer.clone(),
+            Duration::from_millis(12),
+            now,
+        ));
+        assert_eq!(registry.preferred("one", now).unwrap().0, "two");
+        assert_eq!(
+            registry
+                .preferred("one", now + Duration::from_secs(60))
+                .unwrap()
+                .0,
+            "one"
+        );
+        registry.invalidate_proofs();
+        assert_eq!(registry.preferred("one", now).unwrap().0, "one");
+        registry.bind_authenticated_route(
+            "one",
+            route(10).addr,
+            peer,
+            Duration::from_millis(15),
+            now,
+        );
+        registry.insert("one".into(), route(12));
+        assert_eq!(registry.preferred("one", now).unwrap().0, "one");
+    }
+
+    #[test]
     fn equal_measured_quality_chooses_one_stable_route_without_fanout() {
         let now = Instant::now();
         let expires = now + Duration::from_secs(30);
