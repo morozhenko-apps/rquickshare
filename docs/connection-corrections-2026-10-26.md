@@ -62,8 +62,22 @@ A2.2 and #16 verified-only identity. No new wire fields in this slice.
    during blocked output, keepalive interleaving and no false Finished. Local
    legacy Cancel also wakes the pump; native owner cancellation retains its
    existing enclosing token. Separate material security/transport choices.
-   GATT subscriber/write binding needs a verified BlueZ contract before choosing
-   its security design. Do not improvise trust based on device address.
+   GATT contract readback: installed bluer 0.17.4 exposes adapter/device on every
+   WriteValue request; its Notify callback exposes no subscriber address. Restore
+   the existing single-bridge transport invariant internally: the first valid
+   Weave CONNECT claims ingress for that adapter/device, other writers fail
+   InProgress, pre-CONNECT data fails, nonzero offsets fail, and an owned notify
+   session gets an exclusive receiver. Drop/cancellation replaces the channel and
+   clears the transport owner atomically, so old queued bytes cannot survive.
+   Preserve CONNECT-before-Notify ordering. This is the equivalent of assigning a
+   TCP socket's input to its one connection; it does not authenticate a device,
+   grant trust, group routes, authorize consent or add subscriber-specific notify.
+   Existing UKEY2/consent/security contracts are unchanged, so this correction is
+   an internal routing fix, not the future identity/transport architecture choice.
+   Test two writers/adapters, malformed CONNECT, offsets, full queue, overlapping
+   receiver admission, drop/retry and queued old input. Unidentified notification
+   subscribers and idle prehandshake lifecycle remain explicitly unproven; do not
+   claim complete per-peer notification isolation from these APIs.
 5. [ ] Final gate after planned code/tests: nightly format, Core stable once with
    workspace ext4 TMPDIR (documented baseline tmpfs issue), eight risk-sensitive
    tests individually once (not known flaky), Core strict all-feature Clippy;
@@ -104,3 +118,12 @@ presence before removing; an independent new fixture covers removal before probe
 completion with no phantom presence. No assertion is weakened to hide a failure.
 This plan does not claim that additional connection
 problems, new transport capabilities or hardware acceptance are complete.
+
+First final Core gate: 855 passed / 1 failed / 8 filtered. The newly explicit
+outbound Disconnection handler overwrote an already Finished text transfer when
+the peer's close arrived after completion. Fixed the handler's terminal guard,
+added an authenticated active/Finished/Cancelled/Rejected regression, and reran
+the affected managed test (1/1) then required stable gate: 857/857 +4+4 passed,
+8 risk-sensitive tests excluded. Assertions stayed unchanged. GATT ingress was
+then clarified against actual bluer source, justifying the additional correction
+and a fresh final gate after its implementation. No known-flaky classification.
