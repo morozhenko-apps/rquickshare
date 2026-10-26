@@ -614,8 +614,14 @@ impl NativeRuntime {
             return;
         };
         let snapshot = binding.control.snapshot();
+        // A very short successful transfer can reach Finished before this
+        // owner drains an already-issued authenticated proof. The proof
+        // originates from that live session before its terminal transition,
+        // so retain it only for successful Finished, never for a rejected,
+        // cancelled or disconnected peer.
         if snapshot.direction != crate::channel::TransferType::Outbound
-            || crate::sessions::terminal(&snapshot.state)
+            || (crate::sessions::terminal(&snapshot.state)
+                && snapshot.state != State::Finished)
         {
             return;
         }
