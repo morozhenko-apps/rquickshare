@@ -97,6 +97,7 @@ impl RouteRegistry {
         connected_addr: std::net::SocketAddr,
         peer: VerifiedPeerCredential,
         connect_latency: Duration,
+        observed_at: Instant,
         now: Instant,
     ) -> bool {
         const PROOF_TTL: Duration = Duration::from_secs(60);
@@ -107,9 +108,17 @@ impl RouteRegistry {
         {
             return false;
         }
-        let Some(expires_at) = now.checked_add(PROOF_TTL) else {
+        // A blocked owner must not mint a fresh lease from an old buffered
+        // event. The TTL starts when PairedKey actually completed.
+        if observed_at > now {
+            return false;
+        }
+        let Some(expires_at) = observed_at.checked_add(PROOF_TTL) else {
             return false;
         };
+        if expires_at <= now {
+            return false;
+        }
         self.authenticated.insert(
             id.to_owned(),
             AuthenticatedRoute {
