@@ -297,10 +297,7 @@ async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_
     let job = fixture.receiver.recv().await.unwrap();
     assert_eq!(job.info.addr, "192.0.2.11:1234");
     assert_eq!(
-        job.session
-            .as_ref()
-            .unwrap()
-            .expected_verified_peer(),
+        job.session.as_ref().unwrap().expected_verified_peer(),
         Some(&credential)
     );
     assert!(fixture.receiver.try_recv().is_err());
@@ -405,10 +402,10 @@ async fn given_short_verified_transfer_closes_before_runtime_wakeup_then_prior_s
     assert!(runtime.dispatch().unwrap());
     let job = fx.receiver.recv().await.unwrap();
     let credential = VerifiedPeerCredential::test_fixture([17; 32]);
-    job.session.as_ref().unwrap().record_authenticated_route(
-        credential.clone(),
-        Duration::from_millis(8),
-    );
+    job.session
+        .as_ref()
+        .unwrap()
+        .record_authenticated_route(credential.clone(), Duration::from_millis(8));
     finish(job, State::Finished);
     // Already-emitted proof and terminal session events are both buffered.
     // An independent channel must not lose the authenticated observation
@@ -498,8 +495,7 @@ async fn given_verified_route_evidence_is_revoked_while_queue_is_full_then_pendi
 }
 
 #[test]
-fn given_lagged_authenticated_proof_events_when_runtime_drains_then_all_alias_proofs_are_revoked(
-) {
+fn given_lagged_authenticated_proof_events_when_runtime_drains_then_all_alias_proofs_are_revoked() {
     use std::time::{Duration, Instant};
 
     use crate::peer_authentication::VerifiedPeerCredential;
