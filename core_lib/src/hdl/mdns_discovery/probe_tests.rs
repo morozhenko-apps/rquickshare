@@ -144,6 +144,44 @@ async fn given_failed_address_when_second_succeeds_then_only_reachable_address_i
 }
 
 #[tokio::test]
+async fn given_two_addresses_of_one_service_when_later_address_connects_first_then_fastest_reachable_is_selected_without_fanout(
+) {
+    let (events, receiver) = mpsc::unbounded_channel();
+    let (probes, mut calls) = mpsc::unbounded_channel::<Probe>();
+    let (updates, mut reader) = broadcast::channel::<EndpointInfo>(16);
+    let token = CancellationToken::new();
+    let drive = async {
+        events
+            .send(ServiceEvent::ServiceResolved(service(
+                "peer",
+                "192.0.2.10,192.0.2.11",
+                "One advertised device",
+            )))
+            .unwrap();
+        let first = calls.recv().await.unwrap();
+        let second = calls.recv().await.unwrap();
+        let (mut slower, faster) = if first.address == "192.0.2.10:4242" {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        assert_eq!(slower.address, "192.0.2.10:4242");
+        assert_eq!(faster.address, "192.0.2.11:4242");
+        // The lexically first address is still probing. A different address
+        // has demonstrated an actual successful TCP connect.
+        faster.result.send(Ok(())).unwrap();
+        let selected = reader.recv().await.unwrap();
+        assert_eq!(selected.id, "192.0.2.11:4242");
+        assert_eq!(selected.name.as_deref(), Some("One advertised device"));
+        assert!(reader.try_recv().is_err(), "only one address is published");
+        slower.result.closed().await;
+        token.cancel();
+    };
+    let (_, cache) = tokio::join!(drive, run(receiver, probes, &updates, token.clone()));
+    assert_eq!(cache.len(), 1);
+}
+
+#[tokio::test]
 async fn given_pending_probe_when_browser_closes_then_connect_future_is_dropped() {
     // Arrange
     let (events, receiver) = mpsc::unbounded_channel();
