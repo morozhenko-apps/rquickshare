@@ -5,6 +5,263 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
 use super::*;
 use crate::hdl::{BwuRouter, MigratableStream};
 
+#[tokio::test]
+async fn given_peer_cancel_during_committed_migration_when_processed_then_no_tcp_swap_or_false_finish(
+) {
+    // Arrange
+    let (mut request, mut peer) = pair();
+    let (tcp, _tcp_peer) = tcp_pair().await;
+    request.deferred_upgrade_writes = Some(Vec::new());
+    peer.send_encrypted_frame(&sharing_nearby::Frame {
+        v1: Some(sharing_nearby::V1Frame {
+            r#type: Some(sharing_nearby::v1_frame::FrameType::Cancel.into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    // Act / Assert
+    assert!(request
+        .finish_bandwidth_upgrade(tcp, Instant::now())
+        .await
+        .is_err());
+    assert_eq!(request.state.state, State::Cancelled);
+    assert!(matches!(request.socket, MigratableStream::Ble(_)));
+    assert_eq!(
+        request.state.server_seq, 1,
+        "no terminal response interleaved after LAST_WRITE"
+    );
+}
+
+#[tokio::test]
+async fn given_deferred_application_response_when_budget_exceeded_then_no_crypto_sequence_is_consumed(
+) {
+    // Arrange
+    let (mut request, _peer) = pair();
+    let oversized = OfflineFrame {
+        v1: Some(location_nearby_connections::V1Frame {
+            r#type: Some(FrameType::PayloadTransfer.into()),
+            payload_transfer: Some(location_nearby_connections::PayloadTransferFrame {
+                payload_chunk: Some(
+                    location_nearby_connections::payload_transfer_frame::PayloadChunk {
+                        body: Some(vec![0; SANE_FRAME_LENGTH as usize]),
+                        ..Default::default()
+                    },
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    request.deferred_upgrade_writes = Some(Vec::new());
+    // Act / Assert
+    assert!(request
+        .encrypt_and_send(&oversized)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("safety limit"));
+    assert!(request.deferred_upgrade_writes.as_ref().unwrap().is_empty());
+    assert_eq!(request.state.server_seq, 0);
+}
+
+#[tokio::test(start_paused = true)]
+async fn given_missing_or_incomplete_sync_when_committed_then_upgrade_never_swaps_on_deadline_or_frame_limit(
+) {
+    for event in [
+        None,
+        Some(EventType::SafeToClosePriorChannel),
+        Some(EventType::UpgradePathAvailable),
+    ] {
+        // Arrange
+        let (mut request, mut peer) = pair();
+        let (tcp, _tcp_peer) = tcp_pair().await;
+        request.deferred_upgrade_writes = Some(Vec::new());
+        if let Some(event) = event {
+            let count = if event == EventType::UpgradePathAvailable {
+                16
+            } else {
+                1
+            };
+            for _ in 0..count {
+                peer.encrypt_and_send(&negotiation(event)).await.unwrap();
+            }
+        }
+        let started = tokio::time::Instant::now();
+        // Act
+        let error = request
+            .finish_bandwidth_upgrade(tcp, Instant::now())
+            .await
+            .unwrap_err();
+        // Assert
+        let limited = event == Some(EventType::UpgradePathAvailable);
+        assert!(error
+            .to_string()
+            .contains(if limited { "incomplete" } else { "timed out" }));
+        assert_eq!(
+            started.elapsed(),
+            if limited {
+                Duration::ZERO
+            } else {
+                Duration::from_secs(5)
+            }
+        );
+        assert!(matches!(request.socket, MigratableStream::Ble(_)));
+        assert_eq!(
+            peer.read_encrypted_offline_frame().await.unwrap(),
+            negotiation(EventType::LastWriteToPriorChannel)
+        );
+        let read = peer.socket.read_u8();
+        tokio::pin!(read);
+        assert!(
+            futures::poll!(read).is_pending(),
+            "no premature disconnect or successful swap"
+        );
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn given_partial_body_or_bad_mac_when_committed_then_failure_does_not_reuse_partial_old_channel_as_tcp(
+) {
+    let mut bad_mac = encrypted_bytes(&negotiation(EventType::LastWriteToPriorChannel)).await;
+    *bad_mac.last_mut().unwrap() ^= 1;
+    for bytes in [vec![0, 0, 0, 16, 1], bad_mac] {
+        // Arrange
+        let (mut request, mut peer) = pair();
+        let (tcp, _tcp_peer) = tcp_pair().await;
+        request.deferred_upgrade_writes = Some(Vec::new());
+        peer.socket.write_all(&bytes).await.unwrap();
+        // Act / Assert
+        assert!(request
+            .finish_bandwidth_upgrade(tcp, Instant::now())
+            .await
+            .is_err());
+        assert!(matches!(request.socket, MigratableStream::Ble(_)));
+        assert!(request.state.client_seq <= 1);
+    }
+}
+
+#[tokio::test]
+async fn given_application_response_during_migration_when_both_peer_transitions_arrive_then_response_uses_tcp_in_sequence(
+) {
+    for safe_first in [false, true] {
+        // Arrange
+        let (mut request, mut peer) = pair();
+        let (tcp, tcp_peer) = tcp_pair().await;
+        request.deferred_upgrade_writes = Some(Vec::new());
+        peer.encrypt_and_send(&OfflineFrame {
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(FrameType::KeepAlive.into()),
+                keep_alive: Some(KeepAliveFrame { ack: Some(false) }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let remote = async {
+            assert_eq!(
+                peer.read_encrypted_offline_frame().await.unwrap(),
+                negotiation(EventType::LastWriteToPriorChannel)
+            );
+            if safe_first {
+                peer.encrypt_and_send(&negotiation(EventType::SafeToClosePriorChannel))
+                    .await
+                    .unwrap();
+            }
+            peer.encrypt_and_send(&negotiation(EventType::LastWriteToPriorChannel))
+                .await
+                .unwrap();
+            // If keepalive were written after LAST_WRITE, this assertion would fail.
+            assert_eq!(
+                peer.read_encrypted_offline_frame().await.unwrap(),
+                negotiation(EventType::SafeToClosePriorChannel)
+            );
+            if !safe_first {
+                peer.encrypt_and_send(&negotiation(EventType::SafeToClosePriorChannel))
+                    .await
+                    .unwrap();
+            }
+            let close = read_plain_frame_from(&mut peer.socket).await.unwrap();
+            assert_eq!(
+                OfflineFrame::decode(close.as_slice())
+                    .unwrap()
+                    .v1
+                    .unwrap()
+                    .r#type(),
+                FrameType::Disconnection
+            );
+            peer.socket = MigratableStream::Tcp(tcp_peer);
+            let v1 = peer
+                .read_encrypted_offline_frame()
+                .await
+                .unwrap()
+                .v1
+                .unwrap();
+            assert_eq!(v1.r#type(), FrameType::KeepAlive);
+            assert_eq!(v1.keep_alive.unwrap().ack, Some(true));
+            assert_eq!(peer.state.client_seq, 3);
+        };
+        // Act / Assert
+        let (result, ()) = tokio::join!(
+            request.finish_bandwidth_upgrade(tcp, Instant::now()),
+            remote
+        );
+        result.unwrap();
+        assert!(matches!(request.socket, MigratableStream::Tcp(_)));
+        assert!(request.deferred_upgrade_writes.is_none());
+        assert_eq!(request.state.server_seq, 3);
+        assert_eq!(request.state.client_seq, 3);
+    }
+}
+
+#[tokio::test]
+async fn given_established_eof_after_last_write_when_full_upgrade_runs_then_worker_receives_session_fatal_error(
+) {
+    // Arrange
+    let (mut request, mut peer) = pair();
+    let router = BwuRouter::new();
+    let route = router.clone();
+    let (socket, mut tcp_peer) = tcp_pair().await;
+    let remote = async {
+        peer.read_encrypted_offline_frame().await.unwrap();
+        let intro = OfflineFrame {
+            v1: Some(location_nearby_connections::V1Frame {
+                r#type: Some(FrameType::BandwidthUpgradeNegotiation.into()),
+                bandwidth_upgrade_negotiation: Some(location_nearby_connections::BandwidthUpgradeNegotiationFrame {
+                    event_type: Some(EventType::ClientIntroduction.into()),
+                    client_introduction: Some(location_nearby_connections::bandwidth_upgrade_negotiation_frame::ClientIntroduction {
+                        endpoint_id: Some("PEER".into()), ..Default::default()
+                    }), ..Default::default()
+                }), ..Default::default()
+            }), ..Default::default()
+        };
+        send_plain_frame_on(&mut tcp_peer, &intro.encode_to_vec())
+            .await
+            .unwrap();
+        route.route_with_alias("PEER", None, socket).await.unwrap();
+        read_plain_frame_from(&mut tcp_peer).await.unwrap();
+        assert_eq!(
+            peer.read_encrypted_offline_frame().await.unwrap(),
+            negotiation(EventType::LastWriteToPriorChannel)
+        );
+        drop(peer);
+    };
+    // Act / Assert
+    let (result, ()) = tokio::join!(
+        request.do_bandwidth_upgrade_at(&router, 4242, [192, 0, 2, 1]),
+        remote
+    );
+    assert!(result
+        .unwrap_err()
+        .downcast_ref::<BwuSessionError>()
+        .is_some());
+    assert!(request.deferred_upgrade_writes.is_none());
+    assert!(matches!(request.socket, MigratableStream::Ble(_)));
+}
+
 // Only the external transport is substituted; encryption, parser and state
 // transitions are the production implementations on both ends.
 fn pair() -> (

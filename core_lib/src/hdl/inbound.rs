@@ -598,6 +598,7 @@ pub struct InboundRequest<S = TcpStream> {
     bwu_peer_failed: bool,
     file_progress_trace: InboundFileProgressTrace,
     peer_endpoint_id: Option<String>,
+    deferred_upgrade_writes: Option<Vec<OfflineFrame>>,
     receive_directory: crate::receive::Directory,
     receive_root: Option<crate::receive::Root>,
     #[cfg(target_os = "linux")]
@@ -634,6 +635,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             bwu_peer_failed: false,
             file_progress_trace: InboundFileProgressTrace::default(),
             peer_endpoint_id: None,
+            deferred_upgrade_writes: None,
             receive_directory: crate::receive::ReceivePolicy::new(None).snapshot(),
             receive_root: None,
             #[cfg(target_os = "linux")]
@@ -1564,8 +1566,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 }
             }
             location_nearby_connections::v1_frame::FrameType::KeepAlive => {
-                trace!("Sending keepalive");
-                self.send_keepalive(true).await?;
+                let keepalive = v1_frame
+                    .keep_alive
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Missing keepalive body"))?;
+                if !keepalive.ack() {
+                    self.send_keepalive(true).await?;
+                }
             }
             location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeRetry => {
                 debug!("BWU: peer requested bandwidth-upgrade retry; continuing current transport");
@@ -2310,6 +2317,23 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
     }
 
     async fn encrypt_and_send(&mut self, frame: &OfflineFrame) -> Result<(), anyhow::Error> {
+        // Once LAST_WRITE is committed, only migration control may use BLE.
+        // Application responses retain order and are encrypted on the new channel.
+        if let Some(queued) = self.deferred_upgrade_writes.as_mut() {
+            let migration_control = frame.v1.as_ref().is_some_and(|v1| {
+                v1.r#type() == location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeNegotiation
+            });
+            if !migration_control {
+                let bytes = queued.iter().map(Message::encoded_len).sum::<usize>();
+                if bytes.saturating_add(frame.encoded_len()) > SANE_FRAME_LENGTH as usize {
+                    return Err(anyhow!(
+                        "BWU deferred application writes exceed safety limit"
+                    ));
+                }
+                queued.push(frame.clone());
+                return Ok(());
+            }
+        }
         let d2d_msg = DeviceToDeviceMessage {
             sequence_number: Some(self.get_server_seq_inc().await),
             message: Some(frame.encode_to_vec()),
@@ -2512,9 +2536,6 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         tcp_port: u16,
         ip: [u8; 4],
     ) -> Result<(), anyhow::Error> {
-        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
-        use location_nearby_connections::v1_frame::FrameType;
-
         let bwu_started = Instant::now();
         let expected_endpoint_id = self
             .peer_endpoint_id
@@ -2573,6 +2594,23 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         send_plain_frame_on(&mut tcp, &ack).await?;
         crate::receiver_trace::event(crate::receiver_trace::Event::BwuAckSent);
 
+        self.deferred_upgrade_writes = Some(Vec::new());
+        let result = self.finish_bandwidth_upgrade(tcp, bwu_started).await;
+        // A partial LAST_WRITE or later error cannot safely fall back to BLE.
+        if result.is_err() {
+            self.deferred_upgrade_writes = None;
+        }
+        result.map_err(|error| anyhow!(BwuSessionError(error)))
+    }
+
+    async fn finish_bandwidth_upgrade(
+        &mut self,
+        tcp: TcpStream,
+        bwu_started: Instant,
+    ) -> Result<(), anyhow::Error> {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
+        use location_nearby_connections::v1_frame::FrameType;
+
         self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
             EventType::LastWriteToPriorChannel,
             None,
@@ -2581,24 +2619,15 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         crate::receiver_trace::event(crate::receiver_trace::Event::BwuPriorDrainStarted);
 
         let drain_started = Instant::now();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut peer_last_write = false;
+        let mut peer_safe_to_close = false;
         for _ in 0..16 {
-            let offline = match tokio::time::timeout(
-                Duration::from_secs(5),
-                self.read_encrypted_offline_frame(),
-            )
-            .await
-            {
-                Ok(Ok(frame)) => frame,
-                Ok(Err(error)) => return Err(error),
-                Err(_) => {
-                    warn!(
-                        "BWU timing: prior BLE drain timed out after {} ms ({} ms total)",
-                        drain_started.elapsed().as_millis(),
-                        bwu_started.elapsed().as_millis()
-                    );
-                    break;
-                }
-            };
+            // One phase budget, never restarted by trickle traffic. A canceled
+            // body read is terminal and its partial bytes cannot reach TCP.
+            let offline = tokio::time::timeout_at(deadline, self.read_encrypted_offline_frame())
+                .await
+                .map_err(|_| anyhow!("BWU prior-channel synchronization timed out"))??;
 
             let Some(v1) = offline.v1.as_ref() else {
                 return Err(anyhow!("BWU drain frame has no v1 payload"));
@@ -2616,6 +2645,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
             match event {
                 Some(EventType::LastWriteToPriorChannel) => {
+                    peer_last_write = true;
                     debug!("BWU: peer sent LAST_WRITE; replying SAFE_TO_CLOSE");
                     self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
                         EventType::SafeToClosePriorChannel,
@@ -2624,13 +2654,16 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                     .await?;
                 }
                 Some(EventType::SafeToClosePriorChannel) => {
+                    peer_safe_to_close = true;
                     crate::receiver_trace::event(crate::receiver_trace::Event::BwuPriorSafeToClose);
                     debug!(
                         "BWU timing: peer marked prior channel safe to close after {} ms drain ({} ms total)",
                         drain_started.elapsed().as_millis(),
                         bwu_started.elapsed().as_millis()
                     );
-                    break;
+                }
+                Some(EventType::UpgradeFailure) => {
+                    return Err(anyhow!("BWU peer rejected a committed migration"));
                 }
                 Some(other) => {
                     debug!("BWU: ignoring drain event {other:?}");
@@ -2639,6 +2672,13 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                     return Err(anyhow!("BWU negotiation frame has no event type"));
                 }
             }
+            if peer_last_write && peer_safe_to_close {
+                break;
+            }
+        }
+
+        if !(peer_last_write && peer_safe_to_close) {
+            return Err(anyhow!("BWU prior-channel synchronization incomplete"));
         }
 
         let disconnection = OfflineFrame {
@@ -2655,9 +2695,19 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
         // This final prior-channel DISCONNECTION is plaintext by protocol design.
         self.send_frame(disconnection.encode_to_vec()).await?;
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Give the peer a condition-based opportunity to read our SAFE_TO_CLOSE.
+        // This is optional cleanup after synchronized safety, not a fallback gate.
+        let _ = tokio::time::timeout(
+            Duration::from_secs(5),
+            read_plain_frame_from(&mut self.socket),
+        )
+        .await;
 
         self.socket = crate::hdl::MigratableStream::Tcp(tcp);
+        self.frame_header = super::frame_header::FrameHeader::default();
+        for frame in self.deferred_upgrade_writes.take().unwrap_or_default() {
+            self.encrypt_and_send(&frame).await?;
+        }
         crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpSwitched);
         info!(
             "BWU timing: migrated inbound session from BLE to Wi-Fi LAN in {} ms total",
@@ -5374,3 +5424,6 @@ mod inbound_file_progress_trace_tests {
         assert!(record(&mut first, 100, 100).is_empty());
     }
 }
+
+#[cfg(test)]
+mod keepalive_tests;
