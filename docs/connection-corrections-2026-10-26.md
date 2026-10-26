@@ -214,6 +214,20 @@ Clippy, frontend and Native GTK are all completed/success. All 31 added methods
 were also cross-checked by name against the final local stable log. No installed
 binary, Pixel or throughput success is inferred from automated tests.
 
+## New static inspection gap: local KDE Cancel during committed BWU
+
+2026-10-26 testing-side source audit found a narrow **unverified-on-device**
+interleaving: after LAST_WRITE commits, `deferred_upgrade_writes=Some` queues
+non-BWU application frames. If KDE user cancellation interrupts the GATT worker's
+BWU future, `send_local_cancel()` can queue both encrypted Sharing Cancel
+fragments, return `Ok`, and incorrectly emit `local_cancel_flushed` although
+neither packet left BLE nor TCP. That is a source-level false delivery claim.
+**New [#26](https://github.com/morozhenko-apps/rquickshare/issues/26) P0**, with
+[focused MODE B test/branch/interaction plan](mode-b-committed-bwu-local-cancel-2026-10-26.md).
+No fix, no new code CI, no installed reproduction and no change to the green
+`088d543` candidate are claimed. Existing LAN KDE Cancel acceptance remains
+PASS once; the committed-migration cancel race is a separate open safety/UX gate.
+
 ## Physical handoff and remaining limits
 
 After six exact-source checks pass, build an uninstalled candidate with
