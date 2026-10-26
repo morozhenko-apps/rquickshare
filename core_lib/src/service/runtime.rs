@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
+use std::time::Instant;
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures::FutureExt;
@@ -13,6 +14,9 @@ use super::*;
 use crate::managed::{ControlLost, ManagedSender, OutboundReceiver, RejectionKind};
 use crate::sessions::{ConsentToken, SessionControl, SessionError, SessionEvent, SessionId};
 use crate::{EndpointInfo, OutboundPayload, SendInfo, State, RQS};
+
+mod route_registry;
+use route_registry::RouteRegistry;
 
 const DISCOVERY_EVENTS: usize = 128;
 const OWNED_DISPATCHES: usize = 32;
@@ -91,7 +95,7 @@ pub struct NativeRuntime {
     sender: ManagedSender,
     events: broadcast::Receiver<SessionEvent>,
     discovery: broadcast::Receiver<EndpointInfo>,
-    routes: BTreeMap<String, Route>,
+    routes: RouteRegistry,
     endpoint_sequence: u64,
     bindings: BTreeMap<SessionId, Binding>,
     pending: Option<Pending>,
@@ -246,7 +250,7 @@ impl NativeRuntime {
             sender,
             events,
             discovery,
-            routes: BTreeMap::new(),
+            routes: RouteRegistry::default(),
             endpoint_sequence: 0,
             bindings: BTreeMap::new(),
             pending: None,
@@ -614,7 +618,9 @@ impl NativeRuntime {
             let Some(dispatch) = self.coordinator.next_send()? else {
                 return Ok(false);
             };
-            let Some(route) = self.routes.get(&dispatch.endpoint) else {
+            let Some((chosen_endpoint, route)) =
+                self.routes.preferred(&dispatch.endpoint, Instant::now())
+            else {
                 self.coordinator.observe(dispatch.transfer, Phase::Failed)?;
                 self.coordinator.owner_closed(dispatch.transfer)?;
                 self.coordinator.source_released(dispatch.transfer)?;
@@ -622,7 +628,7 @@ impl NativeRuntime {
             };
             self.pending = Some(Pending {
                 transfer: dispatch.transfer,
-                endpoint: dispatch.endpoint,
+                endpoint: chosen_endpoint.to_owned(),
                 request: SendInfo {
                     id: format!(
                         "send-{:032x}-{:016x}",
