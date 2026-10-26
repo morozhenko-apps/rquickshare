@@ -32,6 +32,12 @@ impl Deref for RouteRegistry {
 }
 
 impl RouteRegistry {
+    /// After losing any proof-event observation, no cached association is
+    /// trustworthy. Keep exact independent routes, revoke all shared links.
+    pub(super) fn invalidate_proofs(&mut self) {
+        self.authenticated.clear();
+    }
+
     pub(super) fn insert(&mut self, id: String, route: Route) -> Option<Route> {
         // An address or fullname replacement must not inherit past proof.
         self.authenticated.remove(&id);
