@@ -921,3 +921,57 @@ async fn given_received_files_when_consent_direction_phase_or_manifest_differs_t
         }
     }
 }
+
+#[test]
+fn given_managed_outbound_session_when_authenticated_then_proof_is_private_ordered_and_fail_closed() {
+    use std::time::Duration;
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let hub = SessionHub::new(49).unwrap();
+    let mut receiver = hub.subscribe_route_proofs_fresh().unwrap();
+    let key = VerifiedPeerCredential::test_fixture([7; 32]);
+    let mut outbound = hub
+        .open(TransferType::Outbound, None, CancellationToken::new())
+        .unwrap();
+    let session = outbound.control().snapshot().id;
+    outbound.record_authenticated_route(key.clone(), Duration::from_millis(13));
+    let proof = receiver.try_recv().expect("live outbound credential");
+    assert_eq!(proof.session, session);
+    assert_eq!(proof.peer, key);
+    assert_eq!(proof.connect_latency, Duration::from_millis(13));
+    assert!(!format!("{:?}", proof.peer).contains('7'));
+
+    outbound.observe(&State::Finished);
+    outbound.record_authenticated_route(
+        VerifiedPeerCredential::test_fixture([8; 32]),
+        Duration::ZERO,
+    );
+    assert!(receiver.try_recv().is_err(), "terminal session cannot claim identity");
+
+    let inbound = hub
+        .open(TransferType::Inbound, None, CancellationToken::new())
+        .unwrap();
+    inbound.record_authenticated_route(
+        VerifiedPeerCredential::test_fixture([9; 32]),
+        Duration::ZERO,
+    );
+    assert!(receiver.try_recv().is_err(), "inbound cannot bind outbound routes");
+
+    let cancelled = hub
+        .open(TransferType::Outbound, None, CancellationToken::new())
+        .unwrap();
+    cancelled.control().cancel();
+    cancelled.record_authenticated_route(
+        VerifiedPeerCredential::test_fixture([10; 32]),
+        Duration::ZERO,
+    );
+    assert!(receiver.try_recv().is_err(), "cancelled session is not proof");
+
+    hub.close();
+    let stopped = hub
+        .subscribe_route_proofs_fresh()
+        .err()
+        .expect("shut down hub must reject proof subscriptions");
+    assert_eq!(stopped, SessionError::Closed);
+}
