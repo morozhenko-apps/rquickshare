@@ -61,7 +61,7 @@ impl Action {
         })
     }
     pub fn label(self) -> &'static str {
-        match self {
+        crate::i18n::label(match self {
             Self::Open => "Open card",
             Self::Receive => "Receive files",
             Self::Files => "Send files…",
@@ -81,7 +81,7 @@ impl Action {
             Self::Reconnect => "Reconnect service",
             Self::Hide => "Hide card",
             Self::Quit => "Quit panel",
-        }
+        })
     }
     pub fn name(self) -> Option<&'static str> {
         match self {
