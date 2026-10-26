@@ -1,3 +1,5 @@
+> **Current release GO/NO-GO board (2026-10-26):** [release-gates-live-2026-10-26.md](release-gates-live-2026-10-26.md). Separates source/CI PASS from physical 0.9.0 blockers, independent #8 risk disposition, signed tag/R2/APT publication, and 1.0.0 verified-route/20-locale roadmap. No release action authorized by the report.
+
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
 ## 2026-10-26 final owner decision: preserve existing fast BWU (#8 option 1)
