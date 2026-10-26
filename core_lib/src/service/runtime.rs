@@ -862,8 +862,11 @@ impl NativeRuntime {
         if !self.started || self.coordinator.lifecycle == Lifecycle::Stopped {
             return Err(Error::NotRunning.into());
         }
-        let events = self.drain_events()?;
+        // A valid proof is emitted before the session's terminal event.
+        // Consume authenticated route observations first so a fast transfer
+        // cannot lose its already completed peer proof during Close cleanup.
         let proofs = self.drain_route_proofs()?;
+        let events = self.drain_events()?;
         let discovery = self.drain_discovery()?;
         let mut completions = false;
         for _ in 0..OWNED_DISPATCHES {
