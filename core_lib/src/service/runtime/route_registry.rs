@@ -81,11 +81,7 @@ impl RouteRegistry {
         Some((route.0.as_str(), route.1))
     }
 
-    pub(super) fn expected_peer(
-        &self,
-        id: &str,
-        now: Instant,
-    ) -> Option<VerifiedPeerCredential> {
+    pub(super) fn expected_peer(&self, id: &str, now: Instant) -> Option<VerifiedPeerCredential> {
         self.authenticated
             .get(id)
             .filter(|proof| proof.expires_at > now && self.routes.contains_key(id))
