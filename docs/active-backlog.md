@@ -1,5 +1,28 @@
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
+## 2026-10-26 MODE B independent audit: new P0 Cancel/BWU race #26
+
+[Issue #26](https://github.com/morozhenko-apps/rquickshare/issues/26) and
+[reproducible branch/test matrix](mode-b-committed-bwu-local-cancel-2026-10-26.md)
+identify a source-level false `local_cancel_flushed` on KDE-initiated Cancel
+**during an already committed BLE→TCP migration**. The GATT worker may cancel
+`do_bandwidth_upgrade` after `deferred_upgrade_writes=Some`, then
+`send_local_cancel()` queues both Sharing Cancel frames, returns success and
+logs them as flushed although neither reached the sender. This specific race
+was **not** physically reproduced and **not** covered by the 31 new tests.
+The ordinary LAN KDE Cancel still has its earlier genuine Pixel PASS. Avoid
+force-writing on the prior BLE channel after LAST_WRITE or changing accepted
+A2.2 BWU security policy. Design/implementation of terminal ownership during
+committed migration remains OPEN; no code or CI change in this audit.
+
+The latest `088d543` candidate is six-green but **not installed**; its
+known SHA-256 is `5e575d3cd6e242587da477e52b2488cf3058df6d9ee7cdafba926f58c5fb2525`.
+A guarded local acceptance script for the owner's later test verifies both
+new/rollback package digests, current installed ELF identity, three new ELF
+matches and live user services, rolling back on installation failure.
+It was syntax-checked via `bash -n` in a separate ChatGPT environment; **not
+executed on Alcotester**. No master/tag/R2 changes.
+
 ## 2026-10-26 current connection corrections: six-green source, physical pending
 
 Executable source `088d543` contains inbound control/BWU (`b0c62d9`), outbound
