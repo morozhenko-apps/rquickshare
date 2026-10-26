@@ -425,7 +425,8 @@ impl PeerAuthentication {
     }
 
     pub(crate) fn finish(&mut self, remote: Option<i32>) -> Result<Outcome, AuthenticationError> {
-        self.finish_with_credential(remote).map(|(outcome, _)| outcome)
+        self.finish_with_credential(remote)
+            .map(|(outcome, _)| outcome)
     }
 
     /// Emits a credential identity only for a verified, mutually successful
