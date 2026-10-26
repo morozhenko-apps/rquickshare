@@ -1,5 +1,11 @@
 use std::collections::HashMap;
+use std::future::Future;
+use std::net::Ipv4Addr;
+use std::pin::Pin;
+use std::task::Poll;
+use std::time::Duration;
 
+use futures::stream::{FuturesUnordered, StreamExt};
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
@@ -119,6 +125,67 @@ impl MDnsDiscovery {
     }
 }
 
+// Discovery probes are speculative, never transfer or authentication deadlines.
+const MAX_PENDING_SERVICES: usize = 32;
+const MAX_SERVICE_ADDRESSES: usize = 16;
+const PROBE_BUDGET: Duration = Duration::from_secs(5);
+
+#[derive(Clone, PartialEq)]
+struct Candidate {
+    addresses: Vec<Ipv4Addr>,
+    port: u16,
+    name: String,
+    rtype: DeviceType,
+}
+
+impl Candidate {
+    fn from_service(info: &mdns_sd::ServiceInfo) -> Option<Self> {
+        let mut addresses: Vec<_> = info
+            .get_addresses_v4()
+            .into_iter()
+            .copied()
+            .filter(is_not_self_ip)
+            .collect();
+        addresses.sort_unstable();
+        addresses.truncate(MAX_SERVICE_ADDRESSES);
+        if addresses.is_empty() {
+            return None;
+        }
+        let (rtype, name) = parse_mdns_endpoint_info(info.get_property("n")?.val_str()).ok()?;
+        let name = if name.is_empty() {
+            info.get_hostname()
+                .trim_end_matches(".local.")
+                .trim_end_matches(".local")
+                .to_owned()
+        } else {
+            name
+        };
+        Some(Self {
+            addresses,
+            port: info.get_port(),
+            name,
+            rtype,
+        })
+    }
+}
+
+struct PendingCandidate<'a> {
+    candidate: Candidate,
+    reachability: Pin<Box<dyn Future<Output = Option<EndpointInfo>> + Send + 'a>>,
+}
+
+fn poll_candidate(
+    pending: &mut HashMap<String, PendingCandidate<'_>>,
+    cx: &mut std::task::Context<'_>,
+) -> Poll<(String, Option<EndpointInfo>)> {
+    for (fullname, entry) in pending.iter_mut() {
+        if let Poll::Ready(endpoint) = entry.reachability.as_mut().poll(cx) {
+            return Poll::Ready((fullname.clone(), endpoint));
+        }
+    }
+    Poll::Pending
+}
+
 // Only SDK events and TCP reachability are injectable. Domain admission,
 // fullname cache, cancellation and withdrawal behavior remain production code.
 async fn run_event_loop<Next, NextFuture, Probe, ProbeFuture>(
@@ -132,15 +199,30 @@ where
     Next: FnMut() -> NextFuture,
     NextFuture: std::future::Future<Output = Result<ServiceEvent, anyhow::Error>>,
     Probe: FnMut(String) -> ProbeFuture,
-    ProbeFuture: std::future::Future<Output = std::io::Result<()>>,
+    ProbeFuture: std::future::Future<Output = std::io::Result<()>> + Send,
 {
+    let mut pending = HashMap::<String, PendingCandidate<'_>>::new();
+    // Keep the current SDK receive alive across unrelated probe completions.
+    let mut incoming = Box::pin(next());
     loop {
-        let incoming = tokio::select! {
+        let event = tokio::select! {
             biased;
             _ = ctk.cancelled() => break,
-            incoming = next() => incoming,
+            result = &mut incoming => {
+                incoming = Box::pin(next());
+                result
+            },
+            (fullname, endpoint) = futures::future::poll_fn(|cx| poll_candidate(&mut pending, cx)),
+                if !pending.is_empty() => {
+                pending.remove(&fullname);
+                if let Some(endpoint) = endpoint {
+                    cache.insert(fullname, endpoint.clone());
+                    let _ = sender.send(endpoint);
+                }
+                continue;
+            },
         };
-        let event = match incoming {
+        let event = match event {
             Ok(event) => event,
             Err(err) => {
                 // Closed SDK browse receivers must be terminal, not a hot loop.
@@ -151,116 +233,66 @@ where
 
         match event {
             ServiceEvent::ServiceResolved(info) => {
-                let port = info.get_port();
-                let ip_hash = info.get_addresses_v4();
-                if ip_hash.is_empty() {
-                    debug!(
-                        "MDnsDiscovery: dropping {} because it has no IPv4 address",
-                        info.get_fullname()
-                    );
+                let fullname = info.get_fullname().to_owned();
+                let Some(candidate) = Candidate::from_service(&info) else {
+                    // Invalid replacement metadata cannot admit a pending old route.
+                    pending.remove(&fullname);
                     continue;
-                }
-
-                let ip = match ip_hash.iter().next() {
-                    Some(ip) => ip,
-                    None => continue,
                 };
-
-                if !is_not_self_ip(ip) {
-                    trace!(
-                        "MDnsDiscovery: ignoring self service {} at {}",
-                        info.get_fullname(),
-                        ip
-                    );
+                if pending
+                    .get(&fullname)
+                    .is_some_and(|entry| entry.candidate == candidate)
+                {
                     continue;
                 }
-
-                let n = match info.get_property("n") {
-                    Some(n) => n,
-                    None => {
-                        warn!(
-                            "MDnsDiscovery: dropping {} at {}:{} because TXT n= is missing",
-                            info.get_fullname(),
-                            ip,
-                            port
-                        );
-                        continue;
+                // Drop replaced/removed futures immediately. A late old result has
+                // no owner left and cannot resurrect a removed or changed service.
+                pending.remove(&fullname);
+                if pending.len() >= MAX_PENDING_SERVICES {
+                    warn!("MDnsDiscovery: speculative probe capacity reached");
+                    continue;
+                }
+                let attempts = FuturesUnordered::new();
+                for ip in &candidate.addresses {
+                    let address = format!("{ip}:{}", candidate.port);
+                    let connect = probe(address.clone());
+                    let ip = *ip;
+                    attempts.push(async move {
+                        match tokio::time::timeout(PROBE_BUDGET, connect).await {
+                            Ok(Ok(())) => Some((ip, address)),
+                            _ => None,
+                        }
+                    });
+                }
+                let source = candidate.clone();
+                let key = fullname.clone();
+                let reachability = Box::pin(async move {
+                    let mut attempts = attempts;
+                    while let Some(result) = attempts.next().await {
+                        if let Some((ip, address)) = result {
+                            return Some(EndpointInfo {
+                                fullname: key,
+                                id: address,
+                                name: Some(source.name),
+                                ip: Some(ip.to_string()),
+                                port: Some(source.port.to_string()),
+                                rtype: Some(source.rtype),
+                                present: Some(true),
+                            });
+                        }
                     }
-                };
-
-                info!(
-                    "MDnsDiscovery: candidate fullname={} hostname={} ip={} port={} n_encoded_len={}",
-                    info.get_fullname(),
-                    info.get_hostname(),
-                    ip,
-                    port,
-                    n.val_str().len()
+                    None
+                });
+                pending.insert(
+                    fullname,
+                    PendingCandidate {
+                        candidate,
+                        reachability,
+                    },
                 );
-
-                let (dt, dn) = match parse_mdns_endpoint_info(n.val_str()) {
-                    Ok(parsed) => parsed,
-                    Err(err) => {
-                        warn!(
-                            "MDnsDiscovery: dropping fullname={} hostname={} ip={} port={} because endpoint info parsing failed: {}",
-                            info.get_fullname(),
-                            info.get_hostname(),
-                            ip,
-                            port,
-                            err
-                        );
-                        continue;
-                    }
-                };
-
-                let display_name = if dn.is_empty() {
-                    info.get_hostname()
-                        .trim_end_matches(".local.")
-                        .trim_end_matches(".local")
-                        .to_string()
-                } else {
-                    dn
-                };
-                let ip_port = format!("{ip}:{port}");
-                let fullname = info.get_fullname().to_string();
-
-                // Cancellation interrupts an unreachable TCP candidate rather
-                // than letting the OS connect timeout pin worker shutdown.
-                let reachability = tokio::select! {
-                    biased;
-                    _ = ctk.cancelled() => break,
-                    result = probe(ip_port.clone()) => result,
-                };
-                if ctk.is_cancelled() {
-                    break;
-                }
-
-                match reachability {
-                    Ok(()) => {
-                        let endpoint = EndpointInfo {
-                            fullname: fullname.clone(),
-                            id: ip_port,
-                            name: Some(display_name),
-                            ip: Some(ip.to_string()),
-                            port: Some(port.to_string()),
-                            rtype: Some(dt),
-                            present: Some(true),
-                        };
-                        info!("ServiceResolved: Resolved a new service: {:?}", endpoint);
-                        cache.insert(fullname, endpoint.clone());
-                        let _ = sender.send(endpoint);
-                    }
-                    Err(err) => {
-                        warn!(
-                            "MDnsDiscovery: service {} resolved at {} but TCP reachability check failed: {}",
-                            fullname,
-                            ip_port,
-                            err
-                        );
-                    }
-                }
             }
             ServiceEvent::ServiceRemoved(_, fullname) => {
-                trace!("ServiceRemoved: checking if should remove {}", fullname);
+                pending.remove(&fullname);
                 if withdraw_cached_endpoint(cache, sender, &fullname) {
                     info!("MDnsDiscovery: cached service removed");
                 }
@@ -318,38 +350,57 @@ mod lifecycle_tests {
     #[tokio::test]
     async fn given_real_sdk_resolve_and_remove_events_when_driven_then_exact_route_and_tombstone_emit(
     ) {
-        let (sender, mut reader) = broadcast::channel(16);
+        let (sender, mut reader) = broadcast::channel::<EndpointInfo>(16);
         let mut cache = HashMap::new();
         let info = sample_service(
             "fixture-peer",
             &crate::utils::gen_mdns_endpoint_info(DeviceType::Phone as u8, "Fixture phone"),
         );
         let fullname = info.get_fullname().to_owned();
-        let result = run_fixture(
+        let (events, event_reader) = tokio::sync::mpsc::unbounded_channel();
+        events.send(ServiceEvent::ServiceResolved(info)).unwrap();
+        let ctk = CancellationToken::new();
+        let drive = async {
+            let added = reader.recv().await.unwrap();
+            assert_eq!(added.present, Some(true));
+            events
+                .send(ServiceEvent::ServiceRemoved(
+                    String::new(),
+                    fullname.clone(),
+                ))
+                .unwrap();
+            let removed = reader.recv().await.unwrap();
+            assert_eq!(removed.present, Some(false));
+            events
+                .send(ServiceEvent::ServiceRemoved(
+                    String::new(),
+                    fullname.clone(),
+                ))
+                .unwrap();
+            ctk.cancel();
+            (added, removed)
+        };
+        let event_reader = std::sync::Arc::new(tokio::sync::Mutex::new(event_reader));
+        let run = run_event_loop(
             &sender,
-            CancellationToken::new(),
+            ctk.clone(),
             &mut cache,
-            vec![
-                ServiceEvent::SearchStarted("_FC9F5ED42C8A._tcp.local.".to_owned()),
-                ServiceEvent::ServiceResolved(info),
-                ServiceEvent::ServiceRemoved(
-                    "_FC9F5ED42C8A._tcp.local.".to_owned(),
-                    fullname.clone(),
-                ),
-                ServiceEvent::ServiceRemoved(
-                    "_FC9F5ED42C8A._tcp.local.".to_owned(),
-                    fullname.clone(),
-                ),
-            ],
-            true,
-        )
-        .await;
-        assert!(
-            result.is_err(),
-            "fixture closes after the finite event stream"
+            || {
+                let event_reader = event_reader.clone();
+                async move {
+                    event_reader
+                        .lock()
+                        .await
+                        .recv()
+                        .await
+                        .ok_or_else(|| anyhow::anyhow!("closed"))
+                }
+            },
+            |_| async { Ok(()) },
         );
+        let ((added, removed), result) = tokio::join!(drive, run);
+        result.unwrap();
         assert!(cache.is_empty());
-        let added = reader.try_recv().unwrap();
         assert_eq!(added.fullname, fullname);
         assert_eq!(added.id, "192.0.2.20:4242");
         assert_eq!(added.name.as_deref(), Some("Fixture phone"));
@@ -357,7 +408,6 @@ mod lifecycle_tests {
         assert_eq!(added.port.as_deref(), Some("4242"));
         assert_eq!(added.present, Some(true));
         assert_eq!(added.rtype, Some(DeviceType::Phone));
-        let removed = reader.try_recv().unwrap();
         assert_eq!(removed.fullname, fullname);
         assert_eq!(removed.id, added.id);
         assert_eq!(removed.present, Some(false));
@@ -370,7 +420,7 @@ mod lifecycle_tests {
 
     #[tokio::test]
     async fn given_missing_or_bad_txt_and_unreachable_candidate_when_driven_then_no_false_peer() {
-        let (sender, mut reader) = broadcast::channel(16);
+        let (sender, mut reader) = broadcast::channel::<EndpointInfo>(16);
         let mut cache = HashMap::new();
         // Build a real ServiceInfo without n=, rather than mocking its getter.
         let missing = mdns_sd::ServiceInfo::new(
@@ -568,3 +618,6 @@ mod lifecycle_tests {
         assert!(reader.try_recv().is_err());
     }
 }
+
+#[cfg(test)]
+mod probe_tests;
