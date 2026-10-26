@@ -325,6 +325,100 @@ async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_
 }
 
 #[tokio::test]
+async fn given_real_managed_session_proofs_when_received_then_runtime_binds_only_its_original_exact_route(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    for (name, address) in [("slow", "192.0.2.10"), ("fast", "192.0.2.11")] {
+        let mut ad = advertisement(name);
+        ad.ip = Some(address.into());
+        runtime.discovered(ad).unwrap();
+    }
+    let routes = runtime.endpoints();
+    let peer = VerifiedPeerCredential::test_fixture([42; 32]);
+    let client = runtime.connect().unwrap();
+    for (index, latency) in [80_u64, 12_u64].into_iter().enumerate() {
+        let selected = runtime.create_selection(client, selection()).unwrap();
+        runtime
+            .send_selection(
+                client,
+                selected,
+                &routes[index].id,
+                &format!("verified-session-{index}"),
+            )
+            .unwrap();
+        assert!(runtime.dispatch().unwrap());
+        let job = fx.receiver.recv().await.unwrap();
+        assert_eq!(
+            job.info.addr,
+            if index == 0 {
+                "192.0.2.10:1234"
+            } else {
+                "192.0.2.11:1234"
+            }
+        );
+        job.session
+            .as_ref()
+            .unwrap()
+            .record_authenticated_route(peer.clone(), Duration::from_millis(latency));
+        assert!(runtime.drain_route_proofs().unwrap());
+        finish(job, State::Finished);
+        runtime.step().await.unwrap();
+    }
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&routes[0].id, Instant::now())
+            .unwrap()
+            .0,
+        routes[1].id
+    );
+}
+
+#[tokio::test]
+async fn given_route_address_rotates_before_proof_arrives_then_old_session_cannot_certify_replacement(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let old_id = runtime.endpoints()[0].id.clone();
+    let client = runtime.connect().unwrap();
+    let selected = runtime.create_selection(client, selection()).unwrap();
+    runtime
+        .send_selection(client, selected, &old_id, "stale-authenticated-proof")
+        .unwrap();
+    assert!(runtime.dispatch().unwrap());
+    let job = fx.receiver.recv().await.unwrap();
+    job.session.as_ref().unwrap().record_authenticated_route(
+        VerifiedPeerCredential::test_fixture([11; 32]),
+        Duration::from_millis(3),
+    );
+
+    let mut changed = advertisement("peer");
+    changed.ip = Some("192.0.2.111".into());
+    runtime.discovered(changed).unwrap();
+    let new_id = runtime.endpoints()[0].id.clone();
+    assert_ne!(new_id, old_id);
+    assert!(runtime.drain_route_proofs().unwrap());
+    assert!(runtime.routes.get(&old_id).is_none());
+    assert_eq!(
+        runtime.routes.preferred(&new_id, Instant::now()).unwrap().0,
+        new_id
+    );
+    assert_eq!(job.info.addr, "127.0.0.1:1234");
+    finish(job, State::Finished);
+    runtime.step().await.unwrap();
+}
+
+#[tokio::test]
 async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_only_one_exact_route_is_contacted(
 ) {
     use crate::utils::gen_mdns_name;
