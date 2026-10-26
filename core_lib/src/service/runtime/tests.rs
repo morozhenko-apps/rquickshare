@@ -21,6 +21,7 @@ pub(crate) struct Fixture {
 pub(crate) fn fixture() -> Fixture {
     let (sender, receiver) = ManagedSender::channel().unwrap();
     let events = sender.sessions().subscribe_fresh().unwrap();
+    let route_proofs = sender.sessions().subscribe_route_proofs_fresh().unwrap();
     let (discovery, observed) = broadcast::channel(128);
     Fixture {
         runtime: NativeRuntime::assemble(
@@ -28,6 +29,7 @@ pub(crate) fn fixture() -> Fixture {
             Coordinator::new(123, Limits::default()).unwrap(),
             sender,
             events,
+            route_proofs,
             observed,
         ),
         receiver,
