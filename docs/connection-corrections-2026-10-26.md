@@ -52,8 +52,16 @@ A2.2 and #16 verified-only identity. No new wire fields in this slice.
    Test silence, exhausted control traffic, partial body at deadline, EOF, bad
    authentication, cancel, reordered peer transitions and successful sequence
    continuity. Preserve the existing legacy admission choice (#8).
-   Review bulk sender duplex control ownership for a separate correction,
-   separating implementable state fixes from material security/transport choices.
+   Correct bulk sender duplex ownership within the same TCP session: cancel-safe
+   persistent header/body reads race cancel-safe individual socket writes. Retain
+   the partial write cursor, parse authenticated peer controls while backpressured,
+   queue nested responses behind the current frame in encryption sequence order,
+   and abort terminal peer Cancel/EOF without appending a new frame inside a
+   partial payload. Bound queued control frames/bytes; keep one writer and avoid
+   detached workers. Test partial input across writes, remote cancel before and
+   during blocked output, keepalive interleaving and no false Finished. Local
+   legacy Cancel also wakes the pump; native owner cancellation retains its
+   existing enclosing token. Separate material security/transport choices.
    GATT subscriber/write binding needs a verified BlueZ contract before choosing
    its security design. Do not improvise trust based on device address.
 5. [ ] Final gate after planned code/tests: nightly format, Core stable once with
