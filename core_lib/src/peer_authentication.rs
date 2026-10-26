@@ -34,6 +34,15 @@ impl PartialEq for VerifiedPeerCredential {
 }
 impl Eq for VerifiedPeerCredential {}
 
+#[cfg(test)]
+impl VerifiedPeerCredential {
+    /// Synthetic proof for ranking-policy tests only; runtime proof must
+    /// originate from a real mutually authenticated PairedKey session.
+    pub(crate) fn test_fixture(fingerprint: [u8; 32]) -> Self {
+        Self(fingerprint)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Role {
     Sender,
