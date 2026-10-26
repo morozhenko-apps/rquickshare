@@ -24,3 +24,13 @@ The existing `native_desktop/src/i18n.rs` exposes a 20-code catalog for the tray
 - Rollback: revert the documentation-only commit independently from executable commits, then revert the i18n and review-window edits. No persistent migration, package, signer, Pixel or network changes.
 
 **State on plan creation:** NOT IMPLEMENTED, NOT TESTED. Issue #17 remains open. #16 and release/security gates remain unchanged.
+
+## Implementation checkpoint (2026-10-26)
+
+- `e0238edd` adds all eight static review strings for the 19 non-English catalog rows (152 translated entries; English is canonical fallback), eight-key tests and PT/RU action/status oracles.
+- `32dc2bb` applies those translations only to the received text/link review labels, without changing the guarded explicit copy callback, untrusted content path or markup-disabled body.
+- `6a0bfb27` reformats all 19 new match arms into the project's Rust per-string row style. No protocol/identity/consent changes.
+- Independent source structural audit **PASS**: 19 × 8 row cardinality, eight key definitions, conditional link-vs-text heading, six remaining label bindings, preserved `label(body.text())`, `set_use_markup(false)` and `copy_explicitly()` invocation. This **is not** a Rust compile, test execution, visual acceptance or a professional translation review.
+- [Draft PR #28](https://github.com/morozhenko-apps/rquickshare/pull/28) targets `dev` while the main branch is concurrently being modified for #16. CI source-exact results pending and must be recorded before merge. **#17 remains PARTIAL** until the other native surfaces and locale layout/context checks pass.
+
+Do not auto-merge this branch, close #17 or publish any `master`, `native/v*`, APT or R2 asset on the basis of this limited static check.
