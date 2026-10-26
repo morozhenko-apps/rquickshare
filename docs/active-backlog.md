@@ -1,5 +1,31 @@
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
+## 2026-10-26 #23 initialization fix: source six-green, installed acceptance pending
+
+**Source `6ae62f62b17b058160d3246873ecdd34377ec9f0` on dev:** optional BWU TCP
+wait no longer starves the encrypted BLE negotiation/consent loop. Authenticated
+UPGRADE_FAILURE ends the wait immediately; partial frame prefixes survive route
+readiness/deadline; established-session errors retain terminal semantics. The
+15-second TCP fallback deadline, successful Wi-Fi upgrade, manual visibility,
+explicit consent and approved A2.2 admission policy are unchanged.
+
+**Verified final CI:** [Preflight 40287507193](https://github.com/morozhenko-apps/rquickshare/actions/runs/40287507193)
+and [Native GTK 40287507248](https://github.com/morozhenko-apps/rquickshare/actions/runs/40287507248),
+all **6/6 SUCCESS**. Core **831 stable + 4 + 4 integration passed**, eight
+race-sensitive tests excluded per policy; all eight also passed individually
+once locally. Fourteen new regression methods protect the changed path. Local
+workspace-TMPDIR final gate matches CI; the earlier tmpfs storage failure was
+reproduced on unchanged baseline and remains disclosed, as does an extra
+non-required no-default-features Core Clippy failure. No assertion weakened.
+
+[Plan, diagnosis, commands, cache-evidence correction and limitations](inbound-bwu-initialization-2026-10-26.md).
+[#23 evidence comment](https://github.com/morozhenko-apps/rquickshare/issues/23#issuecomment-6413626764).
+**#23 remains OPEN / overall PARTIAL:** new source is not installed or accepted
+on Pixel. Next: verified candidate/rollback, cold phone-to-PC text send and retry,
+record common WLAN state and redacted offer/consent/failure-or-TCP stages. Do not
+claim this fixes every historical discovery or stale-tile problem. #18/#25/#8
+remain separate open gates; no master/tag/R2 or user-service change.
+
 ## 2026-10-25 #25 Pixel physical KDE Cancel: LAN PASS; repeat/ BLE remain OPEN
 
 **Owner-confirmed UI:** after native receiver-side KDE Cancel while transferring Pixel→Alcotester, **Google Quick Share on Pixel displays 'Сброшено' (canceled) instead of earlier false 'Success'**. Owner actually executed guarded local installer on Alcotester: six pinned-source CI gates PASS for `213fd3db7c3fac9dd2e51662d6250dc361006967`; verified previous rollback .deb; built `rquickshare-native_0.9.0-1.debug_amd64.deb` in `~/Downloads/rquickshare-cancel-mOClKmN6/` (SHA-256 `38932d873894725f121eb859cc42a02e2d3be4792a4f743d45c534d82ce2cfeb`), reinstalled it and compared all three installed ELFs byte-for-byte to the new package. `INSTALL_VERIFIED=PASS`. Existing rollback at `~/Downloads/rquickshare-connectfix-c9aMs0Hz/` retained.

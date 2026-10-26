@@ -41,22 +41,22 @@ existing authenticated event, not inventing a new protocol or shortening timers.
 ## Plan, compatibility and rollback
 
 1. [x] Analyze source, actual issues, baseline CI and ownership; document plan.
-2. [ ] Add a focused failing diagnostic using the real managed encrypted sender
+2. [x] Add a focused failing diagnostic using the real managed encrypted sender
    and receiver with BWU enabled and no TCP route; consent must arrive before
    the 15-second upgrade deadline. No normal suite before the final gate.
-3. [ ] Let the existing inbound event loop be interrupted only at a safe frame
+3. [x] Let the existing inbound event loop be interrupted only at a safe frame
    header/control boundary by route readiness/deadline. Continue authenticated
    frames, explicit consent and terminal handling while waiting. Honor peer
    UPGRADE_FAILURE immediately and clean up the pending route. Preserve partial
    frame headers across route/deadline transitions and prior-channel drain.
-4. [ ] Add deterministic regressions for normal negotiation, early authenticated
+4. [x] Add deterministic regressions for normal negotiation, early authenticated
    failure, silent-peer timeout, TCP arrival, partial headers/body, EOF/malformed
    frames, explicit accept/reject/cancel and route cleanup. Propagate established
    session errors instead of treating them as recoverable upgrade errors.
-5. [ ] Run final stable Core gate once, strict format/Clippy, separate eight
+5. [x] Run final stable Core gate once, strict format/Clippy, separate eight
    race-sensitive methods once (not known-flaky by repository classification).
    Push dev with expected-tip check; verify six exact-source CI checks.
-6. [ ] Record evidence, update backlog/issue with remaining hardware acceptance.
+6. [x] Record evidence, update backlog/issue with remaining hardware acceptance.
    Do not close #23 until installed Pixel cold/retry acceptance is measured.
 
 Production scope: inbound.rs, GATT worker error propagation, static trace marker;
@@ -99,4 +99,129 @@ prove Android discovery or actual installed latency. Keep raw peer data private.
 
 ## Execution evidence
 
-Implementation and final validation pending. No new package installed.
+Diagnostic command: `cargo test --manifest-path core_lib/Cargo.toml --all-features
+--lib given_pending_wifi_upgrade_when_ble_sender_negotiates_then_consent_and_text_complete_without_tcp
+-- --exact hdl::gatt::managed_tests::given_pending_wifi_upgrade_when_ble_sender_negotiates_then_consent_and_text_complete_without_tcp`.
+Exit 101: exactly one test executed, failed after 5.00 seconds at the explicit
+initialization deadline. Production still exclusively waited for TCP at that
+point. This confirms the starvation independently of Pixel UI assumptions.
+
+Implementation uses private `handle_with_interrupt`, preserving the ordinary
+handler's randomized command/socket selection and processing bodies outside the
+interruptible select. The existing pending TCP timeout is pinned once, not reset
+on activity. `BwuSessionError` preserves fatal/terminal established-session errors
+through the optional-upgrade fallback. A private address-parameterized helper
+allows deterministic loopback upgrade tests without depending on host NIC choice.
+The managed worker tests additionally assert a live pending route at consent, so
+skipping an unavailable upgrade cannot falsely satisfy the regression.
+
+Added 14 test methods: 11 BWU wait/drain tests and 3 managed worker tests, with
+tables for every header split, selected-body boundaries and malformed input kinds.
+Existing accept/reject tests also exercise the refactored shared event boundary.
+Static compilation found and corrected test-only fixture visibility/byte decoding
+and signed frame-length constant typing before final test execution.
+
+Mutation review: restoring exclusive wait kills consent/text/reject regressions;
+ignoring UPGRADE_FAILURE kills zero-time fallback; restarting timeout kills exact
+15-second assertion after traffic; losing a prefix/body kills authenticated
+sequence/frame assertions; swallowing session errors kills terminal peer states;
+omitting route cleanup kills has_pending/re-registration; suppressing migration
+kills real TCP socket/crypto-counter assertions. No mutation engine run claimed.
+
+Source commit: `6ae62f62b17b058160d3246873ecdd34377ec9f0`, normal-pushed to dev
+after expected-tip checks. No force push, master or tag mutation.
+
+Initial local stable command exited 1: **830 passed, 1 failed, 8 filtered**.
+All 14 new tests passed. Existing
+`receive_reliability::given_inaccessible_or_unsafe_receive_storage_after_introduction_when_preparing_then_no_accept_or_partial_owner_is_left`
+failed at line 734. Targeted execution on a source archive of baseline `effa21a`
+reproduced the same failure (exit 101, 1 failed, 824 filtered). The first archive
+compile lacked three include_str assets; adding their unchanged baseline files
+allowed the actual reproduction. No assertion or storage production code changed.
+
+Root diagnostic: `/tmp` is **tmpfs**, workspace is **ext4** (`stat -f` reports
+ext2/ext3). On tmpfs, `openat(unlinked_directory_fd, ".", O_TMPFILE|O_RDWR)`
+succeeds with parent nlink=0; the identical syscall in workspace storage fails
+EPERM. The storage test assumes the latter. This environment-dependent existing
+storage defect remains visible; do not call it a flaky test or a BWU regression.
+The native CI already uses a workspace TMPDIR. Repeat the final Core gate with
+`TMPDIR=/home/morozhenko/Documents/GitHub/rquickshare/core_lib/target/bwu-ci-tmp`
+to validate on the same filesystem class, while retaining the tmpfs failure above.
+
+`cargo +stable clippy --manifest-path core_lib/Cargo.toml --all-features --all-targets
+-- -D warnings`: exit 0. Existing bluer 0.17.3 future-compatibility warning remains.
+## Final source validation
+
+All six exact-source checks completed successfully for `6ae62f6`:
+[Preflight 40287507193](https://github.com/morozhenko-apps/rquickshare/actions/runs/40287507193)
+and [Native GTK 40287507248](https://github.com/morozhenko-apps/rquickshare/actions/runs/40287507248).
+Core job `121454548714` log independently confirms **831 passed, 0 failed,
+0 ignored, 8 filtered**, plus **4/4 modern_protocol and 4/4 native_daemon**.
+Rust format, Core Clippy, Tauri Clippy/desktop tests, frontend and GTK are all green.
+
+Executed local final commands (repository root):
+
+```sh
+TMPDIR="$PWD/core_lib/target/bwu-ci-tmp" bash scripts/ci-core-test-groups.sh stable
+cargo +nightly fmt --manifest-path app/main/src-tauri/Cargo.toml --all --check
+bash scripts/ci-check-workflow-policy.sh
+cargo +stable clippy --manifest-path core_lib/Cargo.toml --all-features --all-targets -- -D warnings
+```
+
+All exit 0. Final stable log: **831 + 4 + 4 passed**, 8 race-sensitive excluded.
+Each exact name from `bash scripts/ci-core-test-groups.sh list` was separately run
+once with `TMPDIR="$PWD/core_lib/target/bwu-ci-tmp" cargo test --manifest-path
+core_lib/Cargo.toml --all-features --lib "$test_name" -- --exact`: eight commands,
+each exit 0 and exactly one pass. These are race-sensitive tests, not a declared
+known-flaky suite. No release 10x/stress or mutation-engine claim.
+
+Evidence correction: an intermediate workspace run reported only 817 stable
+tests after the baseline archive shared Cargo's target directory. That result
+and the first race batch are **not accepted as current-source evidence**.
+After forcing recompilation by touching current `core_lib/src/lib.rs` (no content
+change), the final inventory correctly contained 839 methods, 831 stable passed,
+and all eight exact race tests were rerun once. Independent CI never shared that
+archive cache and confirms the same current-source counts. Logs are in
+`/tmp/rquickshare-bwu-2026-10-26/stable-final.log` and `race-final-1.log` through
+`race-final-8.log`; CI links above provide persistent external evidence.
+
+Additional non-required probe: `cargo +stable clippy --manifest-path
+core_lib/Cargo.toml --no-default-features --all-targets -- -D warnings` exited 101
+on unused experimental imports/fields/helpers and unguarded test references to
+`read_plain_frame_from`. This configuration is not the required all-features
+Core or Tauri no-default gate. It remains a disclosed limitation, not a clean
+pass; those existing feature paths were not broadened in this scoped fix.
+
+The source fix and automated gates are complete; **overall #23 is PARTIAL**
+until installed Pixel acceptance. The initial tmpfs storage failure remains an
+independent tracked limitation, not silenced by workspace validation. No package
+installed or physical latency measured. Rollback: inverse commit `6ae62f6`,
+with separate documentation rollback; previous installed package stays intact.
+Issue evidence: [comment 6413626764](https://github.com/morozhenko-apps/rquickshare/issues/23#issuecomment-6413626764).
+
+## Uninstalled acceptance artifact
+
+After all six CI checks passed, executed:
+
+```sh
+python3 scripts/native_deb.py build --profile dev --output /home/morozhenko/Downloads/rquickshare-bwu-6ae62f6
+sha256sum /home/morozhenko/Downloads/rquickshare-bwu-6ae62f6/*.deb
+git diff --check
+```
+
+All exit 0. Builder compiled all three binaries, verified Debian structure,
+runtime dependencies and isolated help/settings smoke checks. Artifact:
+`/home/morozhenko/Downloads/rquickshare-bwu-6ae62f6/rquickshare-native_0.9.0-1.debug_amd64.deb`.
+SHA-256: `3d8f8e608527b7b08108e25ff34e52b2ef4c761ebefa4def8aa462749ab92bcc`.
+Matching `.deb.sha256` is beside it. The source identity is `6ae62f6`; do not use
+the reused Debian debug version as binary identity. Build log retains existing
+Core feature/dead-code warnings, bluer future-compatibility and dpkg-shlibdeps
+libc diversion warnings; final package verification still succeeded.
+
+No apt install, installed binary replacement, service restart, Android action,
+signing or publication occurred. Previous installed `0.9.0-1.debug` remains.
+Before installing, verify the existing rollback package and compare its three
+ELFs to installed paths as specified by the canonical hardware handoff. Then
+install the candidate with transfers idle, verify its three installed ELFs and
+perform the remaining cold text/retry acceptance. Preserve the old rollback.
+All owned build/test commands completed; Terminal closed. No watcher remains.
