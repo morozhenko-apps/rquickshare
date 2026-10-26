@@ -5,8 +5,8 @@ mod identity_tests;
 
 use std::future::Future;
 use std::net::SocketAddr;
-use std::time::Instant;
 use std::sync::Arc;
+use std::time::Instant;
 
 use tokio::net::TcpStream;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
