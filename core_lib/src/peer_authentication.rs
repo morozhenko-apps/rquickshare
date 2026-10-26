@@ -16,6 +16,24 @@ const MAX_PUBLIC_KEY: usize = 128;
 const MAX_LOCAL_CERTIFICATES: usize = 9;
 const PUBLIC_TOLERANCE_SECONDS: i64 = 30 * 60;
 
+/// Credential proof is session-authenticated, but NOT proof that an mDNS/GATT
+/// advertisement belongs to this session. Never group routes using this alone.
+#[derive(Clone)]
+pub(crate) struct VerifiedPeerCredential([u8; 32]);
+
+impl fmt::Debug for VerifiedPeerCredential {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("VerifiedPeerCredential([redacted])")
+    }
+}
+
+impl PartialEq for VerifiedPeerCredential {
+    fn eq(&self, other: &Self) -> bool {
+        bool::from(self.0.ct_eq(&other.0))
+    }
+}
+impl Eq for VerifiedPeerCredential {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Role {
     Sender,
@@ -407,6 +425,16 @@ impl PeerAuthentication {
     }
 
     pub(crate) fn finish(&mut self, remote: Option<i32>) -> Result<Outcome, AuthenticationError> {
+        self.finish_with_credential(remote).map(|(outcome, _)| outcome)
+    }
+
+    /// Emits a credential identity only for a verified, mutually successful
+    /// PairedKey result. This remains UNLINKED to every advertised transport
+    /// until an independent exact-route/session proof exists.
+    pub(crate) fn finish_with_credential(
+        &mut self,
+        remote: Option<i32>,
+    ) -> Result<(Outcome, Option<VerifiedPeerCredential>), AuthenticationError> {
         if self
             .remote_result
             .is_some_and(|previous| previous != remote)
@@ -434,10 +462,26 @@ impl PeerAuthentication {
             .combine(self.signature.unwrap_or(Outcome::Unable))
             .combine(Outcome::remote(remote));
         if self.combined == Outcome::Fail {
-            Err(AuthenticationError)
-        } else {
-            Ok(self.combined)
+            return Err(AuthenticationError);
         }
+        let credential = if self.combined == Outcome::Success
+            && self.signature == Some(Outcome::Success)
+            && self.remote_result == Some(Some(Status::Success as i32))
+        {
+            self.peer.as_ref().and_then(|peer| {
+                let now = self.clock.seconds()?;
+                if !peer.valid(now) {
+                    return None;
+                }
+                let point = peer.key.as_ref()?.to_encoded_point(false);
+                Some(VerifiedPeerCredential(
+                    Sha256::digest(point.as_bytes()).into(),
+                ))
+            })
+        } else {
+            None
+        };
+        Ok((self.combined, credential))
     }
 }
 
