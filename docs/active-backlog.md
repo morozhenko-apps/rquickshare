@@ -1,5 +1,19 @@
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
+## 2026-10-26 owner scope: correct current connections; defer payload expansion
+
+Owner explicitly deferred richer file categorization and additional payload
+types together with account/QR and future features. Ordinary file bytes already
+use the generic file path; specialized categories do not gate their transfer.
+Mixed attachments, Wi-Fi payload UI/send, split APK, STREAM and Remote Copy
+extensions remain future backlog, alongside new transports and AirDrop.
+
+**Active source work:** [connection correction plan](connection-corrections-2026-10-26.md)
+starts with keepalive and mDNS scheduling/address fallback, then reviews remaining
+BWU/duplex/GATT ownership corrections. This owner instruction allows source work
+to progress while the earlier installed Pixel acceptance remains pending; it
+does not claim installation, waive physical gates or approve a new trust model.
+
 ## 2026-10-26 full compatibility research: ordered follow-up work
 
 [Quick Share / AirDrop audit](quickshare-airdrop-compatibility-audit-2026-10-26.md)
