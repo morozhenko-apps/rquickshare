@@ -71,16 +71,12 @@ fn withdraw_cached_endpoints(
 
 // This is a diagnostic for *untrusted advertised* endpoint IDs, not an
 // authenticated device or a route selection policy. Keep every route alive.
-fn unverified_hint_collision(
-    cache: &HashMap<String, EndpointInfo>,
-    fullname: &str,
-) -> bool {
+fn unverified_hint_collision(cache: &HashMap<String, EndpointInfo>, fullname: &str) -> bool {
     let Some(hint) = crate::utils::parse_mdns_endpoint_id(fullname) else {
         return false;
     };
     cache.keys().any(|previous| {
-        previous != fullname
-            && crate::utils::parse_mdns_endpoint_id(previous) == Some(hint)
+        previous != fullname && crate::utils::parse_mdns_endpoint_id(previous) == Some(hint)
     })
 }
 
@@ -331,15 +327,9 @@ mod lifecycle_tests {
     #[test]
     fn given_same_ephemeral_hint_in_two_services_when_discovered_then_routes_remain_independent() {
         use crate::utils::gen_mdns_name;
-        let one = format!(
-            "{}._FC9F5ED42C8A._tcp.local.",
-            gen_mdns_name(*b"AB12")
-        );
+        let one = format!("{}._FC9F5ED42C8A._tcp.local.", gen_mdns_name(*b"AB12"));
         let same = one.clone();
-        let other = format!(
-            "{}._FC9F5ED42C8A._tcp.local.",
-            gen_mdns_name(*b"CD34")
-        );
+        let other = format!("{}._FC9F5ED42C8A._tcp.local.", gen_mdns_name(*b"CD34"));
         let mut cache = HashMap::<String, EndpointInfo>::new();
         assert!(!unverified_hint_collision(&cache, &one));
         cache.insert(one.clone(), EndpointInfo::default());
@@ -352,8 +342,8 @@ mod lifecycle_tests {
         assert!(unverified_hint_collision(&cache, &alias));
         cache.insert(alias.clone(), EndpointInfo::default());
         assert_eq!(cache.len(), 2);
-        assert_eq!(cache.contains_key(&one), true);
-        assert_eq!(cache.contains_key(&alias), true);
+        assert!(cache.contains_key(&one));
+        assert!(cache.contains_key(&alias));
         assert!(!unverified_hint_collision(&cache, "not-a-nearby-service"));
         cache.remove(&one);
         assert!(!unverified_hint_collision(&cache, &alias));
