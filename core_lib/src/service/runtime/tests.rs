@@ -186,7 +186,10 @@ fn given_existing_discovery_when_name_or_route_changes_then_shared_revision_chan
         second.revision + 1
     );
     let replaced_id = runtime.endpoints()[0].id.clone();
-    assert_ne!(replaced_id, id, "new socket requires a fresh route identity");
+    assert_ne!(
+        replaced_id, id,
+        "new socket requires a fresh route identity"
+    );
     assert!(!runtime.routes.contains_key(&id));
     assert_eq!(runtime.routes[&replaced_id].addr.port(), 4321);
     info.present = Some(false);
@@ -654,7 +657,10 @@ async fn given_untrusted_mdns_address_change_when_send_is_queued_or_pending_then
             job.release();
         }
         assert_eq!(jobs, if full { 10 } else { 0 });
-        assert_eq!(runtime.snapshot(client).unwrap().resources.reserved_handles, 0);
+        assert_eq!(
+            runtime.snapshot(client).unwrap().resources.reserved_handles,
+            0
+        );
     }
 }
 
