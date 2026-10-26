@@ -84,3 +84,20 @@ Lightweight format/static safety diagnostics during implementation; at final cod
 - R12: Windows Native and Linux KDE share the same Core route policy; platform-specific availability measurements vary, consent/identity invariant remains identical.
 
 **Current automated evidence:** native Core already keeps separately discovered fullnames and sends to one exact route. A focused runtime source test added in commit `0d9026f` checks same short-lived ID with contradictory name/address remains separate and emits one job to only the intended address. No real multi-route auto-ranking claimed until actual inputs/binding are present.
+
+## 2026-10-26 next source slice: address-generation-safe routing and measured availability
+
+After explicit owner confirmation, **no new layout, manual transport picker, icon, or grouped-row UI was added**. Native still has only one outgoing mDNS discovery provider; it cannot infer cryptographically verified BLE/mDNS dual transport, so full automatic best-of-media ranking remains OPEN.
+
+Production change `core_lib/src/service/runtime.rs` (code `fe525fcc`): an mDNS update reusing the **same untrusted service fullname** but replacing IP or port no longer preserves its old exact-recipient endpoint capability. It atomically removes the old endpoint and registers a fresh per-epoch/sequence route ID under one Coordinator snapshot update; unchanged address/name remains a no-op, rename alone retains route identity. This protects against one same-fullname address takeover while a file is queued, pending under backpressure, or already in flight. The transfer that selected the former route fails instead of silently being sent to a new, unverified socket; an already established transfer owns its original socket. Change does not silently auto-retry on another peer, send multiple notifications, or grant same-device identity based on IP/fullname.
+
+Source tests (commits `fe33b0f3`, `eebaa58c`, `edc3cca8`) update all prior old-route assumptions and exercise:
+- Same name, changed port or IP → distinct route capability, old route retired; label-only change → same capability.
+- Queued and backpressure-delayed Send → old selected transfer fails without any outbound job to the new socket, no reservation leak.
+- Active Send job → remains attached to its original endpoint, despite discovery of a replacement; no second job.
+- Existing same-hint two-recipient test `aec465bf` now uses distinct dedup tokens, exercising ReplayConflict correctly rather than suppressing it.
+- [New asynchronous mDNS probe regression](../core_lib/src/hdl/mdns_discovery/probe_tests.rs) `cbc6cff3`: when one service has multiple advertised IP addresses, whichever actual TCP connect succeeds *first* becomes the only published live route. The slower still-pending probe is canceled. This is an actual current automatic working-address choice; it does **not** measure payload bandwidth, nor prove two independent BLE and LAN advertisements come from the same person/device.
+
+Security note: changing IP/port under the same mDNS instance may be normal Wi-Fi address churn, not necessarily an attacker. Until a cryptographically valid binding is available, failing already queued work is preferable to redirecting to an unverified different address. A fresh user-initiated Send after this update can use the newly measured reachable route from the unchanged device list. Do not call this finished #16 automatic cross-media ranking, and do not imply an unverified ephemeral endpoint hint proves a Google account.
+
+**Execution gate at writing:** source `edc3cca8ee0461178522ea892a1869d70f5b86d8` has newly triggered Preflight/Native GTK CI; not yet confirmed final success. No actual Pixel or Windows physical acceptance on this code, no deployed/install artifact, no master/tag/R2 changes. Full Mode B and hardware checks remain after #16/#17 per owner's order.
