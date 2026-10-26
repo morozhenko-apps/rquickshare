@@ -215,12 +215,14 @@ mod tests {
             peer.clone(),
             Duration::from_millis(1),
             now,
+            now,
         ));
         assert!(!registry.bind_authenticated_route(
             "one",
             route(11).addr,
             peer.clone(),
             Duration::from_millis(1),
+            now,
             now,
         ));
         assert!(registry.bind_authenticated_route(
@@ -229,6 +231,7 @@ mod tests {
             peer.clone(),
             Duration::from_millis(85),
             now,
+            now,
         ));
         assert!(registry.bind_authenticated_route(
             "two",
@@ -236,6 +239,17 @@ mod tests {
             peer.clone(),
             Duration::from_millis(12),
             now,
+            now,
+        ));
+        // An owner delayed by more than the proof TTL must not revive an
+        // already obsolete, otherwise correctly signed session identity.
+        assert!(!registry.bind_authenticated_route(
+            "one",
+            route(10).addr,
+            peer.clone(),
+            Duration::from_millis(2),
+            now,
+            now + Duration::from_secs(61),
         ));
         assert_eq!(registry.preferred("one", now).unwrap().0, "two");
         assert_eq!(
@@ -252,6 +266,7 @@ mod tests {
             route(10).addr,
             peer,
             Duration::from_millis(15),
+            now,
             now,
         );
         registry.insert("one".into(), route(12));
