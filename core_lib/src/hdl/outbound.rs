@@ -1294,12 +1294,10 @@ impl OutboundRequest {
         // this new connection. Require the SAME authenticated credential in
         // the new PairedKey before Introduction, consent or any payload.
         if let Some(session) = self.session.as_ref() {
-            if session
-                .expected_verified_peer()
-                .is_some_and(|expected| verified.as_ref() != Some(expected))
-            {
-                return Err(crate::peer_authentication::AuthenticationError.into());
-            }
+            crate::peer_authentication::enforce_expected_route_peer(
+                session.expected_verified_peer(),
+                verified.as_ref(),
+            )?;
             if let (Some(peer), Some(latency)) = (verified, self.connect_latency) {
                 session.record_authenticated_route(peer, latency);
             }
