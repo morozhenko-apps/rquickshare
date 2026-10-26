@@ -1,7 +1,7 @@
 use super::*;
 use crate::{OutboundPayload, SendInfo};
 
-async fn consent(accept: bool) {
+async fn consent(accept: Option<bool>, upgrade: bool) {
     // Arrange: real protocol handlers, with a TCP/duplex adapter replacing BlueZ I/O only.
     let hub = SessionHub::new(31).unwrap();
     let session = hub
@@ -10,12 +10,15 @@ async fn consent(accept: bool) {
     let mut control = session.control();
     let (sender, mut events) = tokio::sync::broadcast::channel(128);
     let (ble, mut bridge) = tokio::io::duplex(64 * 1024);
-    let request = InboundRequest::new(
+    let mut request = InboundRequest::new(
         MigratableStream::Ble(ble),
         "legacy-placeholder".into(),
         sender.clone(),
     )
     .attach_session(session);
+    if upgrade {
+        request.enable_bandwidth_upgrade();
+    }
     let parent = CancellationToken::new();
     let tasks = SessionTasks::new(&parent, 3).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -51,11 +54,12 @@ async fn consent(accept: bool) {
             .await;
         })
         .unwrap();
+    let router = BwuRouter::new();
     tasks
         .spawn(run_inbound_worker(
             request,
             sender.clone(),
-            BwuRouter::new(),
+            router.clone(),
             0,
             tasks.lifetime(),
             true,
@@ -68,6 +72,12 @@ async fn consent(accept: bool) {
         control.changed().await.unwrap();
     }
     let snapshot = control.snapshot();
+    if upgrade {
+        assert!(
+            router.has_pending().await,
+            "consent must precede TCP arrival/deadline"
+        );
+    }
     // Act
     sender
         .send(ChannelMessage {
@@ -77,17 +87,21 @@ async fn consent(accept: bool) {
             ..Default::default()
         })
         .unwrap();
-    control
-        .respond(snapshot.consent.unwrap(), 1, accept)
-        .unwrap()
-        .wait()
-        .await
-        .unwrap();
-    sent.wait_released().await.unwrap();
-    let expected = if accept {
-        State::Finished
+    if let Some(accept) = accept {
+        control
+            .respond(snapshot.consent.unwrap(), 1, accept)
+            .unwrap()
+            .wait()
+            .await
+            .unwrap();
     } else {
-        State::Rejected
+        control.cancel();
+    }
+    sent.wait_released().await.unwrap();
+    let expected = match accept {
+        Some(true) => State::Finished,
+        Some(false) => State::Rejected,
+        None => State::Cancelled,
     };
     loop {
         if control.snapshot().state == expected {
@@ -99,17 +113,11 @@ async fn consent(accept: bool) {
     source_lifetime.cancel();
     sending.await.unwrap().unwrap();
     // Assert
-    assert_eq!(
-        sent.session().snapshot().state,
-        if accept {
-            State::Finished
-        } else {
-            State::Rejected
-        }
-    );
+    assert_eq!(sent.session().snapshot().state, expected);
+    assert!(!router.has_pending().await);
     assert_eq!(control.snapshot().id, snapshot.id);
     assert_eq!(control.snapshot().event_id, snapshot.event_id);
-    if accept {
+    if accept == Some(true) {
         let mut received_text = None;
         while let Ok(event) = events.try_recv() {
             if event.id == snapshot.event_id && event.state == Some(State::Finished) {
@@ -530,15 +538,46 @@ async fn given_progressed_native_partial_ble_frame_when_parent_or_request_cancel
 #[tokio::test]
 async fn given_managed_ble_stream_when_owned_consent_accepts_then_real_encrypted_transfer_finishes()
 {
-    tokio::time::timeout(std::time::Duration::from_secs(5), consent(true))
-        .await
-        .expect("BLE consent deadlocked");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        consent(Some(true), false),
+    )
+    .await
+    .expect("BLE consent deadlocked");
 }
 
 #[tokio::test]
 async fn given_managed_ble_stream_when_owned_consent_rejects_then_rejection_survives_group_shutdown(
 ) {
-    tokio::time::timeout(std::time::Duration::from_secs(5), consent(false))
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        consent(Some(false), false),
+    )
+    .await
+    .expect("BLE rejection deadlocked");
+}
+
+#[tokio::test]
+async fn given_pending_wifi_upgrade_when_ble_sender_negotiates_then_consent_and_text_complete_without_tcp(
+) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), consent(Some(true), true))
         .await
-        .expect("BLE rejection deadlocked");
+        .expect("optional BWU must not block encrypted negotiation for 15 seconds");
+}
+
+#[tokio::test]
+async fn given_pending_wifi_upgrade_when_user_rejects_then_both_peers_reject_without_deadline() {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        consent(Some(false), true),
+    )
+    .await
+    .expect("BWU must not block user rejection");
+}
+
+#[tokio::test]
+async fn given_pending_wifi_upgrade_when_user_cancels_then_both_peers_cancel_and_route_releases() {
+    tokio::time::timeout(std::time::Duration::from_secs(5), consent(None, true))
+        .await
+        .expect("BWU must not block user cancellation");
 }

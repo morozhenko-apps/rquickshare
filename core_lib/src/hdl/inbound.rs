@@ -50,6 +50,22 @@ type HmacSha256 = Hmac<Sha256>;
 // rejected connections after a bounded response-delivery interval.
 const REJECTION_PEER_DRAIN_LIMIT: Duration = Duration::from_secs(2);
 
+/// An error from the established session must not be swallowed as an optional
+/// upgrade failure. The worker unwraps it to preserve terminal error semantics.
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+#[derive(Debug)]
+pub(crate) struct BwuSessionError(pub(crate) anyhow::Error);
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+impl std::fmt::Display for BwuSessionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Established session failed during BWU: {}", self.0)
+    }
+}
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+impl std::error::Error for BwuSessionError {}
+
 /// After an encrypted REJECT has been flushed, keep the transport alive until
 /// the peer closes or the bounded grace interval expires. Ignore any further
 /// peer bytes: the terminal consent decision must not admit new payloads.
@@ -578,6 +594,8 @@ pub struct InboundRequest<S = TcpStream> {
     previews: crate::preview_payload::PreviewIds,
     bandwidth_upgrade_enabled: bool,
     bwu_pending: bool,
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    bwu_peer_failed: bool,
     file_progress_trace: InboundFileProgressTrace,
     peer_endpoint_id: Option<String>,
     receive_directory: crate::receive::Directory,
@@ -612,6 +630,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             previews: crate::preview_payload::PreviewIds::default(),
             bandwidth_upgrade_enabled: false,
             bwu_pending: false,
+            #[cfg(all(feature = "experimental", target_os = "linux"))]
+            bwu_peer_failed: false,
             file_progress_trace: InboundFileProgressTrace::default(),
             peer_endpoint_id: None,
             receive_directory: crate::receive::ReceivePolicy::new(None).snapshot(),
@@ -708,14 +728,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
     }
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
-    async fn send_upgrade_path_available(&mut self, port: u16) -> Result<(), anyhow::Error> {
+    async fn send_upgrade_path_available(
+        &mut self,
+        port: u16,
+        ip: [u8; 4],
+    ) -> Result<(), anyhow::Error> {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
             upgrade_path_info::{Medium, WifiLanSocket},
             EventType, UpgradePathInfo,
         };
 
-        let ip = crate::utils::local_lan_ipv4()
-            .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
         info!(
             "BWU: offering WIFI_LAN at {}.{}.{}.{}:{port}",
             ip[0], ip[1], ip[2], ip[3]
@@ -762,13 +784,33 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
     async fn read_encrypted_offline_frame(&mut self) -> Result<OfflineFrame, anyhow::Error> {
-        let frame_data = read_plain_frame_from(&mut self.socket).await?;
+        // A TCP route may arrive after part of the BLE header was consumed.
+        // Resume that same header rather than treating its suffix as a new one.
+        let header = self.frame_header.read(&mut self.socket).await?;
+        let length = u32::from_be_bytes(header) as usize;
+        if length == 0 || length > SANE_FRAME_LENGTH as usize {
+            return Err(anyhow!("Invalid encrypted frame length"));
+        }
+        let mut frame_data = vec![0; length];
+        stream_read_exact(&mut self.socket, &mut frame_data).await?;
         let secure_message = SecureMessage::decode(frame_data.as_slice())?;
         self.decrypt_secure_message(&secure_message).await
     }
 
     pub async fn handle(&mut self) -> Result<(), anyhow::Error> {
+        self.handle_with_interrupt(std::future::pending::<()>())
+            .await
+            .map(|_| ())
+    }
+
+    /// Only interrupt event selection, never a selected frame body or command.
+    /// FrameHeader retains consumed prefix bytes when the interrupt wins.
+    async fn handle_with_interrupt<T>(
+        &mut self,
+        interrupt: impl std::future::Future<Output = T>,
+    ) -> Result<Option<T>, anyhow::Error> {
         tokio::select! {
+            value = interrupt => return Ok(Some(value)),
             command = crate::sessions::consent_command(&mut self.session) => {
                 if let Some(command) = command {
                     let answer = self.session.as_mut().and_then(|session| session.apply(command, &self.state.state));
@@ -779,11 +821,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 match i {
                     Ok(channel_msg) => {
                         if channel_msg.direction == ChannelDirection::LibToFront {
-                            return Ok(());
+                            return Ok(None);
                         }
 
                         if channel_msg.id != self.state.id {
-                            return Ok(());
+                            return Ok(None);
                         }
 
                         debug!("inbound: got: {:?}", channel_msg);
@@ -819,7 +861,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     pub async fn _handle(&mut self, length_buf: [u8; 4]) -> Result<(), anyhow::Error> {
@@ -1534,6 +1576,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                     .as_ref()
                     .map(|frame| frame.event_type());
                 debug!("BWU: peer negotiation event on current transport: {event:?}");
+                #[cfg(all(feature = "experimental", target_os = "linux"))]
+                if event == Some(location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType::UpgradeFailure) {
+                    self.bwu_peer_failed = true;
+                }
             }
             _ => {
                 error!("Unhandled offline frame encrypted: {:?}", offline);
@@ -2413,14 +2459,58 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
 
 #[cfg(all(feature = "experimental", target_os = "linux"))]
 impl InboundRequest<crate::hdl::MigratableStream> {
+    async fn wait_for_bwu_socket(
+        &mut self,
+        socket_receiver: tokio::sync::oneshot::Receiver<TcpStream>,
+    ) -> Result<Option<TcpStream>, anyhow::Error> {
+        let route = tokio::time::timeout(Duration::from_secs(15), socket_receiver);
+        tokio::pin!(route);
+        self.bwu_peer_failed = false;
+        loop {
+            match self
+                .handle_with_interrupt(&mut route)
+                .await
+                .map_err(BwuSessionError)?
+            {
+                Some(Ok(Ok(socket))) => {
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpReceived);
+                    return Ok(Some(socket));
+                }
+                Some(Ok(Err(_))) => {
+                    return Err(anyhow!("BWU TCP route closed before a socket arrived"))
+                }
+                Some(Err(_)) => {
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpTimeout);
+                    return Ok(None);
+                }
+                None if self.bwu_peer_failed => {
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuPeerRejected);
+                    return Ok(None);
+                }
+                None => {}
+            }
+        }
+    }
+
     /// Upgrade an established encrypted BLE session to Wi-Fi LAN.
     ///
-    /// Failure before the transport swap leaves the existing BLE stream intact,
-    /// so callers can continue the session on BLE when an upgrade is unavailable.
+    /// Optional upgrade failure leaves the BLE stream intact. Established-session
+    /// errors are returned as BwuSessionError and must terminate the session.
     pub async fn do_bandwidth_upgrade(
         &mut self,
         router: &crate::hdl::BwuRouter,
         tcp_port: u16,
+    ) -> Result<(), anyhow::Error> {
+        let ip = crate::utils::local_lan_ipv4()
+            .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
+        self.do_bandwidth_upgrade_at(router, tcp_port, ip).await
+    }
+
+    async fn do_bandwidth_upgrade_at(
+        &mut self,
+        router: &crate::hdl::BwuRouter,
+        tcp_port: u16,
+        ip: [u8; 4],
     ) -> Result<(), anyhow::Error> {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
         use location_nearby_connections::v1_frame::FrameType;
@@ -2432,7 +2522,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             .ok_or_else(|| anyhow!("BWU session has no peer endpoint id"))?;
         let socket_receiver = router.register(expected_endpoint_id.clone()).await?;
 
-        if let Err(error) = self.send_upgrade_path_available(tcp_port).await {
+        if let Err(error) = self.send_upgrade_path_available(tcp_port, ip).await {
             router.cancel(&expected_endpoint_id).await;
             return Err(error);
         }
@@ -2442,28 +2532,12 @@ impl InboundRequest<crate::hdl::MigratableStream> {
             bwu_started.elapsed().as_millis()
         );
 
-        let mut tcp = match tokio::time::timeout(Duration::from_secs(15), socket_receiver).await {
-            Ok(Ok(socket)) => {
-                crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpReceived);
-                info!(
-                    "BWU timing: TCP route established at {} ms for endpoint {expected_endpoint_id}",
-                    bwu_started.elapsed().as_millis()
-                );
-                socket
-            }
-            Ok(Err(_)) => {
-                router.cancel(&expected_endpoint_id).await;
-                return Err(anyhow!("BWU TCP route closed before a socket arrived"));
-            }
-            Err(_) => {
-                router.cancel(&expected_endpoint_id).await;
-                crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpTimeout);
-                warn!(
-                    "BWU timing: no routed TCP connection after {} ms; continuing on BLE",
-                    bwu_started.elapsed().as_millis()
-                );
-                return Ok(());
-            }
+        let routed = self.wait_for_bwu_socket(socket_receiver).await;
+        // Also release registrations on established-session EOF, rejection,
+        // cancellation frames, authentication errors and successful completion.
+        router.cancel(&expected_endpoint_id).await;
+        let Some(mut tcp) = routed? else {
+            return Ok(());
         };
 
         let introduction = read_plain_frame_from(&mut tcp).await?;
@@ -2592,6 +2666,9 @@ impl InboundRequest<crate::hdl::MigratableStream> {
         Ok(())
     }
 }
+
+#[cfg(all(test, feature = "experimental", target_os = "linux"))]
+mod bwu_wait_tests;
 
 #[cfg(test)]
 mod security_tests {
@@ -4869,7 +4946,7 @@ mod security_tests {
     }
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
-    fn valid_bwu_client_intro_fixture() -> OfflineFrame {
+    pub(super) fn valid_bwu_client_intro_fixture() -> OfflineFrame {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
             ClientIntroduction, EventType,
         };

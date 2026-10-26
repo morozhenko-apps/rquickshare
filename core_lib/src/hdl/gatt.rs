@@ -799,6 +799,10 @@ async fn run_inbound_worker(
             request.handle().await?;
             if request.take_bwu_pending() {
                 if let Err(error) = request.do_bandwidth_upgrade(&router, tcp_port).await {
+                    let error = match error.downcast::<super::inbound::BwuSessionError>() {
+                        Ok(session_error) => return Err(session_error.0),
+                        Err(upgrade_error) => upgrade_error,
+                    };
                     warn!("{INNER_NAME}: Wi-Fi bandwidth upgrade failed; retaining current transport: {error}");
                 }
             }
