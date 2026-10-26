@@ -34,3 +34,10 @@ The existing `native_desktop/src/i18n.rs` exposes a 20-code catalog for the tray
 - [Draft PR #28](https://github.com/morozhenko-apps/rquickshare/pull/28) targets `dev` while the main branch is concurrently being modified for #16. CI source-exact results pending and must be recorded before merge. **#17 remains PARTIAL** until the other native surfaces and locale layout/context checks pass.
 
 Do not auto-merge this branch, close #17 or publish any `master`, `native/v*`, APT or R2 asset on the basis of this limited static check.
+
+### Extended source guard (after review)
+
+- `8909e652`: test every locale for distinct Copy/Close actions, positive Copy vs failed Copy, positive Copy vs blocked Copy, and text vs link heading; no test mocks the translation subject. These are structural/semantic-collision oracles, not full human translation review.
+- `85eea37a`: wrap disclosure and error labels to conform to Rust source style.
+- Independent read-only source checks **PASS** on these two commits: 19 complete catalog rows × 8 literals, eight canonical source keys, all four per-locale collision oracles present, unchanged manual Copy callback, raw received-body label without markup, and no newly overlong i18n UI calls. **No Rust/GTK tests or formatter executed locally.**
+- Remaining merge gate: exact-current-HEAD Preflight **and** Native GTK build/clippy/isolated widget tests. The Native GTK workflow currently handles `push: dev` and manual `workflow_dispatch`, not feature-branch pull requests. A green feature PR Preflight alone is insufficient to claim its GTK gate passed; do not auto-merge or silently trigger the protected release workflow.
