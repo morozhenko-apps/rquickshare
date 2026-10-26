@@ -138,3 +138,35 @@ Independent #26 cancellation fix is tracked in
 This design has no executable implementation and does not close #8. It narrows
 the next investigation with actual mechanisms, replay requirements and failure
 criteria instead of claiming impossibility from the introduction fields alone.
+
+## Owner discussion checkpoint (2026-10-26)
+
+The owner asked how long BLE waits and proposed retaining BLE if the fast path
+is not found before that deadline, explicitly saying the design is still under
+discussion. **This is not approval of the new post-drain proof architecture.**
+
+Current implementation waits up to **15 seconds for a TCP candidate** during the
+optional phase; absence/explicit upgrade refusal retains BLE. The committed
+phase has **5 seconds for prior-channel synchronization and up to 5 seconds for
+close cleanup**, bounded in total including writes by 10 seconds. These are
+existing ceilings, not fixed delays or proposed proof timeout values. A TCP
+candidate arriving is not the same as authenticated ownership proof.
+
+The requested research target is: if the fast path cannot be authenticated in
+time, keep an actually usable BLE transport. The proposed post-drain scheme
+does **not yet meet that target**: Google's protected TCP writes/keepalive ACKs
+resume after old-channel retirement, so a failed proof can leave no BLE fallback.
+Merely retaining a local stream handle does not keep Google's remote channel
+usable. Do not silently weaken this fallback target, change the 15-second limit,
+or start production #8 implementation from the discussion. Next research must
+establish an actual supported pre-retirement proof or a peer-supported rollback
+sequence; a timer alone provides neither. Candidate isolation and seq_num echo
+remain potentially useful building blocks, not a claimed completed solution.
+
+Additional pinned-source rollback audit: `RunUpgradeFailedProtocol` reports
+failure when creating the new medium failed; `ProcessUpgradeFailureEvent`
+clears upgrade bookkeeping and tries another medium, but neither restores a
+closed `previous_endpoint_channel`. The duplicate-upgrade branch in
+`ProcessBwuPathAvailableEvent` explicitly closes both previous/current channels
+as unrecoverable. These paths do not establish postcommit BLE rollback. This is
+public-source evidence, not a claim about all proprietary Google implementations.

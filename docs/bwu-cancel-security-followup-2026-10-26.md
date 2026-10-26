@@ -67,8 +67,9 @@ fast-BWU contract/security boundary, not to fix cancellation internally.
 3. [x] Refactor phase ownership, delivery guard and bounded shutdown; regression tests.
 4. [x] Final stable suite once, strict Core Clippy, nightly format, workflow policy;
    separately execute eight race-sensitive tests once (not known flaky).
-5. [ ] Separate source/docs commits, normal dev push after expected-ref check;
-   source-exact CI readback; issue/backlog handoff. Physical acceptance stays open.
+5. [x] Separate source/docs commits, normal dev push after expected-ref check;
+   source-exact CI readback; issue/backlog handoff. CI completion and physical
+   acceptance remain open as specified in the final checkpoint below.
 
 ### Planned branches and regressions
 
@@ -181,3 +182,27 @@ It separates old-transport drain from logical route commitment and includes
 candidate-specific challenge echoes, rather than mislabeling a replayable first
 encrypted frame as sufficient socket proof. This is research progress; #8 is
 not fixed and no old acceptance or security-contract exception was inferred.
+
+## Final handoff checkpoint (source 263aa3d, no installation)
+
+Source CI has **5/6 verified completed SUCCESS**: Rust format, frontend, Core
+tests, Core Clippy and Native GTK. Tauri job `121728173910` is still IN PROGRESS
+(last direct run/jobs read: Install Tauri WebKit dependencies); it has not yet
+reported a lint/test result. **PARTIAL, not COMPLETE**. Next external check:
+read terminal status of that exact job on Preflight `40367247177`, then record
+all six only if it succeeds. No background automation or completed-CI claim.
+The source-correction issue must also remain open for physical acceptance.
+
+Commits: docs-first `90a19cb`, executable/tests `263aa3d`, evidence/new security
+design `f701ce9`, followed by the documentation-only owner-discussion checkpoint.
+No executable drift since 263aa3d; normal dev-only pushes, clean source state,
+master/tags untouched. All owned shell commands/process sessions completed;
+terminal closed. No service, device, settings, package or signing state changed.
+
+Owner's latest #8 response is discussion, not architectural approval: investigate
+keeping slow BLE available if a fast path is not authenticated in time. The
+post-drain keepalive design does not yet satisfy this fallback guarantee and is
+not being implemented. Read its owner checkpoint before resuming. Issue comments
+[26](https://github.com/morozhenko-apps/rquickshare/issues/26#issuecomment-6422807899)
+and [8](https://github.com/morozhenko-apps/rquickshare/issues/8#issuecomment-6422799072)
+preserve the earlier intermediate checkpoint; newer readback supersedes it.

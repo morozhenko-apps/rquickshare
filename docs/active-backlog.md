@@ -21,6 +21,14 @@ the owner has not selected BLE-only. Existing plaintext-ID admission and its
 expected-vulnerability sentinels remain unchanged, #8 **OPEN / NOT FIXED**.
 No account/QR/payload expansion/AirDrop or release work is included.
 
+Latest owner discussion: investigate keeping a usable BLE fallback when a fast
+path cannot be authenticated within the waiting budget; **still discussing, no
+approval to implement post-drain proof**. Current optional TCP wait is 15s;
+committed synchronization/close is bounded by existing 5s+5s budgets. The proposed
+proof after BLE retirement does not yet satisfy always-available BLE fallback.
+See the design's owner checkpoint; do not interpret a local retained BLE handle
+or an untrusted TCP arrival as proof of a recoverable/authenticated transport.
+
 ## 2026-10-26 MODE B independent audit: new P0 Cancel/BWU race #26
 
 [Issue #26](https://github.com/morozhenko-apps/rquickshare/issues/26) and
