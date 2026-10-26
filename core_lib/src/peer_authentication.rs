@@ -34,6 +34,18 @@ impl PartialEq for VerifiedPeerCredential {
 }
 impl Eq for VerifiedPeerCredential {}
 
+/// A cached route preference cannot authorize this connection: compare the
+/// new session's verified certificate again before any Introduction/payload.
+pub(crate) fn enforce_expected_route_peer(
+    expected: Option<&VerifiedPeerCredential>,
+    observed: Option<&VerifiedPeerCredential>,
+) -> Result<(), AuthenticationError> {
+    if expected.is_some_and(|peer| observed != Some(peer)) {
+        return Err(AuthenticationError);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 impl VerifiedPeerCredential {
     /// Synthetic proof for ranking-policy tests only; runtime proof must
