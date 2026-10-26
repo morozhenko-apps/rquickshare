@@ -732,18 +732,58 @@ mod tests {
             assert!(!MENU_KEYS.contains(source));
             assert_eq!(translated("en", source), *source);
             for locale in LOCALES {
-                let translated = translated(locale, source);
-                assert!(!translated.trim().is_empty(), "{locale}: {source}");
-                assert!(!translated.contains('{'), "{locale}: {source}");
+                let translation = translated(locale, source);
+                assert!(!translation.trim().is_empty(), "{locale}: {source}");
+                assert!(!translation.contains('{'), "{locale}: {source}");
             }
+        }
+        for locale in LOCALES {
+            assert_ne!(
+                translated(locale, "Copy"),
+                translated(locale, "Close"),
+                "{locale}: action collision"
+            );
+            assert_ne!(
+                translated(locale, "Copied to this clipboard"),
+                translated(locale, "Copy failed. This clipboard did not accept the text."),
+                "{locale}: success/failure collision"
+            );
+            assert_ne!(
+                translated(locale, "Copied to this clipboard"),
+                translated(
+                    locale,
+                    "Copy unavailable. Unlock and review the current transfer."
+                ),
+                "{locale}: success/blocked collision"
+            );
+            assert_ne!(
+                translated(locale, "Received text"),
+                translated(locale, "Received link · plain text"),
+                "{locale}: payload type collision"
+            );
         }
         assert_eq!(translated("ru", "Copy"), "Копировать");
         assert_eq!(translated("pt", "Copy"), "Copiar");
         assert_eq!(translated("pt", "Close"), "Fechar");
-        assert_eq!(translated("ru", "Copied to this clipboard"), "Скопировано в буфер обмена");
-        assert_eq!(translated("pt", "Copied to this clipboard"), "Copiado para a área de transferência");
-        assert_eq!(translated("en", "Copy failed. This clipboard did not accept the text."), "Copy failed. This clipboard did not accept the text.");
-        assert_eq!(translated("en", "Nothing has been copied. Use Copy to replace this clipboard."), "Nothing has been copied. Use Copy to replace this clipboard.");
+        assert_eq!(
+            translated("ru", "Copied to this clipboard"),
+            "Скопировано в буфер обмена"
+        );
+        assert_eq!(
+            translated("pt", "Copied to this clipboard"),
+            "Copiado para a área de transferência"
+        );
+        assert_eq!(
+            translated("en", "Copy failed. This clipboard did not accept the text."),
+            "Copy failed. This clipboard did not accept the text."
+        );
+        assert_eq!(
+            translated(
+                "en",
+                "Nothing has been copied. Use Copy to replace this clipboard."
+            ),
+            "Nothing has been copied. Use Copy to replace this clipboard."
+        );
         assert_eq!(translated("not-a-locale", "Copy"), "Copy");
     }
 
