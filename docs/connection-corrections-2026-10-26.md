@@ -27,11 +27,11 @@ A2.2 and #16 verified-only identity. No new wire fields in this slice.
 
 1. [x] Analyze current event/probe seams, both authenticated handlers and existing
    test/CI policies. Document owner deferrals before code.
-2. [ ] Correct keepalive ACK handling in both directions. Require the keepalive
+2. [x] Correct keepalive ACK handling in both directions. Require the keepalive
    body, answer absent/false ACK, do not answer true ACK. Preserve protobuf/wire
    fields and existing scheduling. Remove the confirmed outbound allocation used
    only to log the chunk length; preserve actual payload construction.
-3. [ ] Make discovery probes owned concurrent futures in the existing event loop.
+3. [x] Make discovery probes owned concurrent futures in the existing event loop.
    Validate TXT/eligible IPv4 before probing, sort addresses, race reachable
    alternatives and cancel losing attempts. Remove/re-resolve cancels the old
    fullname's candidate; only the current candidate may publish. Preserve cache
@@ -41,7 +41,7 @@ A2.2 and #16 verified-only identity. No new wire fields in this slice.
    not sleeps/retries or transfer deadlines: completion publishes immediately,
    expiry frees slots, later genuine resolve events can try again. Never replace
    an active identical candidate merely because the SDK repeats its event.
-4. [ ] Correct BWU committed migration: after LAST_WRITE starts, every failure is
+4. [x] Correct BWU committed migration: after LAST_WRITE starts, every failure is
    terminal for the established session; require peer LAST_WRITE and SAFE_TO_CLOSE
    within one existing five-second drain budget or fail, never swap on iteration
    exhaustion. Defer ordinary encrypted writes until TCP owns the stream; retain
@@ -62,7 +62,7 @@ A2.2 and #16 verified-only identity. No new wire fields in this slice.
    during blocked output, keepalive interleaving and no false Finished. Local
    legacy Cancel also wakes the pump; native owner cancellation retains its
    existing enclosing token. Separate material security/transport choices.
-   GATT contract readback: installed bluer 0.17.4 exposes adapter/device on every
+   GATT contract readback: locked bluer 0.17.3 exposes adapter/device on every
    WriteValue request; its Notify callback exposes no subscriber address. Restore
    the existing single-bridge transport invariant internally: the first valid
    Weave CONNECT claims ingress for that adapter/device, other writers fail
@@ -78,12 +78,12 @@ A2.2 and #16 verified-only identity. No new wire fields in this slice.
    receiver admission, drop/retry and queued old input. Unidentified notification
    subscribers and idle prehandshake lifecycle remain explicitly unproven; do not
    claim complete per-peer notification isolation from these APIs.
-5. [ ] Final gate after planned code/tests: nightly format, Core stable once with
+5. [x] Final gate after planned code/tests: nightly format, Core stable once with
    workspace ext4 TMPDIR (documented baseline tmpfs issue), eight risk-sensitive
    tests individually once (not known flaky), Core strict all-feature Clippy;
    exact-source six-job CI after normal dev push. Fix failures, repeat affected
    checks only as required. Physical tests remain distinct.
-6. [ ] Record source/CI/physical boundaries and next steps; separate atomic
+6. [x] Record source/CI/physical boundaries and next steps; separate atomic
    docs/code commits, expected-tip checks and normal dev push.
 
 Rollback uses inverse independent commits for ACK/copy and discovery. Risks:
@@ -127,3 +127,159 @@ the affected managed test (1/1) then required stable gate: 857/857 +4+4 passed,
 8 risk-sensitive tests excluded. Assertions stayed unchanged. GATT ingress was
 then clarified against actual bluer source, justifying the additional correction
 and a fresh final gate after its implementation. No known-flaky classification.
+
+
+## Implemented source checkpoint
+
+Executable HEAD `088d543` contains four independent executable commits:
+
+| Commit | Production behavior / regression ownership |
+| --- | --- |
+| `b0c62d9` | Inbound keepalive ACK gating; committed BWU errors are terminal; both transition signals required; application replies deferred until TCP; event-based old-channel close |
+| `f4cb225` | Outbound ACK gating; resumable body reader and duplex write pump; remote/local cancel and peer EOF/disconnect while backpressured; terminal outcomes absorbing; unused chunk copy removed |
+| `e320961` | Nonblocking owned mDNS probes, sorted IPv4 alternatives, removal/replacement cancellation, retained SDK event future and bounded speculative work |
+| `088d543` | Single-peer GATT ingress, offset/packet bounds, exclusive receiver and drop-safe fresh channel on session retirement |
+
+The existing root-cause source audit is now addressed for QS-AUDIT-01/02/03,
+QS-AUDIT-04 **write ingress**, and QS-AUDIT-05 **control responsiveness / redundant
+copy**. This does not establish physical acceptance or all performance hypotheses.
+QS-AUDIT-06 new transports and payload/account/QR/AirDrop expansion stay deferred.
+No public API/proto, persistence, peer trust, explicit consent, manual visibility
+window or #8 A2.2 admission policy changed.
+
+GATT still uses BlueZ's global notify callback without subscriber identity. The
+transport address selects whose writes form the current stream; it never proves
+who the user/device is. No full notification isolation or authenticated alias
+association claim. The first valid CONNECT may arrive before Notify; that queue
+is preserved until the notify session owns it. A session's Drop replaces the
+whole channel, covering cancellation and queued-byte cleanup without async work.
+An idle subscriber/pre-CONNECT owner can still occupy the existing bridge; a
+separate connection-lifecycle investigation is needed before changing admission
+or timeout policy. `gatt_write_queue_rejected` now denotes any ingress rejection
+(including offset/foreign writer), not exclusively queue saturation; logs expose
+only the static rejection type, no peer address or packet.
+
+## Regression and validation evidence
+
+**31 added test methods**, plus one existing resolve/remove fixture synchronized
+on actual presence before removal. No existing assertion was weakened.
+
+| Regression group | New methods | Protected scenarios |
+| --- | ---: | --- |
+| Inbound keepalive | 2 | absent/false/true ACK, authenticated framing, missing body, silent ACK without send keys |
+| Outbound keepalive / terminal | 2 | same ACK/body branches, exact crypto counters and absorbing Finished/Cancelled/Rejected |
+| Committed BWU | 6 | silence, missing signal, frame exhaustion, partial body, bad MAC, EOF, cancel, deferred response bound and TCP sequence continuity; both peer signal orders |
+| mDNS | 10 | slow/fast peers, reachable alternate after pending/error, all failed, duplicate, remove/re-resolve, invalid replacement, source closure, retained event future, IPv4/self filters and probe bounds/expiry |
+| Resumable body | 2 | every split in a small header/body, consecutive frames, invalid size and truncation |
+| Duplex bulk | 4 | cancel/disconnect/EOF/bad MAC under backpressure, local legacy cancel, keepalive after complete file frame, queue count and byte boundaries |
+| GATT ingress | 5 | foreign peer/adapter, pre-CONNECT/invalid/offset/oversize input, overlapping receiver, old queue drop/retry, bounded queue and canceled task |
+
+The table counts methods, not a coverage percentage. Positive, N1/N2 framing and
+resource boundaries, N3 network failure, N4 duplicates/retry, N5 lifecycle races,
+N6 malformed wire metadata, N7 stream ownership and N9 cancellation are exercised.
+N10 has static redacted new errors/tombstones; this is not a repository-wide log
+privacy audit. N8 timezone, N11 billing and N12 storage are outside the changed
+logic; existing storage tests remain in the stable suite. Assertions kill ACK
+inversion, premature swap, OR-instead-of-AND transition checks, dropped partial
+read progress, queue-bound equality errors, stale candidate publication and
+terminal-state overwrite. No mutation engine or project-wide coverage claim.
+
+Executed local commands and results on the final code tree:
+
+- `cargo clippy --manifest-path core_lib/Cargo.toml --all-features --all-targets -- -D warnings`
+  **exit 0**. Initial checks found a large control enum (reduced to a boolean
+  result) and side-effect `map_err` (changed to `inspect_err`); warnings were not
+  disabled. Existing bluer future-compatibility notice remains non-gating.
+- `TMPDIR="$PWD/core_lib/target/connection-tmp" bash scripts/ci-core-test-groups.sh stable`
+  **exit 0: 862 stable methods passed, 0 failed/ignored, 8 filtered; 4/4 + 4/4
+  integration passed**. Prior failed/857-test intermediate gates are retained
+  above. Workspace ext4 TMPDIR avoids the documented pre-existing tmpfs storage
+  contract discrepancy; no storage test was skipped or weakened.
+- `cargo +nightly fmt --manifest-path app/main/src-tauri/Cargo.toml --all --check`
+  **exit 0**; `git diff --check` and `bash scripts/ci-check-workflow-policy.sh`
+  **exit 0**.
+- `while IFS= read -r test_name; do TMPDIR="$PWD/core_lib/target/connection-tmp" cargo test --manifest-path core_lib/Cargo.toml --all-features --lib -- "$test_name" --exact || exit; done < <(bash scripts/ci-core-test-groups.sh list)`
+  **exit 0: all eight selected tests passed once each, exactly one test per
+  invocation**. This group is risk-sensitive, not known flaky. Protected 10x
+  release/Mode B gates were not requested or executed. No separate known-flaky
+  suite is configured for this slice, and no newly failing test was reclassified.
+
+CI for exact executable SHA `088d54343768e30e321822f6aa9dd64c748bcdac`
+is **terminal SUCCESS, all six required checks**:
+[Preflight 40334258112](https://github.com/morozhenko-apps/rquickshare/actions/runs/40334258112),
+[Native GTK 40334258097](https://github.com/morozhenko-apps/rquickshare/actions/runs/40334258097).
+Core job `121611473153` independently reports **862 passed / 0 failed / 0 ignored /
+8 filtered**, plus both **4/4 integration** binaries. Format, Core Clippy, Tauri
+Clippy, frontend and Native GTK are all completed/success. All 31 added methods
+were also cross-checked by name against the final local stable log. No installed
+binary, Pixel or throughput success is inferred from automated tests.
+
+## Physical handoff and remaining limits
+
+After six exact-source checks pass, build an uninstalled candidate with
+`python3 scripts/native_deb.py build --profile dev --output <dedicated-directory>`;
+record its SHA-256 and preserve the prior installed rollback artifact. Do not
+install the older unaccepted `6ae62f6` candidate as though it includes these fixes.
+Physical acceptance needs cold/retry text, URL and multi-file transfer, successful
+BLE-to-TCP and TCP-unavailable paths, sender/receiver cancel then immediate retry,
+and mDNS disappear/reappear with an unreachable alternate address. Record exact
+installed binaries and redacted stage markers. Issues #9/#18/#19/#23/#25 remain
+open for their applicable actual device/SDK gates.
+
+Disk worker/buffer reuse/progress coalescing require measurements on a confirmed
+transport and remain under #24. The old-channel close opportunity is bounded at
+five seconds if a confirmed-safe peer supplies neither disconnect nor EOF; it
+finishes immediately on the event, rather than always sleeping 200 ms. Discovery
+has 32 pending services and 16 addresses per service with five-second connect
+budgets; saturation never invents presence and a later resolve may retry.
+Per-peer global-notify ambiguity and prehandshake idle ownership remain explicit.
+No new network backend, account feature, release tag, master promotion or service
+restart occurred. Rollback uses the inverse of the four source commits in reverse
+order; documentation history preserves the rationale and intermediate failures.
+
+
+## Final candidate and publication evidence
+
+**Source/automated scope COMPLETE; installed/physical acceptance PARTIAL.**
+The package build ran only after all six exact-source CI checks succeeded:
+
+```sh
+git diff --quiet 088d543 -- core_lib native_desktop app scripts .github
+python3 scripts/native_deb.py build --profile dev --output /home/morozhenko/Downloads/rquickshare-connections-088d543
+```
+
+Both commands exited 0; the builder compiled all three binaries with stable
+Cargo `--locked`, verified Debian metadata/archive/ELF smoke contracts and wrote:
+
+- Candidate: `/home/morozhenko/Downloads/rquickshare-connections-088d543/rquickshare-native_0.9.0-1.debug_amd64.deb`.
+- SHA-256: `5e575d3cd6e242587da477e52b2488cf3058df6d9ee7cdafba926f58c5fb2525`.
+- Package identity remains `rquickshare-native 0.9.0-1.debug`; no release bump/tag.
+- Build disclosed existing bluer future-compatibility and nine warnings in the
+  desktop's no-default-feature Core dependency build, plus dpkg-shlibdeps loader
+  diversion notices. These are not a failed build or a clean-warning claim;
+  strict required all-feature Clippy passed separately.
+
+A read-only `dpkg-deb -x` plus SHA-256 comparison confirms installed daemon and
+GUI differ from the new candidate; unchanged preview helper matches. Installed
+package reports the same version string, so version alone cannot prove upgrade.
+Installed daemon SHA-256 is
+`2b1aaa9803ff6b5d273e15c88bc3199564eeee2b1c8ada527ff48da51401a652`;
+candidate daemon is
+`ff8f1eba8247b6eb7b47883e44d3bfcd2669fad7dbb00ed5fe126169feaf1d78`.
+No package installation, daemon restart, hardware traffic or current-service
+modification was performed. Old rollback artifacts remain available.
+
+Docs-first commits: `c6ee99e` (scope deferrals/plan), `a3b8403` (BWU invariants),
+`02a33e5` (duplex ownership), `22056e2` (GATT contract and failed-gate evidence).
+Four source commits are listed above. Publication was a normal dev-only push
+from expected `054acf0` to `088d543`, with a fresh origin-tip check before each
+source commit. Final evidence is a separate docs-only commit. No master/tag/PR
+mutation, release publication or issue closure.
+
+Final documentation checks: `git diff --check` exit 0; a Python relative-link
+existence check passed **41 local Markdown targets** across the three edited
+records. This is not an external-link/anchor crawler. All owned commands finished
+with native exit status, terminal sessions closed; no server/watcher remains.
+Next action is guarded installation of this candidate with prior rollback, then
+actual Pixel acceptance using the matrix above. New source supersedes the older
+uninstalled candidate; functional hardware issues remain open until their proof.

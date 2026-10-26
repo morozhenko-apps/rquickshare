@@ -1,5 +1,31 @@
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
+## 2026-10-26 current connection corrections: six-green source, physical pending
+
+Executable source `088d543` contains inbound control/BWU (`b0c62d9`), outbound
+backpressure/cancel/framing (`f4cb225`), nonblocking multi-address mDNS (`e320961`)
+and GATT write peer/session isolation (`088d543`). [Full plan, regressions,
+commands and limits](connection-corrections-2026-10-26.md). **31 new methods**;
+local **862 stable +4+4 integration PASS**, all eight risk-sensitive methods once
+PASS, strict Core Clippy/nightly format/workflow policy PASS. One intermediate
+terminal-state regression was fixed with an absorbing-state guard and a new test.
+
+Exact-source [Preflight 40334258112](https://github.com/morozhenko-apps/rquickshare/actions/runs/40334258112)
+and [Native GTK 40334258097](https://github.com/morozhenko-apps/rquickshare/actions/runs/40334258097)
+are both **completed SUCCESS, all 6/6 checks** on `088d543`. Core CI confirms
+**862 stable +4+4 integration PASS**. Verified uninstalled candidate:
+`~/Downloads/rquickshare-connections-088d543/rquickshare-native_0.9.0-1.debug_amd64.deb`,
+SHA-256 `5e575d3cd6e242587da477e52b2488cf3058df6d9ee7cdafba926f58c5fb2525`.
+Installed daemon/GUI hashes differ from this candidate; equal package version
+strings do not prove installation. The old uninstalled `6ae62f6` package lacks
+these changes. Next: guarded current candidate install/rollback, then cold/retry
+Pixel text/file, cancel and discovery acceptance. No installation or Pixel
+acceptance yet. GATT notification subscriber identity,
+idle prehandshake lifecycle, measured disk/progress throughput and #8 A2.2
+cryptographic route proof remain explicit limits. All applicable hardware issues
+stay open. Payload categories/new types, account/QR/new transports/AirDrop remain
+future backlog under the owner's narrowed scope.
+
 ## 2026-10-26 owner scope: correct current connections; defer payload expansion
 
 Owner explicitly deferred richer file categorization and additional payload

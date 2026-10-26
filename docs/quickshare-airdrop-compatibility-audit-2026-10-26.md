@@ -4,6 +4,11 @@ Mode A, research/planning slice requested by the owner on 2026-10-26.
 Baseline: `b19031a94332223d90d67556cd4960851f4882f1` on dev; executable baseline
 `6ae62f62b17b058160d3246873ecdd34377ec9f0` (six-green CI, uninstalled candidate).
 
+**Implementation follow-up:** [current connection corrections](connection-corrections-2026-10-26.md)
+records subsequent source fixes for discovery, control traffic, committed BWU and
+GATT write ingress. The research checkpoint below remains historical; expanded
+payload types, account/QR and new transports are deferred by the owner.
+
 ## Scope and execution plan
 
 Investigate the complete discovery/connection/authentication/consent/transport/
