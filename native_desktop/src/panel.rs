@@ -408,6 +408,7 @@ impl Panel {
         layer: bool,
     ) -> Rc<Self> {
         let builder = gtk::Builder::from_string(include_str!("../ui/panel.ui"));
+        crate::i18n::localize_panel(&builder);
         let window: gtk::Window = builder.object("panel").expect("panel widget");
         window.set_application(Some(application));
         window.set_icon_name(Some(crate::tray::ICON_NAME));
@@ -1123,13 +1124,14 @@ impl Panel {
                     .count()
             })
             .unwrap_or(0);
-        self.text("quick-receive-label", "Receive");
+        self.text("quick-receive-label", crate::i18n::label("Receive"));
+        let devices_label = crate::i18n::label("Devices");
         self.text(
             "quick-devices-label",
             &if waiting_requests == 0 {
-                "Devices".into()
+                devices_label.into()
             } else {
-                format!("Devices ({waiting_requests})")
+                format!("{devices_label} ({waiting_requests})")
             },
         );
         for (name, enabled) in [
