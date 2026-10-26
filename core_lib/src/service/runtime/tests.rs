@@ -283,7 +283,7 @@ async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_
     );
     runtime.routes.bind_test_authenticated_route(
         &fast_id,
-        credential,
+        credential.clone(),
         Duration::from_millis(10),
         expires,
     );
@@ -296,6 +296,13 @@ async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_
     assert!(runtime.dispatch().unwrap());
     let job = fixture.receiver.recv().await.unwrap();
     assert_eq!(job.info.addr, "192.0.2.11:1234");
+    assert_eq!(
+        job.session
+            .as_ref()
+            .unwrap()
+            .expected_verified_peer(),
+        Some(&credential)
+    );
     assert!(fixture.receiver.try_recv().is_err());
 
     // A new mDNS route generation cannot inherit the old cryptographic
