@@ -5,6 +5,7 @@ mod identity_tests;
 
 use std::future::Future;
 use std::net::SocketAddr;
+use std::time::Instant;
 use std::sync::Arc;
 
 use tokio::net::TcpStream;
@@ -167,6 +168,7 @@ impl<C: Connector> SessionContext<C> {
             .identity
             .as_ref()
             .map(|identity| identity.snapshot().name);
+        let connect_started = Instant::now();
         let Some(socket) =
             until_either_stops(token, cancellation, self.connector.connect(&info.addr)).await
         else {
@@ -176,6 +178,7 @@ impl<C: Connector> SessionContext<C> {
             }
             return Ok(());
         };
+        let connect_latency = connect_started.elapsed();
         let mut request = OutboundRequest::new(
             self.endpoint_id,
             socket?,
@@ -187,6 +190,7 @@ impl<C: Connector> SessionContext<C> {
                 name: info.name,
             },
         )?;
+        request = request.with_connect_latency(connect_latency);
         if let Some(name) = local_name {
             request = request.with_local_name(name);
         }
