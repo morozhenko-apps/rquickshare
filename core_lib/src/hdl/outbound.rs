@@ -602,6 +602,7 @@ pub struct OutboundRequest {
     text_payload_id: Option<i64>,
     cleanup_files: Vec<ManagedEphemeralFile>,
     local_name: Option<crate::identity::DeviceName>,
+    connect_latency: Option<std::time::Duration>,
 }
 
 impl Drop for OutboundRequest {
@@ -619,6 +620,11 @@ impl Drop for OutboundRequest {
 }
 
 impl OutboundRequest {
+    pub(crate) fn with_connect_latency(mut self, latency: std::time::Duration) -> Self {
+        self.connect_latency = Some(latency);
+        self
+    }
+
     pub(crate) fn with_local_name(mut self, name: crate::identity::DeviceName) -> Self {
         self.local_name = Some(name);
         self
@@ -708,6 +714,7 @@ impl OutboundRequest {
             text_payload_id: None,
             cleanup_files,
             local_name: None,
+            connect_latency: None,
         })
     }
 
@@ -1282,7 +1289,12 @@ impl OutboundRequest {
             .paired_key_result
             .as_ref()
             .ok_or_else(|| anyhow!("Missing paired-key result"))?;
-        self.authentication.finish(result.status)?;
+        let (_, verified) = self.authentication.finish_with_credential(result.status)?;
+        if let (Some(peer), Some(latency), Some(session)) =
+            (verified, self.connect_latency, self.session.as_ref())
+        {
+            session.record_authenticated_route(peer, latency);
+        }
 
         let prepared_files = match &self.payload {
             OutboundPayload::Files(files) | OutboundPayload::EphemeralFiles(files) => {
