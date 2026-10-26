@@ -1,3 +1,4 @@
+mod ingress;
 mod slot;
 
 use std::future::Future;
@@ -13,7 +14,6 @@ use bluer::gatt::local::{
 use bluer::{Adapter, Uuid, UuidExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast::Sender;
-use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
@@ -281,11 +281,9 @@ impl ReceiverGattServer {
             "{INNER_NAME}: diagnostic slot0 deferred advertising refresh enabled={deferred_slot0_advertising}"
         );
 
-        const MAX_PENDING_GATT_WRITES: usize = 64;
-        let (packet_sender, packet_receiver) = channel::<Vec<u8>>(MAX_PENDING_GATT_WRITES);
+        let packet_receiver = ingress::Ingress::shared();
+        let packet_sender = packet_receiver.clone();
         let first_data_queued = Arc::new(AtomicBool::new(true));
-        let packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>> =
-            Arc::new(Mutex::new(Some(packet_receiver)));
         let channel_sender = self.sender.clone();
         let tcp_port = self.tcp_port;
         let bwu_router = self.bwu_router.clone();
@@ -361,7 +359,7 @@ impl ReceiverGattServer {
                             write: true,
                             write_without_response: false,
                             method: CharacteristicWriteMethod::Fun(Box::new(
-                                move |value, _request| {
+                                move |value, request| {
                                     let packet_sender = packet_sender.clone();
                                     let first_data_queued = first_data_queued.clone();
                                     Box::pin(async move {
@@ -372,14 +370,11 @@ impl ReceiverGattServer {
                                                 crate::receiver_trace::Event::GattWeaveConnectWrite,
                                             );
                                         }
-                                        packet_sender.try_send(value).map_err(|error| {
+                                        ingress::Ingress::write(&packet_sender, request.adapter_name, request.device_address, request.offset, value).inspect_err(|error| {
                                             crate::receiver_trace::event(
                                                 crate::receiver_trace::Event::GattWriteQueueRejected,
                                             );
-                                            warn!(
-                                                "{INNER_NAME}: rejecting GATT write because the weave queue is full or closed: {error}"
-                                            );
-                                            ReqError::Failed
+                                            debug!("{INNER_NAME}: rejected GATT ingress: {error}");
                                         })?;
                                         if first_data_queued_after_connect(
                                             &first_data_queued,
@@ -548,7 +543,7 @@ struct ReceiveAdmission {
 
 async fn weave_session(
     mut notifier: CharacteristicNotifier,
-    packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>>,
+    packet_receiver: ingress::Shared,
     sender: Sender<ChannelMessage>,
     bwu_router: BwuRouter,
     tcp_port: u16,
@@ -558,13 +553,8 @@ async fn weave_session(
     let ReceiveAdmission { sessions, policy } = admission;
     let notification_stopped = notifier.stopped();
     tokio::pin!(notification_stopped);
-    let mut receiver_guard = tokio::select! {
-        _ = &mut notification_stopped => return Ok(()),
-        receiver = packet_receiver.lock() => receiver,
-    };
-    let receiver = receiver_guard
-        .as_mut()
-        .ok_or_else(|| anyhow!("weave packet receiver is unavailable"))?;
+    let mut ingress_session = ingress::Session::open(packet_receiver)?;
+    let receiver = &mut ingress_session.receiver;
 
     info!("{INNER_NAME}: weave notify session opened");
     crate::receiver_trace::event(crate::receiver_trace::Event::GattSessionOpened);
@@ -628,7 +618,7 @@ async fn weave_session(
     let mut read_buffer = [0_u8; 2048];
 
     // A peer can disappear without sending a final weave control packet. Observe
-    // the GATT subscription lifecycle explicitly so the session mutex is released
+    // the GATT subscription lifecycle explicitly so the session ingress is released
     // and a later transfer can start without restarting the application.
     let result = loop {
         tokio::select! {
