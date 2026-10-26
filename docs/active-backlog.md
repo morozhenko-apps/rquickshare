@@ -1,5 +1,29 @@
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
+## 2026-10-26 full compatibility research: ordered follow-up work
+
+[Quick Share / AirDrop audit](quickshare-airdrop-compatibility-audit-2026-10-26.md)
+records six source-backed backlog items (QS-AUDIT-01..06), a capability/physical
+acceptance matrix and pinned Google reference sources. Confirmed findings:
+serialized first-address mDNS probing, ACK-to-ACK keepalive handling, BWU drain
+without a required SAFE_TO_CLOSE transition, unattributed shared GATT ingress,
+bulk sender control starvation/redundant copies, and missing outbound/off-LAN
+transport capabilities. Runtime impact beyond existing traces remains unmeasured.
+
+**Execution order:** first physically accept the existing `6ae62f6` candidate;
+then separate keepalive/discovery fixes, BWU/control-channel correctness and
+GATT ownership design; profile throughput after reliable connections. New
+off-LAN transports, account/QR parity and AirDrop need their own documented
+contracts and acceptance. GATT security boundaries, network ownership and
+AirDrop production architecture require owner decisions before implementation.
+Approved #8 A2.2 and #16 verified-only identity remain unchanged.
+
+This slice changes documentation only. No package installation, service restart,
+new compatibility claim or functional issue closure. AirDrop requires a distinct
+Linux radio/protocol backend; OpenDrop/archived OWL are research references, not
+accepted production dependencies. Existing issue/physical/release gates below
+remain open; the audit does not replace historical evidence.
+
 ## 2026-10-26 #23 initialization fix: source six-green, installed acceptance pending
 
 **Source `6ae62f62b17b058160d3246873ecdd34377ec9f0` on dev:** optional BWU TCP

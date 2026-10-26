@@ -4,6 +4,12 @@
 
 _Last updated: 2026-10-18 for product direction; dated implementation checkpoints retained._
 
+**2026-10-26 compatibility research:** [source audit, capability matrix and ordered
+follow-up queue](quickshare-airdrop-compatibility-audit-2026-10-26.md) covers
+discovery, keepalive, migration, GATT ownership, duplex transfer, off-LAN routes
+and current AirDrop feasibility. It adds evidence and proposed work, not a new
+implemented-feature claim or approval of transport/security architecture.
+
 **Current product contract:** [product-release-strategy.md](product-release-strategy.md).
 rQuickShare targets Linux, Windows and macOS, and full Google Quick Share
 interoperability remains the long-term objective. The intended public product
@@ -210,6 +216,7 @@ everyday UI work and physical acceptance separately.
     - Android Quick Share on selected devices can interoperate with AirDrop.
     - Linux support is a separate protocol/transport project (Apple discovery/AWDL/AirDrop), not a normal Quick Share frame extension.
     - Research as a separate transport/dependency workstream within the platform-specific parity matrix. No full-parity claim while applicable Apple paths remain unverified.
+    - The [2026-10-26 audit](quickshare-airdrop-compatibility-audit-2026-10-26.md) distinguishes direct AirDrop from cloud QR, checks public AWDL references and records consent/security/hardware blockers. OpenDrop and archived OWL cannot be shipped unchanged as the production backend.
 
 ### Phase 4 — polish and distribution
 
