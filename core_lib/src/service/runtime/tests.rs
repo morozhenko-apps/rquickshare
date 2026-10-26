@@ -659,6 +659,38 @@ async fn given_untrusted_mdns_address_change_when_send_is_queued_or_pending_then
 }
 
 #[tokio::test]
+async fn given_new_mdns_socket_after_a_transfer_is_dispatched_then_active_session_stays_on_the_original_recipient(
+) {
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let old_endpoint = runtime.endpoints()[0].id.clone();
+    let client = runtime.connect().unwrap();
+    let transfer = send(runtime, client, "active-recipient");
+    assert!(runtime.dispatch().unwrap());
+    let job = fixture.receiver.recv().await.unwrap();
+    assert_eq!(job.info.addr, "127.0.0.1:1234");
+
+    let mut changed = advertisement("peer");
+    changed.ip = Some("192.0.2.200".into());
+    runtime.discovered(changed).unwrap();
+
+    let fresh = runtime.endpoints();
+    assert_eq!(fresh.len(), 1);
+    assert_ne!(fresh[0].id, old_endpoint);
+    assert_eq!(
+        runtime.routes[&fresh[0].id].addr.to_string(),
+        "192.0.2.200:1234"
+    );
+    assert_eq!(job.info.addr, "127.0.0.1:1234");
+    assert!(fixture.receiver.try_recv().is_err());
+
+    finish(job, State::Finished);
+    runtime.step().await.unwrap();
+    assert_eq!(view(runtime, client, transfer).phase, Phase::Finished);
+}
+
+#[tokio::test]
 async fn given_removed_endpoint_when_queued_or_pending_then_unsent_work_fails_and_releases_resources(
 ) {
     // Arrange / Act / Assert
