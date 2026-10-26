@@ -420,6 +420,44 @@ async fn given_short_verified_transfer_closes_before_runtime_wakeup_then_prior_s
 }
 
 #[tokio::test]
+async fn given_proof_then_failed_terminal_before_owner_wakeup_when_consumed_then_route_remains_unverified(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    for (index, terminal) in [
+        State::Rejected,
+        State::Cancelled,
+        State::Disconnected,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut fx = fixture();
+        let runtime = &mut fx.runtime;
+        runtime.discovered(advertisement("peer")).unwrap();
+        let route = runtime.endpoints()[0].id.clone();
+        let client = runtime.connect().unwrap();
+        let selected = runtime.create_selection(client, selection()).unwrap();
+        runtime
+            .send_selection(client, selected, &route, &format!("failed-proof-{index}"))
+            .unwrap();
+        assert!(runtime.dispatch().unwrap());
+        let job = fx.receiver.recv().await.unwrap();
+        job.session.as_ref().unwrap().record_authenticated_route(
+            VerifiedPeerCredential::test_fixture([29; 32]),
+            Duration::from_millis(8),
+        );
+        finish(job, terminal);
+        // Auth and terminal events may both be queued. A failed connection
+        // cannot confer a trusted alias on any other discovery route.
+        runtime.step().await.unwrap();
+        assert!(runtime.routes.expected_peer(&route, Instant::now()).is_none());
+    }
+}
+
+#[tokio::test]
 async fn given_route_address_rotates_before_proof_arrives_then_old_session_cannot_certify_replacement(
 ) {
     use std::time::{Duration, Instant};
