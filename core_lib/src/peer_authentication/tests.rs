@@ -555,7 +555,10 @@ fn given_actual_valid_credential_when_mutually_verified_then_only_certificate_pr
         .unwrap();
     assert_eq!(outcome, Outcome::Success);
     let identity = identity.expect("verified certificate proof");
-    assert_eq!(format!("{identity:?}"), "VerifiedPeerCredential([redacted])");
+    assert_eq!(
+        format!("{identity:?}"),
+        "VerifiedPeerCredential([redacted])"
+    );
 
     let (mut second, _) = setup(Role::Receiver, true, true);
     assert_eq!(second.verify(&proof(Role::Receiver)), Outcome::Success);
@@ -601,7 +604,9 @@ fn given_anonymous_unable_or_peer_decline_when_finished_then_no_verified_credent
 fn given_expired_verified_peer_when_finishing_then_identity_fails_closed() {
     let (mut known, time) = setup(Role::Receiver, true, true);
     assert_eq!(known.verify(&proof(Role::Receiver)), Outcome::Success);
-    time.0.store(20_000, Ordering::SeqCst);
+    // Peer certificates use an explicit 30-minute public tolerance.
+    // At the exclusive end of that tolerance the proof must fail closed.
+    time.0.store(21_800, Ordering::SeqCst);
     assert!(known
         .finish_with_credential(Some(Status::Success as i32))
         .is_err());
