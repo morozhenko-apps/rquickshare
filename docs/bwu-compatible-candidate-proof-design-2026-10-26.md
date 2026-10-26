@@ -170,3 +170,39 @@ closed `previous_endpoint_channel`. The duplicate-upgrade branch in
 `ProcessBwuPathAvailableEvent` explicitly closes both previous/current channels
 as unrecoverable. These paths do not establish postcommit BLE rollback. This is
 public-source evidence, not a claim about all proprietary Google implementations.
+
+## Final owner decision — 2026-10-26: preserve existing fast BWU
+
+After clarifying that authenticated frame checks already exist and #8 concerns
+premature route consumption, the owner explicitly selected **option 1: retain
+the current Google-compatible fast BWU**, reaffirming the earlier A2.2 decision.
+This supersedes the pending choice/recommendation in the research sections above.
+
+MODE A, documentation-only plan and completion:
+1. [x] Verify the clean synchronized dev tip `5795996`, single worktree, no open
+   PR, and live issue #8 (OPEN); read the active backlog and related decisions.
+2. [x] Record the final choice here, in the canonical backlog and original A2.2
+   design. Preserve the research and its limitations as historical evidence.
+3. [x] Validate whitespace, changed-document local links/anchor and unchanged
+   executable paths; commit docs separately and normal-push after expected-tip
+   verification. Update issue #8 with the decision, keeping it OPEN.
+
+No production architecture, wire protocol, timing, authorization, persistent
+format or installed runtime change is part of this decision. The candidate
+mailbox/KEEP_ALIVE proposal remains research only and is not selected for
+implementation. Existing incoming HMAC and sequence checks remain active;
+checking after migration and aborting invalid traffic is already implemented.
+The residual defect is earlier irreversible routing by an untrusted plaintext
+current/previous endpoint ID, allowing disruption before authentication succeeds.
+
+**Disposition: #8 P0 OPEN / DEFERRED / NOT FIXED.** The selected compatibility
+policy does not prove safe route admission, establish external file decryption,
+or waive a future release-security review. Existing expected-vulnerability
+sentinels remain evidence of the defect, not successful protection. Resume only
+with credible compatible binding/rollback evidence or a new explicit owner
+request. Independent #26 source/CI and physical acceptance are unaffected.
+
+Validation: `git diff --check` exits 0; focused local-link/decision-anchor and
+unchanged-executable checks exit 0. Rust/GTK/stress/physical tests are not rerun
+for this documentation-only decision. Rollback uses an inverse documentation
+commit; it does not change or resolve the recorded technical risk.

@@ -86,3 +86,14 @@ This closes only the A1 reproducibility/CI repair. Global Mode B Stage 12 and ha
 **Status: P0 #8 OPEN / DEFERRED / NOT FIXED.** This is a prioritization and compatibility decision, **not** evidence that the observed unauthenticated route-consumption risk is resolved, not approval to mark the release fully secure, and not a waiver of a future security/release review. Existing two expected-panic tests reproduce the known failure; they must not be reported as passing security controls. Normal functionality and existing test gates remain unchanged.
 
 **Reopen criteria:** authoritative Google Nearby protocol update, reproducible redacted Pixel/Windows protocol trace showing a pre-commit cryptographic TCP binding, or explicit owner request to revisit the throughput vs security trade-off. Future Mode A work must require TCP-socket-specific proof, authenticated ownership commit and retry/rollback tests, and Android/Windows compatibility acceptance. Continue unrelated backlog tasks; localization remains the last feature before the final 1.0.0 gate. GitHub issue #8 is the canonical task tracker.
+
+## Owner reaffirmation — 2026-10-26
+
+Following the deeper compatibility review and clarification that postmigration
+HMAC/sequence validation already exists, the owner chose **option 1: preserve
+current fast Google-compatible BWU**, reaffirming A2.2. The proposed provisional
+candidate/standard KEEP_ALIVE design remains unimplemented research; no BLE-only
+policy or new TCP proof architecture was selected. See the
+[final decision](bwu-compatible-candidate-proof-design-2026-10-26.md#final-owner-decision--2026-10-26-preserve-existing-fast-bwu).
+Issue #8 remains **P0 OPEN / DEFERRED / NOT FIXED**, with no release-security
+waiver or source/runtime change. The independently fixed #26 is not affected.

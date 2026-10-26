@@ -1,6 +1,19 @@
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
-## 2026-10-26 #26 corrected in source; #8 reopened for compatible proof research
+## 2026-10-26 final owner decision: preserve existing fast BWU (#8 option 1)
+
+Owner selected **option 1: preserve the existing Google-compatible fast BWU**,
+reaffirming A2.2. **#8 remains P0 OPEN / DEFERRED / NOT FIXED**: untrusted
+plaintext IDs can consume a pending route and disrupt a legitimate upgrade.
+Existing encrypted-frame HMAC/sequence validation remains in place; this
+decision does not establish file decryption or approve a security-release waiver.
+The proposed candidate/KEEP_ALIVE architecture is not selected for implementation.
+[Final decision and rationale](bwu-compatible-candidate-proof-design-2026-10-26.md#final-owner-decision--2026-10-26-preserve-existing-fast-bwu).
+Reopen on new compatible proof/rollback evidence or an explicit owner request.
+This is documentation only; #26's independent six-green source correction and
+pending physical acceptance remain as recorded below.
+
+## 2026-10-26 #26 corrected in source; earlier #8 research checkpoint
 
 Source `263aa3dcc0f8736c7945e5db147f6adcd0eb272f` fixes the committed-migration
 local Cancel ownership/delivery defect. [Plan, exact local gates and limits](bwu-cancel-security-followup-2026-10-26.md):
