@@ -384,6 +384,7 @@ impl SessionHub {
             status,
             mailbox,
             round: 0,
+            expected_peer: None,
         })
     }
 }
@@ -404,6 +405,7 @@ pub(crate) struct SessionLease {
     status: watch::Sender<Status>,
     mailbox: mpsc::Receiver<ConsentCommand>,
     round: u64,
+    expected_peer: Option<crate::peer_authentication::VerifiedPeerCredential>,
 }
 
 impl fmt::Debug for SessionLease {
@@ -422,6 +424,19 @@ impl SessionLease {
             }
         }
     }
+    pub(crate) fn require_verified_peer(
+        &mut self,
+        expected: crate::peer_authentication::VerifiedPeerCredential,
+    ) {
+        self.expected_peer = Some(expected);
+    }
+
+    pub(crate) fn expected_verified_peer(
+        &self,
+    ) -> Option<&crate::peer_authentication::VerifiedPeerCredential> {
+        self.expected_peer.as_ref()
+    }
+
     pub fn control(&self) -> SessionControl {
         self.control.clone()
     }
