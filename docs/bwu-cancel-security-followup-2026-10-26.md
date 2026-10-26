@@ -63,9 +63,9 @@ fast-BWU contract/security boundary, not to fix cancellation internally.
 
 1. [x] Read live backlog, issue #8, #26 diagnostic plan and Google source/PR;
    refresh refs and preserve independent upstream docs.
-2. [ ] Establish local minimal #26 diagnostic (expected failure, not a stable pass).
-3. [ ] Refactor phase ownership, delivery guard and bounded shutdown; regression tests.
-4. [ ] Final stable suite once, strict Core Clippy, nightly format, workflow policy;
+2. [x] Establish local minimal #26 diagnostic (expected failure, not a stable pass).
+3. [x] Refactor phase ownership, delivery guard and bounded shutdown; regression tests.
+4. [x] Final stable suite once, strict Core Clippy, nightly format, workflow policy;
    separately execute eight race-sensitive tests once (not known flaky).
 5. [ ] Separate source/docs commits, normal dev push after expected-ref check;
    source-exact CI readback; issue/backlog handoff. Physical acceptance stays open.
@@ -102,3 +102,82 @@ Risk: cancellation delivery may wait for the existing bounded committed phase;
 peer-visible failure is unavoidable if that phase fails. Public API/wire, consent,
 trust and persistent schema stay unchanged. Rollback is inverse dev commits;
 source-only rollback cannot undo any future separately authorized installation.
+
+## Executed implementation and local evidence
+
+Source commit `263aa3d` modifies `hdl/inbound.rs`, `hdl/gatt.rs` and two focused
+BWU test modules. The actual GATT worker now observes local cancellation between
+operations; preparation itself is cancellable, committed migration retains its
+writer, and service shutdown remains immediately cancellable. Interface-address
+resolution is injected as a function solely to make the real worker testable
+with loopback; no domain handler is mocked, no production feature flag exists.
+The old internal convenience method was folded into explicit-address preparation;
+InboundRequest is not exported by the library's public API.
+
+The writer-unavailable state is set before LAST_WRITE and cleared only after a
+successful complete migration. `send_local_cancel` rejects deferred/unavailable
+writers and emits the existing fixed `local_cancel_write_failed` event instead
+of a false `local_cancel_flushed`. Failed migration remains terminal; no old-BLE
+fallback. The local Cancel path is service-cancellable even while notifying.
+
+Nine new test methods exercise fifteen table cases: one minimal deferred-writer
+regression; four committed cancellation boundaries; three encryption-disable
+flag variants; two service/user stop combinations; failed writer; backpressured
+LAST_WRITE; optional TCP introduction cancellation; prior EOF; silent-peer phase
+deadline. The four boundary cases also assert a single terminal Cancelled event,
+both decrypted Cancel fragments, exact sequence continuity and no application
+processing after the pending local cancellation. Missing/false/true disabling
+flags retain encryption and reject plaintext after a real migration. This is
+regression protection of an already-safe invariant, not a claimed downgrade fix.
+
+Commands actually executed:
+
+- Minimal `cargo test --manifest-path core_lib/Cargo.toml --all-features --lib
+  given_deferred_bwu_writer_when_local_cancel_runs_then_delivery_fails_without_ble_bytes`:
+  **exit 101 before fix**, 0 pass/1 fail, exact assertion detected false delivery.
+- `cargo check --manifest-path core_lib/Cargo.toml --all-features --tests`:
+  exit 0. Initial follow-up found unused test import/internal wrapper, removed
+  rather than suppressing lint.
+- `cargo clippy --manifest-path core_lib/Cargo.toml --all-features --all-targets
+  -- -D warnings`: **exit 0**. Existing bluer 0.17.3 future-incompatibility notice
+  remains visible; it is not a new Clippy failure.
+- First final stable gate: **exit 1, 870 passed/1 failed**. The new silent-peer
+  fixture paused the clock after a live-clock deadline existed, observing 5.001s
+  instead of exactly 5s. Fixed the fixture to start with paused time; the exact
+  equality assertion stayed unchanged. Focused affected test **exit 0, 1 pass**.
+- Required final rerun `TMPDIR="$PWD/core_lib/target/connection-tmp" bash
+  scripts/ci-core-test-groups.sh stable`: **exit 0, 871 stable unit methods,
+  4+4 integration methods passed, 0 failures/ignored, 8 separately filtered**.
+  Workspace TMPDIR preserves the existing ext4 storage contract; no skip added.
+- All eight names from `bash scripts/ci-core-test-groups.sh list`, each once via
+  `cargo test --manifest-path core_lib/Cargo.toml --all-features --lib -- "$race"
+  --exact`: **eight exit-0 results, one test each**. These are race-sensitive,
+  not a known-flaky group. No separately classified known-flaky group exists;
+  no 10x release stress/mutation/physical suite executed.
+- `cargo +nightly fmt --manifest-path app/main/src-tauri/Cargo.toml --all --check`,
+  `bash scripts/ci-check-workflow-policy.sh`, `git diff --check`: each **exit 0**.
+
+Logs: `/tmp/rqs-bwu-cancel-diagnostic.log`, `...-clippy.log`, `...-stable.log`,
+`...-clock.log`, `...-stable-final.log`, `...-races.log` (prefix
+`/tmp/rqs-bwu-cancel`). Owned commands completed; no runtime service changed.
+
+Source and prior docs-first commit `90a19cb` were normally pushed to dev after
+checking remote expected SHA `8f818d5`. Exact-source CI:
+[Preflight 40367247177](https://github.com/morozhenko-apps/rquickshare/actions/runs/40367247177),
+[GTK 40367247126](https://github.com/morozhenko-apps/rquickshare/actions/runs/40367247126).
+At 17:24 UTC: Rust format, frontend, Core Rust tests and Native GTK completed
+SUCCESS (**4/6**); both Clippy jobs remain in progress. Core job `121728173535`
+independently confirms **871 +4+4 PASS**, all nine new methods individually `ok`,
+and the two existing #8 sentinels still `should panic ... ok` (known defect, not
+secured admission). No all-six-green claim yet. Physical acceptance is pending.
+
+## Owner correction and continuing security work
+
+The owner rejected repeating the old A2.1/A2.2 decision and asked to find a
+compatible solution. No BLE-only change was selected. Deeper Google reader,
+writer and keepalive analysis produced a **new candidate design**:
+[standard keepalive proof with non-destructive candidates](bwu-compatible-candidate-proof-design-2026-10-26.md).
+It separates old-transport drain from logical route commitment and includes
+candidate-specific challenge echoes, rather than mislabeling a replayable first
+encrypted frame as sufficient socket proof. This is research progress; #8 is
+not fixed and no old acceptance or security-contract exception was inferred.

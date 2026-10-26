@@ -1,5 +1,26 @@
 > **Canonical 2026-10-25 Pixel/KDE hardware measurements:** [native-pixel-kde-field-measurements-2026-10-25.md](native-pixel-kde-field-measurements-2026-10-25.md). Consolidates #25 Cancel before/after, #23 first BLE Weave/slot0 and BWU stages, #18 off-LAN discovery, exact `elapsed_ms` tables, CI/payload SHA and unresolved gates. Read this measurement record before interpreting historical in-progress snapshots below. Source code unchanged; no release promotion.
 
+## 2026-10-26 #26 corrected in source; #8 reopened for compatible proof research
+
+Source `263aa3dcc0f8736c7945e5db147f6adcd0eb272f` fixes the committed-migration
+local Cancel ownership/delivery defect. [Plan, exact local gates and limits](bwu-cancel-security-followup-2026-10-26.md):
+**871 stable +4+4 integration PASS**, eight race-sensitive methods separately
+once PASS; nine new methods/fifteen table cases. Strict Core Clippy, nightly
+format and workflow policy PASS. Exact-source remote Preflight/GTK terminal
+status is recorded in the implementation report. No updated package installed,
+no physical Cancel/BWU or Google Windows acceptance; #26/#25 remain OPEN.
+
+Owner reopened #8 and requested a compatible solution, explicitly rejecting a
+mere repeat of the old BWU-versus-BLE-only choice. Deeper pinned Google source
+review produced [a new standard-keepalive candidate design](bwu-compatible-candidate-proof-design-2026-10-26.md):
+non-destructive candidate mailbox, authenticated BLE readiness, isolated crypto
+verification and candidate-specific challenge echoes before logical route
+commit. It is **not implemented or physically proven**. It revises the old
+pre-BLE-retirement proof/rollback contract and requires that material decision;
+the owner has not selected BLE-only. Existing plaintext-ID admission and its
+expected-vulnerability sentinels remain unchanged, #8 **OPEN / NOT FIXED**.
+No account/QR/payload expansion/AirDrop or release work is included.
+
 ## 2026-10-26 MODE B independent audit: new P0 Cancel/BWU race #26
 
 [Issue #26](https://github.com/morozhenko-apps/rquickshare/issues/26) and
