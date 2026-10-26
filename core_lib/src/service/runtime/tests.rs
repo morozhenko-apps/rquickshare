@@ -246,6 +246,57 @@ fn given_duplicate_named_routes_when_minimal_mdns_tombstone_arrives_then_only_ma
     assert!(current.iter().all(|endpoint| endpoint.id != first_id));
 }
 
+#[tokio::test]
+async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_only_one_exact_route_is_contacted(
+) {
+    use crate::utils::gen_mdns_name;
+
+    let mut fixture = fixture();
+    let client = fixture.runtime.connect().unwrap();
+    let endpoint = gen_mdns_name(*b"AB12");
+    let mut first = advertisement(&format!(
+        "{endpoint}._FC9F5ED42C8A._tcp.local."
+    ));
+    first.name = Some("First phone".into());
+    first.ip = Some("192.0.2.10".into());
+    first.port = Some("4567".into());
+    let mut conflicting = advertisement(&format!(
+        "{endpoint}._fc9f5ed42c8a._TCP.LOCAL."
+    ));
+    conflicting.name = Some("Different phone".into());
+    conflicting.ip = Some("192.0.2.11".into());
+    conflicting.port = Some("4568".into());
+
+    fixture.runtime.discovered(first).unwrap();
+    fixture.runtime.discovered(conflicting).unwrap();
+    let routes = fixture.runtime.endpoints();
+    assert_eq!(routes.len(), 2);
+    assert_ne!(routes[0].id, routes[1].id);
+    assert_ne!(routes[0].name, routes[1].name);
+
+    // The untrusted 4-byte advertising ID alone cannot silently select,
+    // redirect, multicast, or reuse consent across different sockets.
+    for (index, expected_address) in ["192.0.2.10:4567", "192.0.2.11:4568"]
+        .into_iter()
+        .enumerate()
+    {
+        let selection = fixture.runtime.create_selection(client, selection()).unwrap();
+        fixture
+            .runtime
+            .send_selection(client, selection, &routes[index].id, "explicit-recipient")
+            .unwrap();
+        assert!(fixture.runtime.dispatch().unwrap());
+        let job = fixture.receiver.recv().await.unwrap();
+        assert_eq!(job.info.addr, expected_address);
+        assert!(
+            fixture.receiver.try_recv().is_err(),
+            "one user transfer must never fan out to another advertised peer"
+        );
+        finish(job, State::Finished);
+        fixture.runtime.step().await.unwrap();
+    }
+}
+
 #[test]
 fn given_empty_fullname_tombstone_when_received_then_live_routes_remain_unmodified() {
     let mut fixture = fixture();
