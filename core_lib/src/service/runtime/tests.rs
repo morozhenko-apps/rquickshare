@@ -185,7 +185,10 @@ fn given_existing_discovery_when_name_or_route_changes_then_shared_revision_chan
         runtime.snapshot(client).unwrap().revision,
         second.revision + 1
     );
-    assert_eq!(runtime.routes[&id].addr.port(), 4321);
+    let replaced_id = runtime.endpoints()[0].id.clone();
+    assert_ne!(replaced_id, id, "new socket requires a fresh route identity");
+    assert!(!runtime.routes.contains_key(&id));
+    assert_eq!(runtime.routes[&replaced_id].addr.port(), 4321);
     info.present = Some(false);
     runtime.discovered(info.clone()).unwrap();
     let removed = runtime.snapshot(client).unwrap();
@@ -468,14 +471,15 @@ fn given_unusable_discovery_when_updated_then_only_bounded_numeric_routes_are_ex
     updated.ip = Some("::1".into());
     updated.name = Some("Updated".into());
     runtime.discovered(updated).unwrap();
-    assert_eq!(runtime.endpoints()[0].id, first.id);
-    assert_eq!(runtime.routes[&first.id].addr.to_string(), "[::1]:1234");
+    let replacement = runtime.endpoints()[0].id.clone();
+    assert_ne!(replacement, first.id);
+    assert_eq!(runtime.routes[&replacement].addr.to_string(), "[::1]:1234");
     let mut removed = advertisement("peer");
     removed.present = Some(false);
     runtime.discovered(removed).unwrap();
     assert!(runtime.endpoints().is_empty());
     runtime.discovered(advertisement("peer")).unwrap();
-    assert_ne!(runtime.endpoints()[0].id, first.id);
+    assert_ne!(runtime.endpoints()[0].id, replacement);
 }
 
 #[tokio::test]
