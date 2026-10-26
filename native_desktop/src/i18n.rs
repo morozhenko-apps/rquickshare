@@ -453,6 +453,32 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
     row[index]
 }
 
+
+/// Apply only static Builder labels; dynamic data and consent are not translated
+/// by scanning arbitrary widgets. Uncataloged strings preserve English.
+pub(crate) fn localize_panel(builder: &gtk::Builder) {
+    use gtk::prelude::*;
+
+    for (id, source) in [
+        ("files", "Add files…"),
+        ("folder", "Folder…"),
+    ] {
+        if let Some(button) = builder.object::<gtk::Button>(id) {
+            button.set_label(label(source));
+        }
+    }
+    for (id, source) in [
+        ("quick-receive-label", "Receive"),
+        ("quick-send-label", "Send"),
+        ("quick-devices-label", "Devices"),
+        ("quick-hide-label", "Hide"),
+    ] {
+        if let Some(widget) = builder.object::<gtk::Label>(id) {
+            widget.set_label(label(source));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
