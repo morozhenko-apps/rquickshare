@@ -426,10 +426,35 @@ impl NativeRuntime {
                     if route.name == name && route.addr == addr {
                         return Ok(());
                     }
-                    // Label and route updates must share the snapshot revision.
-                    // Check exhaustion before mutating the already visible route.
-                    self.coordinator.advance()?;
-                    id
+                    if route.addr != addr {
+                        // An untrusted mDNS fullname does NOT authenticate a
+                        // new socket as the former recipient. Retire the old
+                        // capability before exposing a fresh route generation:
+                        // an already queued Send must fail, never silently
+                        // follow an address now owned by a different phone.
+                        let sequence = self
+                            .endpoint_sequence
+                            .checked_add(1)
+                            .ok_or(Error::Exhausted)?;
+                        let replacement =
+                            format!("ep-{:032x}-{:016x}", self.coordinator.epoch, sequence);
+                        let mut endpoints: Vec<_> = self
+                            .routes
+                            .keys()
+                            .filter(|key| **key != id)
+                            .cloned()
+                            .collect();
+                        endpoints.push(replacement.clone());
+                        self.coordinator.set_endpoints(endpoints)?;
+                        self.routes.remove(&id);
+                        self.endpoint_sequence = sequence;
+                        replacement
+                    } else {
+                        // A label-only change does not grant a new transport
+                        // capability or redirect the already selected socket.
+                        self.coordinator.advance()?;
+                        id
+                    }
                 }
                 None => {
                     if self.routes.len() >= self.coordinator.limits.endpoints {
