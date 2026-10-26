@@ -81,6 +81,17 @@ impl RouteRegistry {
         Some((route.0.as_str(), route.1))
     }
 
+    pub(super) fn expected_peer(
+        &self,
+        id: &str,
+        now: Instant,
+    ) -> Option<VerifiedPeerCredential> {
+        self.authenticated
+            .get(id)
+            .filter(|proof| proof.expires_at > now && self.routes.contains_key(id))
+            .map(|proof| proof.peer.clone())
+    }
+
     /// The runtime owner invokes this only on a live managed-session proof,
     /// for the same exact route generation and connected socket it dispatched.
     /// It is not callable from mDNS/IPC, and cannot elevate an advertised hint.
