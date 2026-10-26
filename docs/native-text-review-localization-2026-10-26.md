@@ -1,0 +1,26 @@
+# Native GTK received-text review localization, #17
+
+Date: 2026-10-26. Mode A feature slice. Branch: `feature/native-text-review-i18n-20261026`; based on `dev` at `612fdb78722eaed68d0f009b7b4dd24a3e337cda`. The #16 authenticated-route work is concurrent on `dev`; do not touch its production files or the protected `master`/release tracks.
+
+## Scope and source inventory
+
+The received-text review window in `native_desktop/src/panel/text.rs` currently displays eight English messages: `Received text`, `Received link · plain text`, `Copy`, `Close`, the untouched-clipboard disclosure, copy-unavailable warning, copy-failure warning, and copy-success confirmation. These are static application-owned strings; the received text itself is untrusted user content and must never go through localization or markup.
+
+The existing `native_desktop/src/i18n.rs` exposes a 20-code catalog for the tray/quick actions and `label(&'static str)` with system-locale selection. Extend this catalog with an *independent typed-size review section* without altering earlier 17 key positions or locale mapping. The canonical codes are `en,ru,es,pt,de,fr,it,pl,hi,zh-Hant,ja,nl,sv,tr,ko,bn,th,id,fil,ar`; `pt` means European Portuguese, `zh-Hant` means Traditional Chinese, and unsupported `pt_BR`/`zh_Hans` fall back to English. No preference, D-Bus, storage or protocol schema changes.
+
+## Implementation and risk boundaries
+
+1. Add the eight complete native review translations per canonical locale. Preserve the exact source-key inventory and explicit English fallback for unknown keys.
+2. Route only the eight static labels in `panel/text.rs` through `i18n::label`. Preserve the copy button's explicit, capability-guarded event handler and clipboard write; no clipboard read, auto-copy, auto-open, content markup, or changed success state. Do not localize `body.text()`.
+3. Keep consent/PIN, settings, history and other dynamic surfaces separate; this is a bounded #17 contribution, not full GTK localization.
+4. Add deterministic per-locale catalog invariants, expected RU/PT security wording, unsupported-locale fallbacks and all review-key coverage to existing source tests. Check source exactness before GitHub CI.
+
+## Risk, validation, rollback
+
+- Security invariant: `Nothing has been copied` must never imply an automatic clipboard write; failed/blocked copies must not be translated as success. All strings are static and untrusted peer content stays escaped by GTK Label markup-disabled handling.
+- Language risk: draft translations require human native-speaker contextual review. Automated cardinality and key tests do not establish linguistic quality, bidi visual correctness or font availability.
+- Planned final gate on the feature branch: native GTK verification and full applicable preflight, with STABLE vs known-FLAKY results reported separately using actual source-exact CI receipts. No local Rust/GTK toolchain is assumed in the current ChatGPT environment; no tests are claimed passed without execution evidence.
+- Manual acceptance: KDE screen-width/font fallback, Arabic RTL and mixed-script untrusted text; copy disabled state, successful Copy and clipboard-failure warning, switching locale by environment before launch.
+- Rollback: revert the documentation-only commit independently from executable commits, then revert the i18n and review-window edits. No persistent migration, package, signer, Pixel or network changes.
+
+**State on plan creation:** NOT IMPLEMENTED, NOT TESTED. Issue #17 remains open. #16 and release/security gates remain unchanged.
