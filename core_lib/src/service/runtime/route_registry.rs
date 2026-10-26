@@ -76,7 +76,7 @@ impl RouteRegistry {
     }
 
     #[cfg(test)]
-    fn bind_test_authenticated_route(
+    pub(super) fn bind_test_authenticated_route(
         &mut self,
         id: &str,
         peer: VerifiedPeerCredential,
