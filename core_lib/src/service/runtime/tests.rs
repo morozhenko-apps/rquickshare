@@ -263,7 +263,9 @@ async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_onl
     let mut conflicting = advertisement(&format!(
         "{endpoint}._fc9f5ed42c8a._TCP.LOCAL."
     ));
-    conflicting.name = Some("Different phone".into());
+    // Worst case: even a matching label AND four-byte ID are not positive
+    // identity evidence when independently advertised sockets disagree.
+    conflicting.name = Some("First phone".into());
     conflicting.ip = Some("192.0.2.11".into());
     conflicting.port = Some("4568".into());
 
@@ -272,7 +274,7 @@ async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_onl
     let routes = fixture.runtime.endpoints();
     assert_eq!(routes.len(), 2);
     assert_ne!(routes[0].id, routes[1].id);
-    assert_ne!(routes[0].name, routes[1].name);
+    assert_eq!(routes[0].name, routes[1].name);
 
     // The untrusted 4-byte advertising ID alone cannot silently select,
     // redirect, multicast, or reuse consent across different sockets.
