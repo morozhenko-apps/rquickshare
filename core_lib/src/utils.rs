@@ -83,6 +83,38 @@ pub fn gen_mdns_name(endpoint_id: [u8; 4]) -> String {
     URL_SAFE_NO_PAD.encode(&name_b)
 }
 
+/// An advertiser-controlled, short-lived Nearby Connections endpoint hint.
+/// Never use it as a verified peer, selected Send route or account identity.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(crate) struct UnverifiedEndpointHint([u8; 4]);
+
+impl std::fmt::Debug for UnverifiedEndpointHint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("UnverifiedEndpointHint([redacted])")
+    }
+}
+
+/// Inverse of our own Google-compatible mDNS instance name generator.
+/// This only checks the advertising syntax, never authenticates its author.
+pub(crate) fn parse_mdns_endpoint_id(fullname: &str) -> Option<UnverifiedEndpointHint> {
+    const SUFFIX: &str = "_FC9F5ED42C8A._tcp.local.";
+    let (instance, suffix) = fullname.split_once('.')?;
+    if !suffix.eq_ignore_ascii_case(SUFFIX) || instance.len() != 14 {
+        return None;
+    }
+    let payload = URL_SAFE_NO_PAD.decode(instance).ok()?;
+    if payload.len() != 10
+        || payload[0] != 0x23
+        || payload[5..8] != [0xFC, 0x9F, 0x5E]
+        || payload[8..10] != [0, 0]
+        || !payload[1..5].iter().all(u8::is_ascii_alphanumeric)
+    {
+        return None;
+    }
+    let endpoint: [u8; 4] = payload[1..5].try_into().ok()?;
+    Some(UnverifiedEndpointHint(endpoint))
+}
+
 pub fn gen_mdns_endpoint_info(device_type: u8, device_name: &str) -> String {
     let mut record = Vec::new();
 
