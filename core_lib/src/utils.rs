@@ -358,14 +358,12 @@ mod tests {
     }
 
     #[test]
-    fn given_genuine_google_mdns_instances_when_decoded_then_only_temporary_endpoint_hint_matches() {
+    fn given_genuine_google_mdns_instances_when_decoded_then_only_temporary_endpoint_hint_matches()
+    {
         for id in [*b"A1b2", *b"9876", *b"aBcD", *b"Z0Z9"] {
             let hint = parse_mdns_endpoint_id(&fullname(id)).expect("valid instance");
             assert_eq!(hint, UnverifiedEndpointHint(id));
-            assert_eq!(
-                format!("{hint:?}"),
-                "UnverifiedEndpointHint([redacted])"
-            );
+            assert_eq!(format!("{hint:?}"), "UnverifiedEndpointHint([redacted])");
         }
         // Equal display names are not evidence, and distinct short-lived IDs
         // never become a shared verified-device key.
