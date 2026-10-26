@@ -41,7 +41,18 @@ A2.2 and #16 verified-only identity. No new wire fields in this slice.
    not sleeps/retries or transfer deadlines: completion publishes immediately,
    expiry frees slots, later genuine resolve events can try again. Never replace
    an active identical candidate merely because the SDK repeats its event.
-4. [ ] Review BWU drain and bulk sender control ownership for the next correction,
+4. [ ] Correct BWU committed migration: after LAST_WRITE starts, every failure is
+   terminal for the established session; require peer LAST_WRITE and SAFE_TO_CLOSE
+   within one existing five-second drain budget or fail, never swap on iteration
+   exhaustion. Defer ordinary encrypted writes until TCP owns the stream; retain
+   parsing/cancellation on BLE, bound the deferred bytes to SANE_FRAME_LENGTH.
+   Send plaintext old-channel disconnect without advancing crypto counters and
+   await peer disconnect/EOF with a bounded close opportunity instead of 200 ms
+   sleep. A confirmed-safe old channel may be dropped when its close budget ends.
+   Test silence, exhausted control traffic, partial body at deadline, EOF, bad
+   authentication, cancel, reordered peer transitions and successful sequence
+   continuity. Preserve the existing legacy admission choice (#8).
+   Review bulk sender duplex control ownership for a separate correction,
    separating implementable state fixes from material security/transport choices.
    GATT subscriber/write binding needs a verified BlueZ contract before choosing
    its security design. Do not improvise trust based on device address.
@@ -78,5 +89,10 @@ N11 and N12 do not apply to this in-memory discovery/ACK slice.
 
 ## Progress and evidence
 
-Implementation pending. This plan does not claim that additional connection
+ACK handlers/copy removal and owned discovery candidates are implemented locally;
+compile-only check found fixture type-inference errors (being corrected), not a
+passing test gate. Existing resolve/remove fixture now awaits actual admitted
+presence before removing; an independent new fixture covers removal before probe
+completion with no phantom presence. No assertion is weakened to hide a failure.
+This plan does not claim that additional connection
 problems, new transport capabilities or hardware acceptance are complete.
