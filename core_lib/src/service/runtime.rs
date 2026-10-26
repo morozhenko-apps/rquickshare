@@ -12,7 +12,7 @@ use tokio::sync::broadcast;
 
 use super::*;
 use crate::managed::{ControlLost, ManagedSender, OutboundReceiver, RejectionKind};
-use crate::sessions::{ConsentToken, SessionControl, SessionError, SessionEvent, SessionId};
+use crate::sessions::{ConsentToken, RouteProof, SessionControl, SessionError, SessionEvent, SessionId};
 use crate::{EndpointInfo, OutboundPayload, SendInfo, State, RQS};
 
 mod route_registry;
@@ -82,6 +82,8 @@ struct Binding {
     transfer: TransferId,
     control: SessionControl,
     consent: Option<ConsentToken>,
+    /// Only outbound sessions have a selected exact route/socket generation.
+    route: Option<(String, SocketAddr)>,
 }
 struct Pending {
     transfer: TransferId,
@@ -94,6 +96,7 @@ pub struct NativeRuntime {
     coordinator: Coordinator,
     sender: ManagedSender,
     events: broadcast::Receiver<SessionEvent>,
+    route_proofs: broadcast::Receiver<RouteProof>,
     discovery: broadcast::Receiver<EndpointInfo>,
     routes: RouteRegistry,
     endpoint_sequence: u64,
@@ -197,9 +200,13 @@ impl NativeRuntime {
                 .sessions()
                 .subscribe_fresh()
                 .map_err(|_| RuntimeError::CoreUnavailable)?;
-            Ok::<_, RuntimeError>((coordinator, sender, receiver, events))
+            let route_proofs = sender
+                .sessions()
+                .subscribe_route_proofs_fresh()
+                .map_err(|_| RuntimeError::CoreUnavailable)?;
+            Ok::<_, RuntimeError>((coordinator, sender, receiver, events, route_proofs))
         })();
-        let (coordinator, sender, receiver, events) = match prepared {
+        let (coordinator, sender, receiver, events, route_proofs) = match prepared {
             Ok(parts) => parts,
             Err(error) => {
                 return Err(RejectedRuntime {
@@ -209,7 +216,7 @@ impl NativeRuntime {
             }
         };
         let (discovery_sender, discovery) = broadcast::channel(DISCOVERY_EVENTS);
-        let mut runtime = Self::assemble(core, coordinator, sender, events, discovery);
+        let mut runtime = Self::assemble(core, coordinator, sender, events, route_proofs, discovery);
         runtime.startup = Some(Startup {
             receiver,
             discovery_sender,
@@ -242,6 +249,7 @@ impl NativeRuntime {
         coordinator: Coordinator,
         sender: ManagedSender,
         events: broadcast::Receiver<SessionEvent>,
+    route_proofs: broadcast::Receiver<RouteProof>,
         discovery: broadcast::Receiver<EndpointInfo>,
     ) -> Self {
         Self {
@@ -249,6 +257,7 @@ impl NativeRuntime {
             coordinator,
             sender,
             events,
+            route_proofs,
             discovery,
             routes: RouteRegistry::default(),
             endpoint_sequence: 0,
@@ -516,6 +525,7 @@ impl NativeRuntime {
                         transfer,
                         control,
                         consent: None,
+                        route: None,
                     },
                 );
                 // Open carries a live capability; later ordered Changed events carry historical state.
@@ -647,6 +657,7 @@ impl NativeRuntime {
             self.coordinator.source_released(pending.transfer)?;
             return Ok(true);
         };
+        let route_binding = (pending.endpoint.clone(), route.addr);
         pending.request.addr = route.addr.to_string();
         pending.request.name = route.name.clone();
         match self.sender.try_send(pending.request) {
@@ -658,6 +669,7 @@ impl NativeRuntime {
                         transfer: pending.transfer,
                         control: session,
                         consent: None,
+                        route: Some(route_binding),
                     },
                 );
                 self.releases.push(Box::pin(async move {
