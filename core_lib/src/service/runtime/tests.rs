@@ -497,6 +497,66 @@ async fn given_verified_route_evidence_is_revoked_while_queue_is_full_then_pendi
     assert_eq!(jobs, 10);
 }
 
+#[test]
+fn given_lagged_authenticated_proof_events_when_runtime_drains_then_all_alias_proofs_are_revoked(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("a")).unwrap();
+    runtime.discovered(advertisement("b")).unwrap();
+    let routes = runtime.endpoints();
+    let peer = VerifiedPeerCredential::test_fixture([55; 32]);
+    let expiry = Instant::now() + Duration::from_secs(60);
+    runtime.routes.bind_test_authenticated_route(
+        &routes[0].id,
+        peer.clone(),
+        Duration::from_millis(100),
+        expiry,
+    );
+    runtime.routes.bind_test_authenticated_route(
+        &routes[1].id,
+        peer.clone(),
+        Duration::from_millis(5),
+        expiry,
+    );
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&routes[0].id, Instant::now())
+            .unwrap()
+            .0,
+        routes[1].id
+    );
+
+    let lease = runtime
+        .sender
+        .sessions()
+        .open(
+            crate::channel::TransferType::Outbound,
+            None,
+            CancellationToken::new(),
+        )
+        .unwrap();
+    // The private channel has 128 bounded slots. Overflowing before owner
+    // processing is a loss of security evidence, not permission to guess.
+    for _ in 0..129 {
+        lease.record_authenticated_route(peer.clone(), Duration::from_millis(1));
+    }
+    assert!(runtime.drain_route_proofs().unwrap());
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&routes[0].id, Instant::now())
+            .unwrap()
+            .0,
+        routes[0].id
+    );
+}
+
 #[tokio::test]
 async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_only_one_exact_route_is_contacted(
 ) {
