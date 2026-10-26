@@ -602,6 +602,52 @@ impl NativeRuntime {
         Ok(progressed)
     }
 
+    /// Consume a proof only from the live outbound session that actually
+    /// connected to this generation's original exact socket. No mDNS, IPC or
+    /// BLE advertisement may supply a peer credential.
+    fn observed_route_proof(&mut self, proof: RouteProof) {
+        let Some(binding) = self.bindings.get(&proof.session) else {
+            return;
+        };
+        let snapshot = binding.control.snapshot();
+        if snapshot.direction != crate::channel::TransferType::Outbound
+            || crate::sessions::terminal(&snapshot.state)
+        {
+            return;
+        }
+        let Some((id, addr)) = binding.route.as_ref() else {
+            return;
+        };
+        self.routes.bind_authenticated_route(
+            id,
+            *addr,
+            proof.peer,
+            proof.connect_latency,
+            Instant::now(),
+        );
+    }
+
+    fn drain_route_proofs(&mut self) -> Result<bool, RuntimeError> {
+        let mut progressed = false;
+        for _ in 0..128 {
+            match self.route_proofs.try_recv() {
+                Ok(proof) => {
+                    self.observed_route_proof(proof);
+                    progressed = true;
+                }
+                Err(broadcast::error::TryRecvError::Empty) => return Ok(progressed),
+                Err(broadcast::error::TryRecvError::Lagged(_)) => {
+                    // Missing even a single proof invalidates inferred links,
+                    // but independent exact routes remain fully usable.
+                    self.routes.invalidate_proofs();
+                    return Ok(true);
+                }
+                Err(broadcast::error::TryRecvError::Closed) => return self.fault().map(|_| false),
+            }
+        }
+        Ok(progressed)
+    }
+
     fn drain_discovery(&mut self) -> Result<bool, RuntimeError> {
         let mut progressed = false;
         for _ in 0..DISCOVERY_EVENTS {
@@ -799,6 +845,7 @@ impl NativeRuntime {
             return Err(Error::NotRunning.into());
         }
         let events = self.drain_events()?;
+        let proofs = self.drain_route_proofs()?;
         let discovery = self.drain_discovery()?;
         let mut completions = false;
         for _ in 0..OWNED_DISPATCHES {
@@ -822,11 +869,19 @@ impl NativeRuntime {
         let retired = self.coordinator.maintain_history()?;
         let controls = self.controls()?;
         let dispatch = self.dispatch()?;
-        if events || discovery || completions || controls || dispatch || retired {
+        if events || proofs || discovery || completions || controls || dispatch || retired {
             return Ok(());
         }
         let result = tokio::select! {
             result = self.events.recv() => match result { Ok(event) => self.observed(event), Err(_) => self.fault() },
+            result = self.route_proofs.recv() => match result {
+                Ok(proof) => { self.observed_route_proof(proof); Ok(()) },
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    self.routes.invalidate_proofs();
+                    Ok(())
+                },
+                Err(broadcast::error::RecvError::Closed) => self.fault(),
+            },
             result = self.discovery.recv() => match result { Ok(info) => self.discovered(info), Err(_) => self.fault() },
             Some((intent, result)) = self.receipts.next(), if !self.receipts.is_empty() => self.receipt(intent, result),
             Some((id, result)) = self.releases.next(), if !self.releases.is_empty() => self.release(id, result),
