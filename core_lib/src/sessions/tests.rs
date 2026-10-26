@@ -923,7 +923,8 @@ async fn given_received_files_when_consent_direction_phase_or_manifest_differs_t
 }
 
 #[test]
-fn given_managed_outbound_session_when_authenticated_then_proof_is_private_ordered_and_fail_closed() {
+fn given_managed_outbound_session_when_authenticated_then_proof_is_private_ordered_and_fail_closed()
+{
     use std::time::Duration;
 
     use crate::peer_authentication::VerifiedPeerCredential;
@@ -947,7 +948,10 @@ fn given_managed_outbound_session_when_authenticated_then_proof_is_private_order
         VerifiedPeerCredential::test_fixture([8; 32]),
         Duration::ZERO,
     );
-    assert!(receiver.try_recv().is_err(), "terminal session cannot claim identity");
+    assert!(
+        receiver.try_recv().is_err(),
+        "terminal session cannot claim identity"
+    );
 
     let inbound = hub
         .open(TransferType::Inbound, None, CancellationToken::new())
@@ -956,7 +960,10 @@ fn given_managed_outbound_session_when_authenticated_then_proof_is_private_order
         VerifiedPeerCredential::test_fixture([9; 32]),
         Duration::ZERO,
     );
-    assert!(receiver.try_recv().is_err(), "inbound cannot bind outbound routes");
+    assert!(
+        receiver.try_recv().is_err(),
+        "inbound cannot bind outbound routes"
+    );
 
     let cancelled = hub
         .open(TransferType::Outbound, None, CancellationToken::new())
@@ -966,7 +973,10 @@ fn given_managed_outbound_session_when_authenticated_then_proof_is_private_order
         VerifiedPeerCredential::test_fixture([10; 32]),
         Duration::ZERO,
     );
-    assert!(receiver.try_recv().is_err(), "cancelled session is not proof");
+    assert!(
+        receiver.try_recv().is_err(),
+        "cancelled session is not proof"
+    );
 
     hub.close();
     let stopped = hub
