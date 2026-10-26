@@ -278,10 +278,18 @@ async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_onl
         .into_iter()
         .enumerate()
     {
-        let selection = fixture.runtime.create_selection(client, selection()).unwrap();
+        let selection = fixture
+            .runtime
+            .create_selection(client, selection())
+            .unwrap();
         fixture
             .runtime
-            .send_selection(client, selection, &routes[index].id, "explicit-recipient")
+            .send_selection(
+                client,
+                selection,
+                &routes[index].id,
+                &format!("explicit-recipient-{index}"),
+            )
             .unwrap();
         assert!(fixture.runtime.dispatch().unwrap());
         let job = fixture.receiver.recv().await.unwrap();
