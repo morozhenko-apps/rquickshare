@@ -89,6 +89,7 @@ struct Pending {
     transfer: TransferId,
     endpoint: String,
     request: SendInfo,
+    expected_peer: Option<crate::peer_authentication::VerifiedPeerCredential>,
 }
 
 pub struct NativeRuntime {
@@ -685,6 +686,7 @@ impl NativeRuntime {
             self.pending = Some(Pending {
                 transfer: dispatch.transfer,
                 endpoint: chosen_endpoint.to_owned(),
+                expected_peer: self.routes.expected_peer(chosen_endpoint, Instant::now()),
                 request: SendInfo {
                     id: format!(
                         "send-{:032x}-{:016x}",
@@ -703,10 +705,25 @@ impl NativeRuntime {
             self.coordinator.source_released(pending.transfer)?;
             return Ok(true);
         };
+        // An expected identity from a previous authenticated session must
+        // remain live until queue admission. Otherwise fail, never downgrade
+        // to an anonymous handshake or try an unrelated fallback address.
+        if pending.expected_peer.is_some()
+            && self.routes.expected_peer(&pending.endpoint, Instant::now())
+                != pending.expected_peer
+        {
+            self.coordinator.observe(pending.transfer, Phase::Failed)?;
+            self.coordinator.owner_closed(pending.transfer)?;
+            self.coordinator.source_released(pending.transfer)?;
+            return Ok(true);
+        }
         let route_binding = (pending.endpoint.clone(), route.addr);
         pending.request.addr = route.addr.to_string();
         pending.request.name = route.name.clone();
-        match self.sender.try_send(pending.request) {
+        match self
+            .sender
+            .try_send_verified(pending.request, pending.expected_peer.clone())
+        {
             Ok(control) => {
                 let session = control.session();
                 self.bindings.insert(
@@ -728,6 +745,7 @@ impl NativeRuntime {
                     transfer: pending.transfer,
                     endpoint: pending.endpoint,
                     request: *rejected.request,
+                    expected_peer: pending.expected_peer,
                 });
                 match rejected.kind {
                     RejectionKind::Full => Ok(false),
