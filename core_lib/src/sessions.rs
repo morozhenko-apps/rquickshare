@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, Mutex, Weak};
+use std::time::Duration;
 
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -15,6 +16,16 @@ pub mod text;
 use details::TransferDetails;
 
 const SESSION_LIMIT: usize = 32;
+const PROOF_EVENT_LIMIT: usize = 128;
+
+/// Private authenticated observation, never a public SessionSnapshot or IPC field.
+#[derive(Clone)]
+pub(crate) struct RouteProof {
+    pub(crate) session: SessionId,
+    pub(crate) peer: crate::peer_authentication::VerifiedPeerCredential,
+    pub(crate) connect_latency: Duration,
+}
+
 pub(crate) const EVENT_LIMIT: usize = 512;
 
 /// Ordered observations for a single trusted native owner. Lag requires fail-closed handling.
@@ -206,6 +217,7 @@ struct HubState {
     open: bool,
     sessions: BTreeMap<SessionId, SessionControl>,
     events: broadcast::Sender<SessionEvent>,
+    route_proofs: broadcast::Sender<RouteProof>,
     membership: watch::Sender<()>,
 }
 
@@ -227,6 +239,7 @@ impl SessionHub {
             open: true,
             sessions: BTreeMap::new(),
             events: broadcast::channel(EVENT_LIMIT).0,
+            route_proofs: broadcast::channel(PROOF_EVENT_LIMIT).0,
             membership: watch::channel(()).0,
         }))))
     }
@@ -241,6 +254,21 @@ impl SessionHub {
             return Err(SessionError::Stale);
         }
         Ok(state.events.subscribe())
+    }
+
+    /// Independent private channel for credential proofs; never derived from
+    /// advertised metadata and subscribed before any managed worker starts.
+    pub(crate) fn subscribe_route_proofs_fresh(
+        &self,
+    ) -> Result<broadcast::Receiver<RouteProof>, SessionError> {
+        let state = self.0.lock().map_err(|_| SessionError::OwnerLost)?;
+        if !state.open {
+            return Err(SessionError::Closed);
+        }
+        if state.sequence != 0 {
+            return Err(SessionError::Stale);
+        }
+        Ok(state.route_proofs.subscribe())
     }
 
     pub(crate) async fn available(&self) -> Result<(), SessionError> {
@@ -402,6 +430,34 @@ impl SessionLease {
     }
     pub fn event_id(&self) -> String {
         self.control.snapshot().event_id
+    }
+
+    /// May only be called by the outbound protocol worker AFTER an actual
+    /// mutually authenticated PairedKey result. An expired/closed lease has no
+    /// authority to mint a route proof. No value is exposed to IPC or logs.
+    pub(crate) fn record_authenticated_route(
+        &self,
+        peer: crate::peer_authentication::VerifiedPeerCredential,
+        connect_latency: Duration,
+    ) {
+        let snapshot = self.control.snapshot();
+        if snapshot.direction != TransferType::Outbound
+            || terminal(&snapshot.state)
+            || self.control.cancellation.is_cancelled()
+        {
+            return;
+        }
+        if let Some(hub) = self.hub.upgrade() {
+            if let Ok(state) = hub.lock() {
+                if state.open && state.sessions.contains_key(&self.id) {
+                    let _ = state.route_proofs.send(RouteProof {
+                        session: self.id,
+                        peer,
+                        connect_latency,
+                    });
+                }
+            }
+        }
     }
 
     pub fn observe_state(&mut self, actual: &crate::hdl::InnerState) {
