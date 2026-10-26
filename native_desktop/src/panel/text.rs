@@ -94,7 +94,9 @@ impl Review {
             .child(&text)
             .build();
         root.append(&scroll);
-        let status = label(crate::i18n::label("Nothing has been copied. Use Copy to replace this clipboard."));
+        let status = label(crate::i18n::label(
+            "Nothing has been copied. Use Copy to replace this clipboard.",
+        ));
         status.set_selectable(false);
         root.append(&status);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -147,7 +149,9 @@ impl Review {
     fn copy_explicitly(&self) {
         if self.closed.get() || !(self.guard)(&self.key) {
             self.status
-                .set_text(crate::i18n::label("Copy unavailable. Unlock and review the current transfer."));
+                .set_text(crate::i18n::label(
+                    "Copy unavailable. Unlock and review the current transfer.",
+                ));
             return;
         }
         let body = self.body.borrow();
@@ -156,7 +160,9 @@ impl Review {
         let provider = gtk::gdk::ContentProvider::for_value(&body.text().to_value());
         if display.is_closed() || display.clipboard().set_content(Some(&provider)).is_err() {
             self.status
-                .set_text(crate::i18n::label("Copy failed. This clipboard did not accept the text."));
+                .set_text(crate::i18n::label(
+                    "Copy failed. This clipboard did not accept the text.",
+                ));
             return;
         }
         self.status.set_text(crate::i18n::label("Copied to this clipboard"));
