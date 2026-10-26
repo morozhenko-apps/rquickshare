@@ -254,15 +254,11 @@ async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_onl
     let mut fixture = fixture();
     let client = fixture.runtime.connect().unwrap();
     let endpoint = gen_mdns_name(*b"AB12");
-    let mut first = advertisement(&format!(
-        "{endpoint}._FC9F5ED42C8A._tcp.local."
-    ));
+    let mut first = advertisement(&format!("{endpoint}._FC9F5ED42C8A._tcp.local."));
     first.name = Some("First phone".into());
     first.ip = Some("192.0.2.10".into());
     first.port = Some("4567".into());
-    let mut conflicting = advertisement(&format!(
-        "{endpoint}._fc9f5ed42c8a._TCP.LOCAL."
-    ));
+    let mut conflicting = advertisement(&format!("{endpoint}._fc9f5ed42c8a._TCP.LOCAL."));
     // Worst case: even a matching label AND four-byte ID are not positive
     // identity evidence when independently advertised sockets disagree.
     conflicting.name = Some("First phone".into());
