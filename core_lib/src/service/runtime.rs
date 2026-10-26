@@ -12,7 +12,9 @@ use tokio::sync::broadcast;
 
 use super::*;
 use crate::managed::{ControlLost, ManagedSender, OutboundReceiver, RejectionKind};
-use crate::sessions::{ConsentToken, RouteProof, SessionControl, SessionError, SessionEvent, SessionId};
+use crate::sessions::{
+    ConsentToken, RouteProof, SessionControl, SessionError, SessionEvent, SessionId,
+};
 use crate::{EndpointInfo, OutboundPayload, SendInfo, State, RQS};
 
 mod route_registry;
@@ -217,7 +219,8 @@ impl NativeRuntime {
             }
         };
         let (discovery_sender, discovery) = broadcast::channel(DISCOVERY_EVENTS);
-        let mut runtime = Self::assemble(core, coordinator, sender, events, route_proofs, discovery);
+        let mut runtime =
+            Self::assemble(core, coordinator, sender, events, route_proofs, discovery);
         runtime.startup = Some(Startup {
             receiver,
             discovery_sender,
@@ -250,7 +253,7 @@ impl NativeRuntime {
         coordinator: Coordinator,
         sender: ManagedSender,
         events: broadcast::Receiver<SessionEvent>,
-    route_proofs: broadcast::Receiver<RouteProof>,
+        route_proofs: broadcast::Receiver<RouteProof>,
         discovery: broadcast::Receiver<EndpointInfo>,
     ) -> Self {
         Self {
@@ -709,8 +712,7 @@ impl NativeRuntime {
         // remain live until queue admission. Otherwise fail, never downgrade
         // to an anonymous handshake or try an unrelated fallback address.
         if pending.expected_peer.is_some()
-            && self.routes.expected_peer(&pending.endpoint, Instant::now())
-                != pending.expected_peer
+            && self.routes.expected_peer(&pending.endpoint, Instant::now()) != pending.expected_peer
         {
             self.coordinator.observe(pending.transfer, Phase::Failed)?;
             self.coordinator.owner_closed(pending.transfer)?;
