@@ -620,8 +620,7 @@ impl NativeRuntime {
         // so retain it only for successful Finished, never for a rejected,
         // cancelled or disconnected peer.
         if snapshot.direction != crate::channel::TransferType::Outbound
-            || (crate::sessions::terminal(&snapshot.state)
-                && snapshot.state != State::Finished)
+            || (crate::sessions::terminal(&snapshot.state) && snapshot.state != State::Finished)
         {
             return;
         }
