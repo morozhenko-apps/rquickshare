@@ -154,7 +154,10 @@ impl Panel {
             ("Hidden", "hidden"),
             ("Visible for one minute", "temporary"),
         ] {
-            visibility.append(Some(title), Some(&format!("panel.visibility::{target}")));
+            visibility.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.visibility::{target}")),
+            );
         }
         let navigation = gio::Menu::new();
         for (name, title) in [
@@ -162,10 +165,16 @@ impl Panel {
             ("send", "Send files…"),
             ("transfers", "History"),
         ] {
-            navigation.append(Some(title), Some(&format!("panel.{name}")));
+            navigation.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
         }
         menu.append_section(None, &navigation);
-        menu.append_section(Some("Discovery visibility"), &visibility);
+        menu.append_section(
+            Some(crate::i18n::label("Discovery visibility")),
+            &visibility,
+        );
         let secondary = gio::Menu::new();
         for (name, title) in [
             ("settings", "Settings…"),
@@ -173,7 +182,10 @@ impl Panel {
             ("hide", "Hide card"),
             ("quit", "Quit panel"),
         ] {
-            secondary.append(Some(title), Some(&format!("panel.{name}")));
+            secondary.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
         }
         menu.append_section(None, &secondary);
         let sending = gio::Menu::new();
@@ -183,7 +195,10 @@ impl Panel {
             ("send-text", "Text or link…"),
             ("send-clipboard", "Clipboard"),
         ] {
-            sending.append(Some(title), Some(&format!("panel.{name}")));
+            sending.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
         }
         self.sending.set_menu_model(Some(&sending));
         self.sending.set_parent(&self.button("quick-send"));
