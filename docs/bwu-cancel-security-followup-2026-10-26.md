@@ -206,3 +206,22 @@ not being implemented. Read its owner checkpoint before resuming. Issue comments
 [26](https://github.com/morozhenko-apps/rquickshare/issues/26#issuecomment-6422807899)
 and [8](https://github.com/morozhenko-apps/rquickshare/issues/8#issuecomment-6422799072)
 preserve the earlier intermediate checkpoint; newer readback supersedes it.
+
+## Terminal exact-source CI checkpoint (supersedes pending Tauri above)
+
+Read back all check runs for executable SHA
+`263aa3dcc0f8736c7945e5db147f6adcd0eb272f`: **all six completed SUCCESS**.
+[Preflight 40367247177](https://github.com/morozhenko-apps/rquickshare/actions/runs/40367247177)
+contains Rust format `121728174311`, frontend `121728174155`, Core Clippy
+`121728173986`, Tauri Clippy/tests `121728173910` and Core tests `121728173535`.
+[Native GTK 40367247126](https://github.com/morozhenko-apps/rquickshare/actions/runs/40367247126)
+job `121728159746` also completed SUCCESS. The earlier five-check checkpoint is
+historical; Tauri is no longer pending. Previously read Core logs establish
+871 stable +4+4 integration PASS and every new regression method individually ok.
+
+Source correction and automated gates are complete. **Overall PARTIAL** until
+verified current-binary installation and physical Pixel cancellation/retry
+acceptance; issue #26 stays OPEN. No new package installation, runtime change,
+physical result, #8 security fix or repeated test execution is claimed here.
+Documentation-only whitespace validation `git diff --check` exits 0; source
+remains unchanged from the exact CI SHA.

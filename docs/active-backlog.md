@@ -6,8 +6,9 @@ Source `263aa3dcc0f8736c7945e5db147f6adcd0eb272f` fixes the committed-migration
 local Cancel ownership/delivery defect. [Plan, exact local gates and limits](bwu-cancel-security-followup-2026-10-26.md):
 **871 stable +4+4 integration PASS**, eight race-sensitive methods separately
 once PASS; nine new methods/fifteen table cases. Strict Core Clippy, nightly
-format and workflow policy PASS. Exact-source remote Preflight/GTK terminal
-status is recorded in the implementation report. No updated package installed,
+format and workflow policy PASS. Exact-source remote Preflight `40367247177`
+and GTK `40367247126` are now **completed SUCCESS, all 6/6 checks** on `263aa3d`.
+Terminal readback is recorded in the implementation report. No updated package installed,
 no physical Cancel/BWU or Google Windows acceptance; #26/#25 remain OPEN.
 
 Owner reopened #8 and requested a compatible solution, explicitly rejecting a
