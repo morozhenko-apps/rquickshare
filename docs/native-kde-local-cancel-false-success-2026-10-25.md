@@ -1,5 +1,8 @@
 # Native receiver-initiated Cancel: protocol correctness / MODE B
 
+
+> **Real Pixel hardware acceptance and measured pre/post timeline (2026-10-25):** [consolidated field measurements](native-pixel-kde-field-measurements-2026-10-25.md). The MODE B plan below documents intended and executed source coverage; the field report is the definitive dated record for `local_cancel_flushed`, `local_cancel_peer_eof`, 394ms EOF delta, installed package digests and gates still open.
+
 Date: 2026-10-25. Priority: P0. [Issue #25](https://github.com/morozhenko-apps/rquickshare/issues/25). Related: [#23](https://github.com/morozhenko-apps/rquickshare/issues/23), [#18](https://github.com/morozhenko-apps/rquickshare/issues/18). Source baseline: `af951088` installed on Alcotester. Candidate implementation HEAD at document creation: `b00471ef`, **not installed or hardware accepted**.
 
 ## Precise user evidence and root cause
