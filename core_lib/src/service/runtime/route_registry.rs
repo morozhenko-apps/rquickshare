@@ -97,8 +97,9 @@ impl RouteRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    use super::*;
 
     fn route(host: u8) -> Route {
         Route {
@@ -129,15 +130,9 @@ mod tests {
         for (id, host) in [("a", 10), ("b", 11), ("c", 12), ("d", 13)] {
             registry.insert(id.into(), route(host));
         }
-        registry.bind_test_authenticated_route(
-            "a", one.clone(), Duration::from_millis(95), after,
-        );
-        registry.bind_test_authenticated_route(
-            "b", one, Duration::from_millis(25), after,
-        );
-        registry.bind_test_authenticated_route(
-            "c", another, Duration::from_millis(1), after,
-        );
+        registry.bind_test_authenticated_route("a", one.clone(), Duration::from_millis(95), after);
+        registry.bind_test_authenticated_route("b", one, Duration::from_millis(25), after);
+        registry.bind_test_authenticated_route("c", another, Duration::from_millis(1), after);
         // Matching labels and a faster connection cannot steal an
         // unverified route or redirect a separately authenticated peer.
         assert_eq!(registry.preferred("a", now).unwrap().0, "b");
@@ -161,7 +156,10 @@ mod tests {
         for (id, host) in [("z", 10), ("a", 11)] {
             registry.insert(id.into(), route(host));
             registry.bind_test_authenticated_route(
-                id, peer.clone(), Duration::from_millis(50), expires,
+                id,
+                peer.clone(),
+                Duration::from_millis(50),
+                expires,
             );
         }
         assert_eq!(registry.preferred("z", now).unwrap().0, "a");
