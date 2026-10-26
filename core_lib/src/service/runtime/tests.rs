@@ -610,6 +610,55 @@ async fn given_pending_backpressure_when_capacity_returns_then_same_payload_is_s
 }
 
 #[tokio::test]
+async fn given_untrusted_mdns_address_change_when_send_is_queued_or_pending_then_old_recipient_is_never_redirected(
+) {
+    for full in [false, true] {
+        let mut fixture = fixture();
+        let runtime = &mut fixture.runtime;
+        runtime.discovered(advertisement("peer")).unwrap();
+        let original = runtime.endpoints()[0].id.clone();
+        let client = runtime.connect().unwrap();
+        if full {
+            fill_transport(runtime);
+        }
+        let transfer = send(runtime, client, "route-generation");
+        if full {
+            assert!(!runtime.dispatch().unwrap());
+            assert!(runtime.pending.is_some());
+        }
+
+        // Same untrusted fullname, different socket: may be a changed network
+        // route OR a different host replaying the old advertisement.
+        let mut moved = advertisement("peer");
+        moved.ip = Some("192.0.2.99".into());
+        moved.port = Some("5678".into());
+        fixture.discovery.send(moved).unwrap();
+        runtime.step().await.unwrap();
+
+        let routes = runtime.endpoints();
+        assert_eq!(routes.len(), 1);
+        assert_ne!(routes[0].id, original);
+        assert!(!runtime.routes.contains_key(&original));
+        assert_eq!(
+            runtime.routes[&routes[0].id].addr.to_string(),
+            "192.0.2.99:5678"
+        );
+        assert_eq!(view(runtime, client, transfer).phase, Phase::Failed);
+        assert!(runtime.pending.is_none());
+
+        // Exactly zero payload jobs may be sent to the newly advertised peer
+        // on behalf of the OLD selection, including with pending backpressure.
+        let mut jobs = 0;
+        while let Ok(job) = fixture.receiver.try_recv() {
+            jobs += 1;
+            job.release();
+        }
+        assert_eq!(jobs, if full { 10 } else { 0 });
+        assert_eq!(runtime.snapshot(client).unwrap().resources.reserved_handles, 0);
+    }
+}
+
+#[tokio::test]
 async fn given_removed_endpoint_when_queued_or_pending_then_unsent_work_fails_and_releases_resources(
 ) {
     // Arrange / Act / Assert
