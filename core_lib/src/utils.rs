@@ -353,6 +353,79 @@ mod tests {
         URL_SAFE_NO_PAD.encode(payload)
     }
 
+    fn fullname(id: [u8; 4]) -> String {
+        format!("{}._FC9F5ED42C8A._tcp.local.", gen_mdns_name(id))
+    }
+
+    #[test]
+    fn given_genuine_google_mdns_instances_when_decoded_then_only_temporary_endpoint_hint_matches() {
+        for id in [*b"A1b2", *b"9876", *b"aBcD", *b"Z0Z9"] {
+            let hint = parse_mdns_endpoint_id(&fullname(id)).expect("valid instance");
+            assert_eq!(hint, UnverifiedEndpointHint(id));
+            assert_eq!(
+                format!("{hint:?}"),
+                "UnverifiedEndpointHint([redacted])"
+            );
+        }
+        // Equal display names are not evidence, and distinct short-lived IDs
+        // never become a shared verified-device key.
+        assert_ne!(
+            parse_mdns_endpoint_id(&fullname(*b"AAAA")),
+            parse_mdns_endpoint_id(&fullname(*b"BBBB"))
+        );
+        // DNS service type comparison may ignore ASCII case, but the
+        // base64 instance must remain byte-exact and case-sensitive.
+        let mixed = format!("{}._fc9f5ed42c8a._TCP.LOCAL.", gen_mdns_name(*b"Ax9Z"));
+        assert_eq!(
+            parse_mdns_endpoint_id(&mixed),
+            Some(UnverifiedEndpointHint(*b"Ax9Z"))
+        );
+    }
+
+    #[test]
+    fn given_malformed_mdns_advertiser_claims_when_decoded_then_none_can_become_a_hint() {
+        let valid = fullname(*b"AB12");
+        let instance = gen_mdns_name(*b"AB12");
+        for malformed in [
+            "".to_owned(),
+            "AB12".to_owned(),
+            "notbase64._FC9F5ED42C8A._tcp.local.".to_owned(),
+            format!("{instance}._unrelated._tcp.local."),
+            format!("{instance}._FC9F5ED42C8A._udp.local."),
+            format!("{instance}._FC9F5ED42C8A._tcp.local.evil."),
+            format!("other.{valid}"),
+            format!("{instance}=._FC9F5ED42C8A._tcp.local."),
+            format!("%{instance}._FC9F5ED42C8A._tcp.local."),
+            format!("{}._FC9F5ED42C8A._tcp.local.", gen_mdns_name(*b"A+12")),
+        ] {
+            assert!(
+                parse_mdns_endpoint_id(&malformed).is_none(),
+                "accepted invalid instance syntax"
+            );
+        }
+        for (offset, replacement) in [
+            (0, 0x22_u8),
+            (5, 0x00_u8),
+            (6, 0xFF_u8),
+            (7, 0x5F_u8),
+            (8, 0x01_u8),
+            (9, 0x01_u8),
+            (2, 0x00_u8),
+        ] {
+            let mut wire = URL_SAFE_NO_PAD.decode(&instance).unwrap();
+            wire[offset] = replacement;
+            let wrong = format!("{}._FC9F5ED42C8A._tcp.local.", URL_SAFE_NO_PAD.encode(wire));
+            assert!(parse_mdns_endpoint_id(&wrong).is_none());
+        }
+        for length in [0_usize, 1, 4, 9, 11, 32] {
+            let wrong = format!(
+                "{}._FC9F5ED42C8A._tcp.local.",
+                URL_SAFE_NO_PAD.encode(vec![0x23; length])
+            );
+            assert!(parse_mdns_endpoint_id(&wrong).is_none());
+        }
+    }
+
     #[test]
     fn test_gen_and_parse_mdns_info() {
         let device_name = "a_device_name";
