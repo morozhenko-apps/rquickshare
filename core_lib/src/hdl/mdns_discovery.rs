@@ -69,6 +69,21 @@ fn withdraw_cached_endpoints(
     }
 }
 
+// This is a diagnostic for *untrusted advertised* endpoint IDs, not an
+// authenticated device or a route selection policy. Keep every route alive.
+fn unverified_hint_collision(
+    cache: &HashMap<String, EndpointInfo>,
+    fullname: &str,
+) -> bool {
+    let Some(hint) = crate::utils::parse_mdns_endpoint_id(fullname) else {
+        return false;
+    };
+    cache.keys().any(|previous| {
+        previous != fullname
+            && crate::utils::parse_mdns_endpoint_id(previous) == Some(hint)
+    })
+}
+
 pub struct MDnsDiscovery {
     daemon: ServiceDaemon,
     sender: broadcast::Sender<EndpointInfo>,
@@ -239,6 +254,11 @@ where
                     pending.remove(&fullname);
                     continue;
                 };
+                if unverified_hint_collision(cache, &fullname) {
+                    debug!(
+                        "MDnsDiscovery: untrusted endpoint hints overlap; preserving independent routes"
+                    );
+                }
                 if pending
                     .get(&fullname)
                     .is_some_and(|entry| entry.candidate == candidate)
@@ -307,6 +327,37 @@ where
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    #[test]
+    fn given_same_ephemeral_hint_in_two_services_when_discovered_then_routes_remain_independent() {
+        use crate::utils::gen_mdns_name;
+        let one = format!(
+            "{}._FC9F5ED42C8A._tcp.local.",
+            gen_mdns_name(*b"AB12")
+        );
+        let same = one.clone();
+        let other = format!(
+            "{}._FC9F5ED42C8A._tcp.local.",
+            gen_mdns_name(*b"CD34")
+        );
+        let mut cache = HashMap::<String, EndpointInfo>::new();
+        assert!(!unverified_hint_collision(&cache, &one));
+        cache.insert(one.clone(), EndpointInfo::default());
+        assert!(!unverified_hint_collision(&cache, &same));
+        assert!(!unverified_hint_collision(&cache, &other));
+        // Different fullnames can carry the same untrusted endpoint hint.
+        // The diagnostic does not remove either routing key from the cache.
+        let alias = format!("{}._fc9f5ed42c8a._TCP.LOCAL.", gen_mdns_name(*b"AB12"));
+        assert_ne!(alias, one);
+        assert!(unverified_hint_collision(&cache, &alias));
+        cache.insert(alias.clone(), EndpointInfo::default());
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.contains_key(&one), true);
+        assert_eq!(cache.contains_key(&alias), true);
+        assert!(!unverified_hint_collision(&cache, "not-a-nearby-service"));
+        cache.remove(&one);
+        assert!(!unverified_hint_collision(&cache, &alias));
+    }
 
     fn sample_service(name: &str, encoded: &str) -> mdns_sd::ServiceInfo {
         mdns_sd::ServiceInfo::new(
