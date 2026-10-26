@@ -387,6 +387,40 @@ async fn given_real_managed_session_proofs_when_received_then_runtime_binds_only
 }
 
 #[tokio::test]
+async fn given_short_verified_transfer_closes_before_runtime_wakeup_then_prior_successful_proof_is_still_owned(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let id = runtime.endpoints()[0].id.clone();
+    let client = runtime.connect().unwrap();
+    let selected = runtime.create_selection(client, selection()).unwrap();
+    runtime
+        .send_selection(client, selected, &id, "fast-verified-terminal")
+        .unwrap();
+    assert!(runtime.dispatch().unwrap());
+    let job = fx.receiver.recv().await.unwrap();
+    let credential = VerifiedPeerCredential::test_fixture([17; 32]);
+    job.session.as_ref().unwrap().record_authenticated_route(
+        credential.clone(),
+        Duration::from_millis(8),
+    );
+    finish(job, State::Finished);
+    // Already-emitted proof and terminal session events are both buffered.
+    // An independent channel must not lose the authenticated observation
+    // merely because terminal cleanup is processed first.
+    runtime.step().await.unwrap();
+    assert_eq!(
+        runtime.routes.expected_peer(&id, Instant::now()),
+        Some(credential)
+    );
+}
+
+#[tokio::test]
 async fn given_route_address_rotates_before_proof_arrives_then_old_session_cannot_certify_replacement(
 ) {
     use std::time::{Duration, Instant};
