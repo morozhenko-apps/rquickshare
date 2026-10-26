@@ -426,13 +426,9 @@ async fn given_proof_then_failed_terminal_before_owner_wakeup_when_consumed_then
 
     use crate::peer_authentication::VerifiedPeerCredential;
 
-    for (index, terminal) in [
-        State::Rejected,
-        State::Cancelled,
-        State::Disconnected,
-    ]
-    .into_iter()
-    .enumerate()
+    for (index, terminal) in [State::Rejected, State::Cancelled, State::Disconnected]
+        .into_iter()
+        .enumerate()
     {
         let mut fx = fixture();
         let runtime = &mut fx.runtime;
@@ -453,7 +449,10 @@ async fn given_proof_then_failed_terminal_before_owner_wakeup_when_consumed_then
         // Auth and terminal events may both be queued. A failed connection
         // cannot confer a trusted alias on any other discovery route.
         runtime.step().await.unwrap();
-        assert!(runtime.routes.expected_peer(&route, Instant::now()).is_none());
+        assert!(runtime
+            .routes
+            .expected_peer(&route, Instant::now())
+            .is_none());
     }
 }
 
