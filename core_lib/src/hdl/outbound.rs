@@ -591,6 +591,8 @@ pub struct OutboundRequest {
     endpoint_id: [u8; 4],
     socket: TcpStream,
     frame_header: super::frame_header::FrameHeader,
+    bulk_body: super::frame_body::FrameBody,
+    bulk_writes: Option<std::collections::VecDeque<Vec<u8>>>,
     pub state: InnerState,
     sender: Sender<ChannelMessage>,
     receiver: Option<Receiver<ChannelMessage>>,
@@ -677,6 +679,8 @@ impl OutboundRequest {
             endpoint_id,
             socket,
             frame_header: super::frame_header::FrameHeader::default(),
+            bulk_body: super::frame_body::FrameBody::default(),
+            bulk_writes: None,
             state: InnerState {
                 id,
                 server_seq: 0,
@@ -1157,8 +1161,20 @@ impl OutboundRequest {
                 }
             }
             location_nearby_connections::v1_frame::FrameType::KeepAlive => {
-                trace!("Sending keepalive");
-                self.send_keepalive(true).await?;
+                let keepalive = v1_frame
+                    .keep_alive
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Missing keepalive body"))?;
+                if !keepalive.ack() {
+                    self.send_keepalive(true).await?;
+                }
+            }
+            location_nearby_connections::v1_frame::FrameType::Disconnection => {
+                if !crate::sessions::terminal(&self.state.state) {
+                    self.update_state(|state| state.state = State::Disconnected, true)
+                        .await;
+                }
+                return Err(anyhow!(crate::errors::AppError::NotAnError));
             }
             _ => {
                 error!("Unhandled offline frame encrypted: {:?}", offline);
@@ -1505,10 +1521,9 @@ impl OutboundRequest {
                             )
                         };
 
-                        let sending_buffer = buffer[..bytes_read].to_vec();
                         info!(
                             "> File ready: {bytes_read} bytes && {} && left to send: {} with current offset: {}",
-                            sending_buffer.len(),
+                            bytes_read,
                             curr_state.total_size - curr_state.bytes_transferred,
 							curr_state.bytes_transferred
                         );
@@ -1911,10 +1926,81 @@ impl OutboundRequest {
         prefixed_length.extend_from_slice(&length_bytes);
         prefixed_length.extend_from_slice(&data);
 
+        if let Some(queued) = self.bulk_writes.as_mut() {
+            // A nested control response cannot interrupt a partially written
+            // file frame. Its crypto sequence follows that already owned frame.
+            let bytes = queued.iter().map(Vec::len).sum::<usize>();
+            if queued.len() >= 32
+                || bytes.saturating_add(prefixed_length.len()) > SANE_FRAME_LENGTH as usize
+            {
+                return Err(anyhow!("Outbound control queue exceeds safety limit"));
+            }
+            queued.push_back(prefixed_length);
+            return Ok(());
+        }
+        if self.state.state == State::SendingFiles {
+            self.bulk_writes = Some(std::collections::VecDeque::new());
+            let result = Box::pin(self.send_duplex_frame(prefixed_length)).await;
+            self.bulk_writes = None;
+            return result;
+        }
         self.socket.write_all(&prefixed_length).await?;
         self.socket.flush().await?;
 
         Ok(())
+    }
+
+    async fn send_duplex_frame(&mut self, mut frame: Vec<u8>) -> Result<(), anyhow::Error> {
+        enum Progress {
+            Written(std::io::Result<usize>),
+            Received(std::io::Result<Vec<u8>>),
+            Control(Result<bool, tokio::sync::broadcast::error::RecvError>),
+        }
+        loop {
+            let mut offset = 0;
+            while offset < frame.len() {
+                let progress = {
+                    let (mut read, mut write) = self.socket.split();
+                    tokio::select! {
+                        biased;
+                        control = crate::sessions::legacy_message(&mut self.receiver), if self.receiver.is_some() => Progress::Control(control.map(|message| is_cancel_request(&message, &self.state.id))),
+                        input = self.bulk_body.read(&mut self.frame_header, &mut read) => Progress::Received(input),
+                        count = write.write(&frame[offset..]) => Progress::Written(count),
+                    }
+                };
+                match progress {
+                    Progress::Written(count) => {
+                        let count = count?;
+                        if count == 0 {
+                            return Err(std::io::Error::from(std::io::ErrorKind::WriteZero).into());
+                        }
+                        offset += count;
+                    }
+                    Progress::Received(bytes) => {
+                        let message = SecureMessage::decode(bytes?.as_slice())?;
+                        // Indirection breaks the async call cycle: processing a
+                        // control may queue a response through send_frame.
+                        Box::pin(self.decrypt_and_process_secure_message(&message)).await?;
+                    }
+                    Progress::Control(Ok(cancelled)) => {
+                        if cancelled {
+                            self.update_state(|state| state.state = State::Cancelled, true)
+                                .await;
+                            return Err(anyhow!(crate::errors::AppError::NotAnError));
+                        }
+                    }
+                    Progress::Control(Err(error)) => return Err(error.into()),
+                }
+            }
+            match self
+                .bulk_writes
+                .as_mut()
+                .and_then(|queue| queue.pop_front())
+            {
+                Some(next) => frame = next,
+                None => return Ok(()),
+            }
+        }
     }
 
     async fn get_server_seq_inc(&mut self) -> i32 {
@@ -3469,3 +3555,9 @@ mod security_tests {
         assert!(!is_cancel_request(&accept, "transfer-1"));
     }
 }
+
+#[cfg(test)]
+mod keepalive_tests;
+
+#[cfg(test)]
+mod bulk_tests;

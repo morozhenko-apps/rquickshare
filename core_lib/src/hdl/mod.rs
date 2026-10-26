@@ -32,6 +32,7 @@ mod gatt;
 mod receiver_header;
 #[cfg(all(feature = "experimental", target_os = "linux"))]
 pub use gatt::*;
+mod frame_body;
 mod frame_header;
 mod inbound;
 pub use inbound::*;
