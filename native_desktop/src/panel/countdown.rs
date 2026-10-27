@@ -36,8 +36,8 @@ impl Panel {
         spinner.start();
         let seconds = remaining_seconds(&model, now);
         let caption = match seconds {
-            Some(seconds) if seconds > 0 => i18n::visibility_remaining(seconds),
-            _ => i18n::label("Updating visibility…").to_string(),
+            Some(seconds) if seconds > 0 => crate::i18n::visibility_remaining(seconds),
+            _ => crate::i18n::label("Updating visibility…").to_string(),
         };
         self.text("receive-countdown", &caption);
         seconds.is_some_and(|seconds| seconds > 0)
