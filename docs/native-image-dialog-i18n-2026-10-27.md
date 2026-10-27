@@ -39,3 +39,11 @@ Before executable changes: NOT IMPLEMENTED, NOT TESTED; #17 remains open.
 - Static source audit PASS: 19 ×10 catalog rows, all key definitions, resource literals `PNG` / `32 MiB` / `64` present, explicit capture callback, PNG MIME whitelist and cancellation path preserved. **This is not a Rust build/test or native-speaker proof.**
 - Exact-source Preflight `40511038788` and Native GTK `40511038773` for this executable SHA **IN PROGRESS** at checkpoint. Must read terminal job results; no 6/6 green claimed.
 - Human acceptance remains: all 20 language semantics, Arabic RTL and font metrics, long captions, unchanged privacy statement and physical desktop/Pixel. No master, release, tag, R2 or installed binary was touched.
+
+## Formatter diagnosis and final source gate (2026-10-27)
+
+Source `b849003e` Native GTK `40511038773` completed **FAIL**, with exact `rustfmt` suggestions for three long assertion invocations in `i18n/image.rs` and one `set_text` call in `panel/image.rs`. No native app compilation or test failure was observed; the formatter stopped the job first. Plausible contributing causes considered: long translated assertion expressions, GTK chained-call layout, inconsistent formatter/toolchain settings, whitespace/line endings, stale runner checkout, network/dependency errors and separate source-level compilation issues. Exact changed-line diff supports the first two and falsifies the others for this failure; no temporary runtime logging is warranted for deterministic source formatting.
+
+Code-only follow-up `9e6251d340dd0a40a5efb09eb7db0979d75e8aff` adopts those four exact formatting changes without changing a translation or runtime behavior. Final source-exact Native GTK `40511449070` and Preflight `40511449089` were **IN PROGRESS / QUEUED** on last read. No final CI success claimed yet. Previous dynamic transfer formatter remains separately confirmed SUCCESS on `b8064a09`.
+
+The next #17 area is native Settings. The source spans 1,235 lines with at least 40 user-visible static/dynamic message candidates and validation/save/login/recovery states, so it needs a separate risk inventory and catalog rather than treating untrusted values or error codes as static keys. No settings behavior has been changed in this slice.

@@ -1,3 +1,7 @@
+## 2026-10-27 #17 native image formatter follow-up
+
+Exact Native GTK `40511038773` on `b849003e` failed in rustfmt-only new test/status layout. Follow-up `9e6251d3` exactly applies four suggested formatting changes without behavior changes; new exact-source Native GTK `40511449070` and Preflight `40511449089` **PENDING**, not yet PASS. [Source diagnosis and gate](native-image-dialog-i18n-2026-10-27.md). Next planned #17 surface: settings validation, destructive recovery and login state captions (separate bounded implementation).
+
 ## 2026-10-27 #17 native image capture dialog localized (20 locales)
 
 Production `b849003e` includes 10 new static image-capture safety labels ×19 additional translated locale rows; existing Cancel/queue-failure messages reused. Static audit PASS; actual native image copy/prepare/epoch/authorization logic is unchanged. Frame dimensions and byte count remain exact with `px`/`B`. **Source-exact Preflight 40511038788 and Native GTK 40511038773 IN PROGRESS**, final result must be read. [Image locale design and negative tests](native-image-dialog-i18n-2026-10-27.md). Image translation is a bounded partial #17 stage, not 20-language holistic UI/RTL signoff.
