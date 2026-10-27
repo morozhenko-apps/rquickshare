@@ -39,3 +39,19 @@ Confirm final image CI before starting settings code, then add first small stati
 - Independent source audit **PASS** for 19×25 values, all 25 GUI key usages, 28 static bindings, existing branch conditions and authorization functions present. This does **not** establish compiler output, save/wire correctness in a live daemon, translator review or KDE UI fit.
 - Exact-source Native GTK run `40513766561` and Preflight `40513766961` on `51b416e6` were **IN PROGRESS** at checkpoint; no success claim until terminal jobs are read. No additional Mode B or release gate.
 - Remaining staged work: privacy explanatory text, full `status(SettingsView)` and `failure(ControllerError)` semantic messages, `login_failure`, recovery and folder-specific warnings, dynamic receive-path/device-name bidi, Arabic RTL/long labels and 20-language human review. #17 remains OPEN.
+
+## Next source slice: exact settings state/error branch inventory
+
+Source-reviewed after static chrome implementation, on executable `51b416e6`; **planning only**. The native settings source contains three separate pure mapping functions, which must remain the single branch-selection source and return literal static English keys *before* locale lookup:
+
+| Existing function | Distinct source states | Non-overridable outcome constraints |
+| --- | ---: | --- |
+| `status(&SettingsView)` | 15 | Preserve ordered precedence: unavailable; errors 1/2/3/4 with name-status branch; invalid visibility; imported/default sources; stopped service; name discovery pending/unknown; live revision mismatch; restart required; **only final success** `Saved and applied.` |
+| `failure(ControllerError)` | 10 | Replay/conflict, indeterminate, directory denial, recovery backup required, backup capacity, unacknowledged save, pending operation, busy, connection loss and rejected/unknown all remain distinct from success |
+| `login_failure(login::Error)` | 7 | Unsupported desktop service, denied, conflict, uncertain, busy, disconnected/unavailable and protocol error never turn into successful autostart confirmation |
+
+The pure mapping functions and their existing unlocalized Rust unit tests are **not changed** by translation. Caller-level `self.status.set_text(status(&view))`, `self.status.set_text(failure(error))`, `self.login_status.set_text(login_failure(error))` and the display `refresh_login` path should only wrap the already selected static source using `i18n::label`, preserving the original branch predicate, pending receipt and default message. Status strings that can appear in `changed`, save validation, Restart/Retry completion and choose-folder operations require a separate exact candidate list; do not translate an arbitrary `view.device_name`, `view.directory_display`, `request` token, `pin` or filename via message lookup.
+
+Before touching these callers, build a 32-key internal `i18n/settings_state.rs` catalog with 19 non-English rows; assert every source maps exactly once, `Saved and applied.` has only one intended success state, every locale keeps conflict/uncertain/restore distinct and 20-language exact fallback. Reuse existing `Sharing settings are unavailable.` where it is already an identical source key. Wording must not imply save completion for indeterminate result, that a backup has already been made, or a service restart without an acknowledged action. Do not modify underlying `confirmation_applied`, `selected_visibility`, `parse_port` or the settings controller.
+
+First static-chrome result and its source-exact CI are tracked above. This future status/error slice is **NOT IMPLEMENTED** and has no CI evidence.
