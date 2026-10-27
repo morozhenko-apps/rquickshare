@@ -678,20 +678,20 @@ GNU General Public License v3.0.",
         self.login_reload
             .set_visible(view.error.is_some() || view.enabled.is_none());
         self.login_reload.set_sensitive(ready);
-        self.login_status
-            .set_text(if self.login_busy.get() || view.busy {
-                "Waiting for login settings…"
-            } else if let Some(error) = view.error {
-                login_failure(error)
-            } else if self.login_dirty.get() {
-                "Sign-in choice will apply after OK."
-            } else if view.enabled == Some(true) {
-                "Daemon and tray will start at sign-in; the card stays hidden."
-            } else if view.enabled == Some(false) {
-                "Login start is off."
-            } else {
-                "Login settings are unavailable."
-            });
+        let caption = if self.login_busy.get() || view.busy {
+            "Waiting for login settings…"
+        } else if let Some(error) = view.error {
+            login_failure(error)
+        } else if self.login_dirty.get() {
+            "Sign-in choice will apply after OK."
+        } else if view.enabled == Some(true) {
+            "Daemon and tray will start at sign-in; the card stays hidden."
+        } else if view.enabled == Some(false) {
+            "Login start is off."
+        } else {
+            "Login settings are unavailable."
+        };
+        self.login_status.set_text(crate::i18n::label(caption));
     }
     fn login_action(self: &Rc<Self>, apply: bool) {
         self.refresh_login();
@@ -722,7 +722,7 @@ GNU General Public License v3.0.",
             Err(error) => {
                 self.confirming.set(false);
                 self.login_dirty.set(true);
-                self.login_status.set_text(login_failure(error));
+                self.login_status.set_text(crate::i18n::label(login_failure(error)));
                 self.refresh();
                 return;
             }
@@ -741,7 +741,7 @@ GNU General Public License v3.0.",
                     editor.refresh_login();
                     if let Err(error) = result {
                         editor.confirming.set(false);
-                        editor.login_status.set_text(login_failure(error));
+                        editor.login_status.set_text(crate::i18n::label(login_failure(error)));
                         editor.status.set_text("Sign-in change was not confirmed. Any acknowledged sharing settings remain saved.");
                     } else if editor.confirming.get() {
                         editor.finish_confirmation();
@@ -821,7 +821,7 @@ GNU General Public License v3.0.",
             Ok(completion) => completion,
             Err(error) => {
                 self.confirming.set(false);
-                self.status.set_text(failure(error));
+                self.status.set_text(crate::i18n::label(failure(error)));
                 self.refresh();
                 return;
             }
@@ -845,7 +845,7 @@ GNU General Public License v3.0.",
                     },
                     Ok(_) if matches!(operation, Operation::Restart) => editor.status.set_text("Sharing restart requested. Retry the connection from the card to read its state."),
                     Ok(_) => { editor.confirming.set(false); editor.status.set_text("Settings acknowledgement was incomplete. Reload before making another edit."); },
-                    Err(error) => { editor.confirming.set(false); editor.status.set_text(failure(error)); },
+                    Err(error) => { editor.confirming.set(false); editor.status.set_text(crate::i18n::label(failure(error))); },
                 }
                 editor.refresh();
             }

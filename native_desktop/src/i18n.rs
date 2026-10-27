@@ -8,6 +8,7 @@ mod history;
 mod image;
 mod settings;
 mod settings_state;
+mod settings_errors;
 
 const MENU_KEYS: [&str; 17] = [
     "Visible",
@@ -593,6 +594,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
     if let Some(value) = settings_state::translated(locale, source) {
         return value;
     }
+    if let Some(value) = settings_errors::translated(locale, source) {
+        return value;
+    }
     if let Some(index) = COMPOSE_KEYS.iter().position(|key| *key == source) {
         return translated_compose(locale)[index];
     }
@@ -1036,6 +1040,16 @@ mod tests {
                 assert!(!history::KEYS.contains(&source));
                 assert!(!image::KEYS.contains(&source));
                 assert!(!settings::KEYS.contains(&source));
+            }
+            for source in settings_errors::KEYS {
+                assert!(!translated(locale, source).is_empty());
+                assert!(!MENU_KEYS.contains(&source));
+                assert!(!REVIEW_KEYS.contains(&source));
+                assert!(!COMPOSE_KEYS.contains(&source));
+                assert!(!history::KEYS.contains(&source));
+                assert!(!image::KEYS.contains(&source));
+                assert!(!settings::KEYS.contains(&source));
+                assert!(!settings_state::KEYS.contains(&source));
             }
         }
     }
