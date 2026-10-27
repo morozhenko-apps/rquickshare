@@ -3,6 +3,8 @@
 //! semantics, the daemon protocol, or the user's persisted settings.
 //! This is the first menu slice of #17, NOT completion of 20-locale GTK coverage.
 
+mod history;
+
 const MENU_KEYS: [&str; 17] = [
     "Visible",
     "Hidden",
@@ -559,6 +561,9 @@ fn translated_compose(locale: &str) -> &'static [&'static str; 11] {
 }
 
 fn translated(locale: &str, source: &'static str) -> &'static str {
+    if let Some(value) = history::translated(locale, source) {
+        return value;
+    }
     if let Some(index) = COMPOSE_KEYS.iter().position(|key| *key == source) {
         return translated_compose(locale)[index];
     }
@@ -972,6 +977,12 @@ mod tests {
             }
             for source in REVIEW_KEYS {
                 assert!(!translated(locale, source).is_empty());
+            }
+            for source in history::KEYS {
+                assert!(!translated(locale, source).is_empty());
+                assert!(!MENU_KEYS.contains(&source));
+                assert!(!REVIEW_KEYS.contains(&source));
+                assert!(!COMPOSE_KEYS.contains(&source));
             }
         }
     }

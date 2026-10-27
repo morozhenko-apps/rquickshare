@@ -54,6 +54,18 @@ pub(super) fn timestamp(timestamp: Option<u64>) -> gtk::Label {
     field(&timestamp.map(date).unwrap_or_default())
 }
 
+fn journal_status_source(status: &str) -> &'static str {
+    match status {
+        "finished" => "Completed",
+        "rejected" => "Declined",
+        "cancelled" => "Cancelled",
+        "failed" => "Failed",
+        "disconnected" => "Disconnected",
+        "interrupted" => "Interrupted",
+        _ => "In progress",
+    }
+}
+
 pub(super) struct Window {
     window: gtk::Window,
     history: gtk::Box,
@@ -66,7 +78,7 @@ pub(super) struct Window {
 impl Window {
     pub(super) fn new(panel: &Rc<Panel>) -> Rc<Self> {
         let window = gtk::Window::builder()
-            .title("History")
+            .title(crate::i18n::label("History"))
             .default_width(860)
             .default_height(560)
             .application(&panel.window.application().expect("application owner"))
@@ -81,10 +93,10 @@ impl Window {
         let footer = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         footer.set_widget_name("history-footer");
         footer.set_halign(gtk::Align::End);
-        let refresh = gtk::Button::with_label("Refresh");
+        let refresh = gtk::Button::with_label(crate::i18n::label("Refresh"));
         refresh.set_action_name(Some("panel.journal-refresh"));
         footer.append(&refresh);
-        let clear = gtk::Button::with_label("Clear completed");
+        let clear = gtk::Button::with_label(crate::i18n::label("Clear completed"));
         clear.set_action_name(Some("panel.journal-clear"));
         footer.append(&clear);
         let notice = label("");
@@ -146,19 +158,28 @@ impl Window {
                 .is_some_and(|v| !v.transfers.is_empty())
                 || journal.is_none_or(|v| v.records.is_empty()),
         );
-        self.notice.set_text(if model.state.disconnected {"Service disconnected. Live states may be stale; reconnect before controlling a transfer."}else{match error {
-            0=>"",
-            1=>"History could not be saved. Sharing is still available. Refresh to retry, or reset history while preserving a recovery copy.",
-            2=>"Loading history…",3=>"Saved history is unavailable with this service version.",_=>"History could not be read safely. Refresh to retry; sharing remains available.",
-        }});
+        let notice = if model.state.disconnected {
+            "Service disconnected. Live states may be stale; reconnect before controlling a transfer."
+        } else {
+            match error {
+                0 => "",
+                1 => "History could not be saved. Sharing is still available. Refresh to retry, or reset history while preserving a recovery copy.",
+                2 => "Loading history…",
+                3 => "Saved history is unavailable with this service version.",
+                _ => "History could not be read safely. Refresh to retry; sharing remains available.",
+            }
+        };
+        self.notice.set_text(crate::i18n::label(notice));
         self.notice
             .set_visible(model.state.disconnected || error != 0);
-        self.clear.set_tooltip_text(Some("Completed metadata is kept for up to 30 days and 1000 operations. File and message contents are not stored."));
-        self.clear.set_label(if error == 1 {
+        self.clear.set_tooltip_text(Some(crate::i18n::label(
+            "Completed metadata is kept for up to 30 days and 1000 operations. File and message contents are not stored.",
+        )));
+        self.clear.set_label(crate::i18n::label(if error == 1 {
             "Reset history"
         } else {
             "Clear completed"
-        });
+        }));
         self.clear.set_sensitive(
             !model.waiting
                 && !model.state.disconnected
@@ -191,7 +212,7 @@ impl Window {
                 .filter(|r| !ids.contains(&r.id))
             {
                 let peer = label(if record.peer.is_empty() {
-                    "Unnamed device"
+                    crate::i18n::label("Unnamed device")
                 } else {
                     &record.peer
                 });
@@ -204,17 +225,13 @@ impl Window {
                 icon.set_width_request(32);
                 peer_cell.append(&icon);
                 peer_cell.append(&peer);
-                let direction = field(if record.inbound { "Receive" } else { "Send" });
+                let direction = field(crate::i18n::label(if record.inbound {
+                    "Receive"
+                } else {
+                    "Send"
+                }));
                 let content = field(&format!("{} · {} bytes", record.kind, record.total));
-                let status = label(match record.status.as_str() {
-                    "finished" => "Completed",
-                    "rejected" => "Declined",
-                    "cancelled" => "Cancelled",
-                    "failed" => "Failed",
-                    "disconnected" => "Disconnected",
-                    "interrupted" => "Interrupted",
-                    _ => "In progress",
-                });
+                let status = label(crate::i18n::label(journal_status_source(&record.status)));
                 status.set_wrap(false);
                 let date = timestamp(Some(record.updated));
                 let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -226,7 +243,9 @@ impl Window {
                     date.upcast_ref(),
                     actions.upcast_ref(),
                 ]);
-                row.set_tooltip_text(Some("Metadata only. Content review and file actions require the original live transfer capability."));
+                row.set_tooltip_text(Some(crate::i18n::label(
+                    "Metadata only. Content review and file actions require the original live transfer capability.",
+                )));
                 self.history.append(&row);
             }
         }
@@ -243,6 +262,25 @@ impl Panel {
             window.present();
             window.render(&self.model.borrow());
         }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn journal_status_source_never_promotes_unknown_or_failed_history_to_success() {
+    assert_eq!(journal_status_source("finished"), "Completed");
+    for (code, expected) in [
+        ("rejected", "Declined"),
+        ("cancelled", "Cancelled"),
+        ("failed", "Failed"),
+        ("disconnected", "Disconnected"),
+        ("interrupted", "Interrupted"),
+        ("unknown", "In progress"),
+        ("", "In progress"),
+        ("Finished", "In progress"),
+    ] {
+        assert_eq!(journal_status_source(code), expected);
+        assert_ne!(journal_status_source(code), "Completed");
     }
 }
 
