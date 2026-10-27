@@ -1,3 +1,7 @@
+## 2026-10-27 #17 transfer row locale formatter correction
+
+Native transfer-row locale code `3fceee03` initially Native GTK `40573609686` FAIL in rustfmt-only (five exact diffs; tests never ran), corrected in formatting-only executable source `1a422353`. Final source-exact Native GTK `40574150162` and Preflight `40574149980` **PENDING**, not green. [Issue #17 source and CI evidence](native-transfer-rows-i18n-2026-10-27.md). 15 new row keys, 285 draft translations, display-only bidi-safe completed filenames; controls/peer trust unchanged. #8 and #16 remain open as agreed; release and Mode B not started.
+
 ## 2026-10-27 #17 transfer rows source slice (consent and bidi-safe files)
 
 Code `3fceee03` adds **15 new UI labels ×19 additional locales = 285 draft translations** for transfer-row content, PIN-review accessible tooltip, incoming/advertised status and saved-file actions. Untrusted completed filename text is now displayed through existing FSI/PDI isolate; original file/capability unchanged. Sender-specific consent, file metadata and cancel/reveal controls remain unchanged. Independent structural source audit PASS; **Preflight `40573609635` and Native GTK `40573609686` running**, not yet accepted. [Source plan/test coverage/rollback](native-transfer-rows-i18n-2026-10-27.md). #17 OPEN.
