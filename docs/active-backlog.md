@@ -1,3 +1,7 @@
+## 2026-10-27 #17 Native card locale GTK formatter diagnosis
+
+Source `35ab8ac2`: [Native GTK 40597510638](https://github.com/morozhenko-apps/rquickshare/actions/runs/40597510638) **FAILED before Clippy/widget tests** on exactly one nightly rustfmt layout in Russian zero-complete-files test assertion (`Some(...)`), not a demonstrated production regression. Narrow formatting-only source correction prepared, not yet committed at this checkpoint to preserve running Preflight `40597510685` (four jobs SUCCESS, Desktop Rust tests IN PROGRESS). Current status **NOT accepted**. Do not count translated source code or an older green run as release readiness.
+
 ## 2026-10-27 #17 client errors green; consent and partial-file card captions source
 
 Client error `2badb6c5` exact [Native GTK 40596891097](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891097) and [Preflight 40596891115](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891115) terminal **SUCCESS** (12 keys, 228 draft translations, unchanged ClientError classification). Human/device gates still open.
