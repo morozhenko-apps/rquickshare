@@ -137,14 +137,14 @@ fn login_failure(error: crate::login::Error) -> &'static str {
 impl Editor {
     pub fn open(panel: &Rc<Panel>) {
         let window = gtk::Window::builder()
-            .title("rQuickShare Settings")
+            .title(crate::i18n::label("rQuickShare Settings"))
             .transient_for(&panel.window)
             .application(&panel.window.application().unwrap())
             .default_width(760)
             .resizable(true)
             .build();
         let content = gtk::Box::new(gtk::Orientation::Vertical, 10);
-        let about = gtk::Button::with_label("About rQuickShare");
+        let about = gtk::Button::with_label(crate::i18n::label("About rQuickShare"));
         about.set_halign(gtk::Align::Start);
         let weak = Rc::downgrade(panel);
         about.connect_clicked(move |_| {
@@ -165,45 +165,45 @@ impl Editor {
             panel: Rc::downgrade(panel),
             base: RefCell::new(None),
             visibility: gtk::DropDown::from_strings(&[
-                "Select visibility…",
-                "Visible",
-                "Hidden",
-                "Visible for one minute",
+                crate::i18n::label("Select visibility…"),
+                crate::i18n::label("Visible"),
+                crate::i18n::label("Hidden"),
+                crate::i18n::label("Visible for one minute"),
             ]),
             name: gtk::Entry::builder()
-                .placeholder_text("Automatic computer name")
+                .placeholder_text(crate::i18n::label("Automatic computer name"))
                 .build(),
             name_hint: label(
                 "Leave empty to use the computer name. OK applies changes to new connections.",
             ),
             port: gtk::Entry::builder()
-                .placeholder_text("Automatic")
+                .placeholder_text(crate::i18n::label("Automatic"))
                 .input_purpose(gtk::InputPurpose::Digits)
                 .build(),
-            directory: label("Connect to read the receive folder"),
+            directory: label(crate::i18n::label("Connect to read the receive folder")),
             directory_intent: Cell::new(0),
             file: RefCell::new(None),
-            recover: gtk::CheckButton::with_label("Back up and replace damaged settings"),
+            recover: gtk::CheckButton::with_label(crate::i18n::label("Back up and replace damaged settings")),
             status: label("Sharing settings are unavailable."),
-            save: gtk::Button::with_label("OK"),
-            cancel: gtk::Button::with_label("Cancel"),
+            save: gtk::Button::with_label(crate::i18n::label("OK")),
+            cancel: gtk::Button::with_label(crate::i18n::label("Cancel")),
             window: window.clone(),
             sections: pages.clone(),
             confirming: Cell::new(false),
-            reload: gtk::Button::with_label("Reload saved values"),
-            retry: gtk::Button::with_label("Retry pending save"),
-            restart: gtk::Button::with_label("Restart sharing"),
-            choose: gtk::Button::with_label("Choose folder…"),
-            default: gtk::Button::with_label("Use default"),
+            reload: gtk::Button::with_label(crate::i18n::label("Reload saved values")),
+            retry: gtk::Button::with_label(crate::i18n::label("Retry pending save")),
+            restart: gtk::Button::with_label(crate::i18n::label("Restart sharing")),
+            choose: gtk::Button::with_label(crate::i18n::label("Choose folder…")),
+            default: gtk::Button::with_label(crate::i18n::label("Use default")),
             dirty: Cell::new(false),
             loading: Cell::new(false),
             busy: Cell::new(false),
             closed: Cell::new(false),
             task: RefCell::new(None),
             dialog: RefCell::new(None),
-            login: gtk::CheckButton::with_label("Start at sign-in"),
-            login_apply: gtk::Button::with_label("Apply login start"),
-            login_reload: gtk::Button::with_label("Reload login state"),
+            login: gtk::CheckButton::with_label(crate::i18n::label("Start at sign-in")),
+            login_apply: gtk::Button::with_label(crate::i18n::label("Apply login start")),
+            login_reload: gtk::Button::with_label(crate::i18n::label("Reload login state")),
             login_status: label("Login settings are unavailable."),
             login_dirty: Cell::new(false),
             login_loading: Cell::new(false),
@@ -250,32 +250,32 @@ impl Editor {
             column.append(&row);
         };
         let general = section();
-        field(&general, "Device name", editor.name.upcast_ref());
+        field(&general, crate::i18n::label("Device name"), editor.name.upcast_ref());
         general.append(&editor.name_hint);
         general.append(&editor.login);
         general.append(&label(
             "Starts sharing and the tray at sign-in, with the card hidden.",
         ));
         general.append(&editor.login_status);
-        pages.add_titled(&general, Some("general"), "General");
+        pages.add_titled(&general, Some("general"), crate::i18n::label("General"));
         let receiving = section();
-        field(&receiving, "Visibility", editor.visibility.upcast_ref());
-        field(&receiving, "Receive folder", editor.directory.upcast_ref());
+        field(&receiving, crate::i18n::label("Visibility"), editor.visibility.upcast_ref());
+        field(&receiving, crate::i18n::label("Receive folder"), editor.directory.upcast_ref());
         let folder = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         folder.append(&editor.choose);
         folder.append(&editor.default);
         receiving.append(&folder);
         receiving.append(&label("Each incoming transfer still requires your confirmation. Folder changes affect new requests."));
-        pages.add_titled(&receiving, Some("receiving"), "Receiving");
+        pages.add_titled(&receiving, Some("receiving"), crate::i18n::label("Receiving"));
         let advanced = section();
-        field(&advanced, "Port", editor.port.upcast_ref());
+        field(&advanced, crate::i18n::label("Port"), editor.port.upcast_ref());
         advanced.append(&label("Leave empty or use 0 for automatic selection. A changed port requires restarting sharing when idle."));
         advanced.append(&editor.recover);
         advanced.append(&editor.reload);
         advanced.append(&editor.retry);
         advanced.append(&editor.restart);
         advanced.append(&editor.login_reload);
-        pages.add_titled(&advanced, Some("advanced"), "Advanced");
+        pages.add_titled(&advanced, Some("advanced"), crate::i18n::label("Advanced"));
         let information = section();
         information.append(&label(&format!(
             "rQuickShare {}",
@@ -286,7 +286,7 @@ impl Editor {
 GNU General Public License v3.0.",
         ));
         information.append(&about);
-        pages.add_titled(&information, Some("about"), "About");
+        pages.add_titled(&information, Some("about"), crate::i18n::label("About"));
         content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
         content.append(&editor.status);
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);

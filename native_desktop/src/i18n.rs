@@ -6,6 +6,7 @@
 mod dynamic;
 mod history;
 mod image;
+mod settings;
 
 const MENU_KEYS: [&str; 17] = [
     "Visible",
@@ -585,6 +586,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
     if let Some(value) = image::translated(locale, source) {
         return value;
     }
+    if let Some(value) = settings::translated(locale, source) {
+        return value;
+    }
     if let Some(index) = COMPOSE_KEYS.iter().position(|key| *key == source) {
         return translated_compose(locale)[index];
     }
@@ -1011,6 +1015,14 @@ mod tests {
                 assert!(!REVIEW_KEYS.contains(&source));
                 assert!(!COMPOSE_KEYS.contains(&source));
                 assert!(!history::KEYS.contains(&source));
+            }
+            for source in settings::KEYS {
+                assert!(!translated(locale, source).is_empty());
+                assert!(!MENU_KEYS.contains(&source));
+                assert!(!REVIEW_KEYS.contains(&source));
+                assert!(!COMPOSE_KEYS.contains(&source));
+                assert!(!history::KEYS.contains(&source));
+                assert!(!image::KEYS.contains(&source));
             }
         }
     }
