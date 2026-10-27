@@ -6,6 +6,7 @@
 mod dynamic;
 mod history;
 mod image;
+mod reveal_notices;
 mod settings;
 mod settings_errors;
 mod settings_residual;
@@ -595,6 +596,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
     if let Some(value) = image::translated(locale, source) {
         return value;
     }
+    if let Some(value) = reveal_notices::translated(locale, source) {
+        return value;
+    }
     if let Some(value) = settings::translated(locale, source) {
         return value;
     }
@@ -1102,6 +1106,20 @@ mod tests {
                 assert!(!settings_errors::KEYS.contains(&source));
                 assert!(!settings_warning::KEYS.contains(&source));
                 assert!(!settings_residual::KEYS.contains(&source));
+            }
+            for source in reveal_notices::KEYS {
+                assert!(!translated(locale, source).is_empty());
+                assert!(!MENU_KEYS.contains(&source));
+                assert!(!REVIEW_KEYS.contains(&source));
+                assert!(!COMPOSE_KEYS.contains(&source));
+                assert!(!history::KEYS.contains(&source));
+                assert!(!image::KEYS.contains(&source));
+                assert!(!settings::KEYS.contains(&source));
+                assert!(!settings_state::KEYS.contains(&source));
+                assert!(!settings_errors::KEYS.contains(&source));
+                assert!(!settings_warning::KEYS.contains(&source));
+                assert!(!settings_residual::KEYS.contains(&source));
+                assert!(!transfer_rows::KEYS.contains(&source));
             }
             assert_ne!(
                 settings_residual::translated(locale, "Start sharing"),

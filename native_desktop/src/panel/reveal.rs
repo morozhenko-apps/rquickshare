@@ -74,7 +74,7 @@ fn current(key: &Key, state: &PanelState) -> bool {
         })
 }
 fn file_button(index: u32, ready: bool, action: impl Fn(u32) + 'static) -> gtk::Button {
-    let button = gtk::Button::with_label("Show in folder");
+    let button = gtk::Button::with_label(crate::i18n::label("Show in folder"));
     button.set_widget_name(&format!("reveal-{index}"));
     button.set_sensitive(ready);
     button.connect_clicked(move |_| action(index));
@@ -216,7 +216,7 @@ impl Panel {
             Ok(completion) => completion,
             Err(_) => {
                 self.notice(
-                    "Cannot show this file right now. Review the current transfer and try again.",
+                    crate::i18n::label("Cannot show this file right now. Review the current transfer and try again."),
                 );
                 return;
             }
@@ -264,7 +264,7 @@ impl Panel {
                 _ => {
                     panel.close_reveal();
                     panel.notice(
-                        "Cannot show this file. It may have moved, changed, or become unavailable.",
+                        crate::i18n::label("Cannot show this file. It may have moved, changed, or become unavailable."),
                     );
                     panel.render();
                     return;
@@ -274,7 +274,7 @@ impl Panel {
                 Ok(file) => Arc::new(file),
                 Err(_) => {
                     panel.close_reveal();
-                    panel.notice("Cannot access this received file right now.");
+                    panel.notice(crate::i18n::label("Cannot access this received file right now."));
                     panel.render();
                     return;
                 }
@@ -310,11 +310,11 @@ impl Panel {
                         Ok(Ok(())) if matches!(key.scope, Scope::Result) => {
                             panel.model.borrow_mut().notice = None
                         }
-                        Ok(Ok(())) => panel.notice("Containing folder shown."),
+                        Ok(Ok(())) => panel.notice(crate::i18n::label("Containing folder shown.")),
                         Ok(Err(crate::portal::Error::Cancelled)) => {
-                            panel.notice("Folder request cancelled.")
+                            panel.notice(crate::i18n::label("Folder request cancelled."))
                         }
-                        _ => panel.notice("Your desktop could not show this folder. Try again."),
+                        _ => panel.notice(crate::i18n::label("Your desktop could not show this folder. Try again.")),
                     }
                     panel.render();
                 }
@@ -323,7 +323,7 @@ impl Panel {
         pending.task.replace(Some(task));
         self.reveal.replace(Some(pending));
         if matches!(scope, Scope::File(_)) {
-            self.notice("Opening containing folder…");
+            self.notice(crate::i18n::label("Opening containing folder…"));
         }
         self.mark_manual();
         self.render();
