@@ -358,7 +358,10 @@ mod tests {
     #[test]
     fn given_supported_locales_when_rendering_residual_settings_then_every_key_is_present() {
         for (index, key) in KEYS.iter().enumerate() {
-            assert!(!KEYS[..index].contains(key), "duplicate residual source key");
+            assert!(
+                !KEYS[..index].contains(key),
+                "duplicate residual source key"
+            );
             assert_eq!(translated("en", key), Some(*key));
             for locale in LOCALES {
                 let text = translated(locale, key).expect("known settings string");

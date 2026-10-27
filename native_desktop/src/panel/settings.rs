@@ -173,9 +173,9 @@ impl Editor {
             name: gtk::Entry::builder()
                 .placeholder_text(crate::i18n::label("Automatic computer name"))
                 .build(),
-            name_hint: label(
-                crate::i18n::label("Leave empty to use the computer name. OK applies changes to new connections."),
-            ),
+            name_hint: label(crate::i18n::label(
+                "Leave empty to use the computer name. OK applies changes to new connections.",
+            )),
             port: gtk::Entry::builder()
                 .placeholder_text(crate::i18n::label("Automatic"))
                 .input_purpose(gtk::InputPurpose::Digits)
@@ -259,9 +259,9 @@ impl Editor {
         );
         general.append(&editor.name_hint);
         general.append(&editor.login);
-        general.append(&label(
-            crate::i18n::label("Starts sharing and the tray at sign-in, with the card hidden."),
-        ));
+        general.append(&label(crate::i18n::label(
+            "Starts sharing and the tray at sign-in, with the card hidden.",
+        )));
         general.append(&editor.login_status);
         pages.add_titled(&general, Some("general"), crate::i18n::label("General"));
         let receiving = section();
@@ -303,10 +303,10 @@ impl Editor {
             "rQuickShare {}",
             env!("CARGO_PKG_VERSION")
         )));
-        information.append(&label(
-            crate::i18n::label("Send and receive nearby files and text.
-GNU General Public License v3.0."),
-        ));
+        information.append(&label(crate::i18n::label(
+            "Send and receive nearby files and text.
+GNU General Public License v3.0.",
+        )));
         information.append(&about);
         pages.add_titled(&information, Some("about"), crate::i18n::label("About"));
         content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
@@ -401,7 +401,9 @@ GNU General Public License v3.0."),
             if let Some(editor) = weak.upgrade() {
                 editor.file.borrow_mut().take();
                 editor.directory_intent.set(1);
-                editor.directory.set_text(crate::i18n::label("Default Downloads folder"));
+                editor
+                    .directory
+                    .set_text(crate::i18n::label("Default Downloads folder"));
                 editor.changed();
             }
         });
@@ -519,8 +521,10 @@ GNU General Public License v3.0."),
         self.loading.set(true);
         self.name.set_text(&view.device_name);
         self.name_hint.set_text(&if view.resolved_name.is_empty() {
-            crate::i18n::label("Leave empty to use the computer name. OK applies changes to new connections.")
-                .to_owned()
+            crate::i18n::label(
+                "Leave empty to use the computer name. OK applies changes to new connections.",
+            )
+            .to_owned()
         } else {
             crate::i18n::resolved_name(&view.resolved_name)
         });
@@ -833,7 +837,8 @@ GNU General Public License v3.0."),
             }
         };
         self.busy.set(true);
-        self.status.set_text(crate::i18n::label("Waiting for the service…"));
+        self.status
+            .set_text(crate::i18n::label("Waiting for the service…"));
         self.refresh();
         let weak = Rc::downgrade(self);
         self.task.replace(Some(glib::spawn_future_local(async move {
