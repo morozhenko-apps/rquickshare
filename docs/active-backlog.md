@@ -1,3 +1,9 @@
+## 2026-10-27 #17 SettingsView source statuses (15×20 locales)
+
+Production `2dcab389` adds **15 settings-status source keys ×19 non-English translated rows = 285 draft translations** in `src/i18n/settings_state.rs`, selected *after* unchanged `status(SettingsView)` error/success priority logic and GTK-only `i18n::label`. Existing `Saved and applied.` tests remain authoritative. Static catalog/branch/UI audits PASS; **source-exact Preflight `40535127513` and Native GTK `40535126993` PENDING** at checkpoint. [Stage plan, coverage and future error mapping](native-settings-i18n-staged-plan-2026-10-27.md). The 10 settings-action and 7 login-action error messages are NOT yet translated. #17 stays open; no physical RTL/human locale review or Mode B release gate.
+
+Previous static settings-chrome `ea4ec8a8` Preflight `40533944102` terminal SUCCESS; GTK `40533944580` still pending as of last observed state. Do not claim a combined pass yet.
+
 ## 2026-10-27 #17 Settings source-exact Preflight proven
 
 Executable `51b416e6`: Preflight `40513766961` **SUCCESS, all five jobs** (Rust format, Core tests/Clippy, Tauri Clippy, Frontend). Native GTK `40513766561` **IN PROGRESS** at last read (prerequisite install), so full GTK source acceptance is still PENDING. [Settings proof and remaining stages](native-settings-i18n-staged-plan-2026-10-27.md). Issue #17 remains OPEN; no 20-language human/RTL and no hardware/1.0.0 release claim.
