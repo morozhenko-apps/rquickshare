@@ -273,7 +273,7 @@ impl Panel {
         };
         if !safe || !self.resource_current(&key) {
             self.notice(
-                "Text is no longer available for review. Unlock and check the current transfer.",
+                crate::i18n::label("Text is no longer available for review. Unlock and check the current transfer."),
             );
             return;
         }
