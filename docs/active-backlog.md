@@ -1,3 +1,7 @@
+## 2026-10-27 #17 typed GTK name/path latest executable gate
+
+Corrected source `84bcff96`: **Native GTK 40563016773 SUCCESS**. Preflight `40563016992` **4/5 jobs SUCCESS, fifth Tauri Clippy IN PROGRESS** as of latest read. No final combined PASS claim. [Precise CI and display-only name/path code](native-settings-dynamic-safe-text-2026-10-27.md). No hardware or final MODE B run.
+
 ## 2026-10-27 #17 Settings dynamic name/path native formatter gate
 
 Source `378834ac` typed 20-locale resolved-name and display-only FSI/PDI paths: Preflight `40561114184` **SUCCESS all five jobs**, Native GTK `40561114130` **FAIL** in exactly three strict rustfmt layout differences, before widgets. Code-only formatting followup `84bcff96` corrects those diagnostics with no behavior change. Exact-source final Preflight `40563016992` / Native GTK `40563016773` **PENDING**. [Full exact-source receipt and pending RTL acceptance](native-settings-dynamic-safe-text-2026-10-27.md). #17 still OPEN; full MODE B intentionally not run.
