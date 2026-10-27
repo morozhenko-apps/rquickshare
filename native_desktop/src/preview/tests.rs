@@ -234,10 +234,25 @@ async fn given_cancelled_busy_or_missing_decoder_when_requested_then_no_queued_o
 }
 
 fn process_fixture(body: &str) -> (tempfile::TempDir, PathBuf) {
+    use std::io::Write;
+
     let root = tempfile::tempdir().unwrap();
+    let staging = root.path().join("fixture.staging");
     let path = root.path().join("fixture");
-    std::fs::write(&path, format!("#!/usr/bin/python3\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    // Do not expose an executable pathname while its inode is writable.
+    {
+        let mut writer = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staging)
+            .unwrap();
+        writer
+            .write_all(format!("#!/usr/bin/python3\n{body}\n").as_bytes())
+            .unwrap();
+        writer.sync_all().unwrap();
+    }
+    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::rename(&staging, &path).unwrap();
     (root, path)
 }
 
@@ -280,7 +295,11 @@ async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_
                 .env("PATH", "/usr/bin:/bin")
                 .env("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
                 .output()
-                .expect("test fixture executable must spawn");
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "malformed fixture #{case}: Decoder={actual:?}, expected={expected:?}, direct_fixture_spawn_error={error:?}"
+                    )
+                });
             let correct_fixture = match case {
                 0 => probe.status.success() && probe.stdout == b"RQSP",
                 1 => probe.status.success() && probe.stdout.len() == MAX_OUTPUT + 1,
