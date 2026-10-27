@@ -41,3 +41,10 @@ Do not auto-merge this branch, close #17 or publish any `master`, `native/v*`, A
 - `85eea37a`: wrap disclosure and error labels to conform to Rust source style.
 - Independent read-only source checks **PASS** on these two commits: 19 complete catalog rows × 8 literals, eight canonical source keys, all four per-locale collision oracles present, unchanged manual Copy callback, raw received-body label without markup, and no newly overlong i18n UI calls. **No Rust/GTK tests or formatter executed locally.**
 - Remaining merge gate: exact-current-HEAD Preflight **and** Native GTK build/clippy/isolated widget tests. The Native GTK workflow currently handles `push: dev` and manual `workflow_dispatch`, not feature-branch pull requests. A green feature PR Preflight alone is insufficient to claim its GTK gate passed; do not auto-merge or silently trigger the protected release workflow.
+
+## 2026-10-27 CI gate handoff
+
+- Prior PR Preflight `40414513690` completed **FAIL** because Core Clippy could not resolve either `index.crates.io` or `github.com` while downloading dependencies. Rust formatting, Core stable suite and frontend passed in that run. Do not attribute the DNS failure to locale code.
+- Separately, base `dev` Preflight `40412736957` exposed Clippy `err_expect` in an unrelated private route proof subscription unit test. Baseline corrected in `dev` via docs `7a73383c` and source `ce567ddd`; exact source still needs fresh CI to verify.
+- `dev` now adds Native GTK pull-request CI in docs `7c91b69d` and workflow `8cafb9e5`. The PR must receive and pass both native GTK and Preflight checks on GitHub's merge SHA before integration. Do not treat prior dev GTK success as this PR's GTK execution.
+- Keep PR #28 in draft until checks and relevant review are complete. Technical merge gate does not replace visual KDE, Arabic RTL or native-speaker content acceptance. #17 still PARTIAL.
