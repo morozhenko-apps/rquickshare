@@ -83,7 +83,7 @@ impl Image {
         worker: Worker,
     ) -> Rc<Self> {
         let window = gtk::Window::builder()
-            .title("Send image")
+            .title(crate::i18n::label("Send image"))
             .default_width(480)
             .default_height(420)
             .build();
@@ -95,7 +95,9 @@ impl Image {
         root.set_margin_bottom(16);
         root.set_margin_start(16);
         root.set_margin_end(16);
-        let heading = label("Capture a clipboard image, review it, then choose recipients.");
+        let heading = label(crate::i18n::label(
+            "Capture a clipboard image, review it, then choose recipients.",
+        ));
         heading.set_selectable(false);
         root.append(&heading);
         let picture = gtk::Picture::new();
@@ -103,13 +105,15 @@ impl Image {
         picture.set_content_fit(gtk::ContentFit::Contain);
         picture.set_vexpand(true);
         root.append(&picture);
-        let status = label("Clipboard is read only when you capture. Nothing is sent yet.");
+        let status = label(crate::i18n::label(
+            "Clipboard is read only when you capture. Nothing is sent yet.",
+        ));
         status.set_selectable(false);
         root.append(&status);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let capture = gtk::Button::with_label("Capture clipboard image");
-        let prepare = gtk::Button::with_label("Prepare image");
-        let cancel = gtk::Button::with_label("Cancel");
+        let capture = gtk::Button::with_label(crate::i18n::label("Capture clipboard image"));
+        let prepare = gtk::Button::with_label(crate::i18n::label("Prepare image"));
+        let cancel = gtk::Button::with_label(crate::i18n::label("Cancel"));
         buttons.append(&capture);
         buttons.append(&prepare);
         buttons.append(&cancel);
@@ -179,7 +183,13 @@ impl Image {
             image.preview_width as usize * 4,
         );
         self.picture.set_paintable(Some(&texture));
-        self.status.set_text(&format!("{} × {} pixels · {} bytes · Clipboard.png\nReview the image, then prepare and choose recipients.", image.width, image.height, image.source.total_bytes()));
+        self.status.set_text(&format!(
+            "{} × {} px · {} · Clipboard.png\n{}",
+            image.width,
+            image.height,
+            crate::i18n::byte_count(image.source.total_bytes()),
+            crate::i18n::label("Review the image, then prepare and choose recipients.")
+        ));
         self.source.replace(Some(image.source));
     }
     fn capture_explicitly(self: &Rc<Self>) {
@@ -203,7 +213,9 @@ impl Image {
                 Ok(bytes) => bytes,
                 Err(()) => {
                     image.busy.set(false);
-                    image.status.set_text("No supported PNG was captured. Use a static image up to 32 MiB and 64 million pixels.");
+                    image.status.set_text(crate::i18n::label(
+                        "No supported PNG was captured. Use a static image up to 32 MiB and 64 million pixels.",
+                    ));
                     image.refresh();
                     return;
                 }
@@ -230,7 +242,9 @@ impl Image {
                         image.permit.replace(Some(permit));
                         match result {
                             Ok(captured) => image.show_capture(captured),
-                            Err(_) => image.status.set_text("Image capture failed validation or exceeded resource limits. The previous image is kept."),
+                            Err(_) => image.status.set_text(crate::i18n::label(
+                                "Image capture failed validation or exceeded resource limits. The previous image is kept.",
+                            )),
                         }
                         image.busy.set(false);
                         image.refresh();
@@ -259,15 +273,15 @@ impl Image {
             .and_then(|source| source.try_clone().ok());
         let Some(source) = source else {
             self.status
-                .set_text("Image source could not be prepared. Capture it again.");
+                .set_text(crate::i18n::label("Image source could not be prepared. Capture it again."));
             return;
         };
         let completion = match (self.submit)(source) {
             Ok(completion) => completion,
             Err(_) => {
-                self.status.set_text(
+                self.status.set_text(crate::i18n::label(
                     "Preparation was not queued. Review the current source and connection.",
-                );
+                ));
                 return;
             }
         };
@@ -392,7 +406,9 @@ impl Panel {
                         return;
                     }
                     if !successful {
-                        panel.notice("Image preparation did not complete. Review Recover or discard the pending preparation.");
+                        panel.notice(crate::i18n::label(
+                            "Image preparation did not complete. Review Recover or discard the pending preparation.",
+                        ));
                     }
                     panel.set_drawer(Drawer::Open);
                     panel.pages.set_visible_child_name("nearby");
