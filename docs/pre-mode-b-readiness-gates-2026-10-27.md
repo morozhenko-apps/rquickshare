@@ -42,3 +42,21 @@ Development branch `dev`, snapshot code `378834ac270517c90b9823c2448b8f1150ce3e8
 - This register is an audit/plan, not a command to push release, change branch protection or delete history. All historical backlog records are retained. Roll back each future executable slice independently.
 
 **Current release readiness:** NOT READY / #8 exception recorded / no final MODE B / no package publication.
+
+## 2026-10-27 focused no-regression source audits
+
+### #16 authentication provider gap, avoid fake Google identity
+
+Current `core_lib/src/service/runtime/route_registry.rs` explicitly documents that **no production provider wires independent verified route generations into grouping yet**. The registry has correct synthetic/fail-closed infrastructure: proof leases with a 60-second limit, socket-address generation checks, no anonymous name/IP merging and no fallback after a pinned dispatch. `core_lib/src/service/runtime.rs::observed_route_proof` accepts evidence only from live authenticated outbound managed sessions, while `peer_authentication::VerifiedPeerCredential` explicitly warns a session credential is *not itself proof of mDNS/GATT advertisement ownership*. `PeerAuthentication::anonymous` is still the standard source for ordinary inbound/outbound compatibility sessions.
+
+Consequently there is no defensible basis to mark two ordinary Pixel advertisements as one proved identity. To actually close #16, implement authentic real peer credential provenance **and** route-to-certificate proof (a product security/public contract), or obtain owner's explicit revised acceptance. This is a **STOP FACTOR limited to the additional trust/provisioning decision**, not a reason to stop unrelated localization/bug fixes. Never inherit #8's explicit plaintext BWU exception as a blanket waiver of this trust decision.
+
+### #21 no implicit saved-temporary rearm on load (source reasoning; hardware still open)
+
+`core_lib/src/settings.rs::StartupSettings::default` chooses `Visibility::Invisible`. `core_lib/src/service/runtime.rs::configuration_only` also constructs an Invisible core, and `core_lib/src/service/process.rs::startup_core` starts the managed receiver Invisible regardless of stored Temporary=2. `settings_service::Writer` initializes `active_visibility` from its loaded snapshot and only issues an `Apply` under **`save && running`**, while `bus.rs` applies visibility only for a dispatched `Apply` or manual quick visibility operation. A normal read/reload (`edit=None, quick=None`) does not submit a visibility write. This supports manual-only startup against the specific reported stored-Temporary replay concern.
+
+It does **not** prove every accelerated save/restart, reconnection and race invariant: a later explicit `Save` may change visibility if `active_visibility` differs; this is a deliberate user action with an existing consent gate. We have **not** run a new deterministic scheduler test or current-installed cold-restart exercise in this task. Retain #21 OPEN until those exact negative cases are proven, and never rewrite the user's stored preference silently as an audit step.
+
+### New UI source receipt
+
+`378834ac` typed `resolved_name_for(locale, name)` with Arabic/European Portuguese/Traditional Chinese and unknown-locale English fallback, FSI/PDI-only projected values, no alteration of editable input, `gio::File` or persisted directory. Static wiring check PASS. Full source CI Preflight `40561114184` and GTK `40561114130` **still pending on most recent read**, not code-complete acceptance. No physical KDE/Pixel or Windows testing occurred.
