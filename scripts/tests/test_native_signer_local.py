@@ -128,7 +128,7 @@ class LocalSigningTests(unittest.TestCase):
                             state / "signer", root / "signed", now=self.now)
                 apt.verify(root / "signed", keyring, primary, now=self.now)
                 status = apt.run("gpgv", "--homedir", str(root), "--keyring", str(keyring), "--status-fd", "1",
-                                 str(root / "signed/dists" / apt.SUITE / "InRelease"))
+                                 str(root / "signed/linux/InRelease"))
                 signature = next(line.split() for line in status.splitlines() if line.startswith("[GNUPG:] VALIDSIG "))
                 self.assertEqual(signature[2], value["identity"]["signing_subkey"]["fingerprint"])
                 self.assertEqual(signature[-1], primary)

@@ -9,11 +9,15 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
+import urllib.request
 
 import native_apt as apt
 
-BUCKET = "rquickshare-native-apt"
-ACTIVE = f"dists/{apt.SUITE}/InRelease"
+BUCKET = "app-dist"
+PREFIX = "dist/rQuickShare/"
+BASE = "https://download.morozhenko.com/" + PREFIX
+ACTIVE = "linux/InRelease"
 IMMUTABLE = "public, max-age=31536000, immutable"
 
 
@@ -54,7 +58,21 @@ class Object:
 def object_for(key, source, mutable=False):
     return Object(key, source, apt.digest(source), source.stat().st_size,
                   "no-store" if mutable else IMMUTABLE,
-                  "application/vnd.debian.binary-package" if source.name.endswith(".deb") else "application/octet-stream")
+                  content_type(source))
+
+
+def content_type(source):
+    if source.name.endswith(".deb"):
+        return "application/vnd.debian.binary-package"
+    if source.name.endswith(".gpg"):
+        return "application/pgp-keys"
+    if source.name.endswith(".gz"):
+        return "application/gzip"
+    if source.name.endswith(".json"):
+        return "application/json"
+    if source.name in {"Packages", "InRelease", "Release"} or source.name.endswith(".sha256"):
+        return "text/plain; charset=utf-8"
+    return "application/octet-stream"
 
 
 def publication(snapshot, keyring, fingerprint, previous=None, now=None):
@@ -62,12 +80,26 @@ def publication(snapshot, keyring, fingerprint, previous=None, now=None):
     active = object_for(ACTIVE, snapshot / ACTIVE, mutable=True)
     objects = []
     for path in sorted(apt.inventory(snapshot)):
-        if path.is_file():
+        if path.is_file() and path.name not in {"Release", "InRelease"}:
             relative = path.relative_to(snapshot).as_posix()
-            objects.append(object_for(f"snapshots/{active.sha256}/{relative}", path))
-            if relative.startswith("pool/") or "/by-hash/SHA256/" in relative:
-                objects.append(object_for(relative, path))
+            objects.append(object_for(relative, path, mutable=path.name in {"Packages", "Packages.gz"}))
+    objects.append(object_for("linux/rquickshare-native-archive-keyring.gpg", keyring))
     return objects, active
+
+
+def public_readback(item, opener=None):
+    opener = urllib.request.urlopen if opener is None else opener
+    with opener(BASE + item.key, timeout=45) as response:
+        apt.require(response.status == 200, "Public download returned non-200")
+        digest = hashlib.sha256()
+        length = 0
+        while chunk := response.read(min(1024 * 1024, item.size - length + 1)):
+            length += len(chunk)
+            apt.require(length <= item.size, "Public download exceeds expected size")
+            digest.update(chunk)
+        apt.require(length == item.size and digest.hexdigest() == item.sha256, "Public download checksum/size mismatch")
+    return {"url": BASE + item.key, "sha256": item.sha256, "size": item.size,
+            "readback_sha256": digest.hexdigest(), "readback_size": length, "readback_status": 200}
 
 
 def matches(remote, expected):
@@ -102,8 +134,20 @@ def ensure_immutable(store, item):
         inspect_after_write(store, item)
 
 
-def publish(snapshot, keyring, fingerprint, store, previous=None, now=None):
-    # Validate all signatures, package bytes and previous authority before any storage IO.
+def ensure_mutable(store, item):
+    current = store.inspect(item.key, apt.MAX_INDEX)
+    if matches(current, item):
+        return
+    try:
+        store.put(item, none_match=current is None, match_etag=None if current is None else current.etag)
+    except Uncertain:
+        inspect_after_write(store, item)
+    else:
+        inspect_after_write(store, item)
+
+
+def publish(snapshot, keyring, fingerprint, store, previous=None, now=None, public_verify=public_readback):
+    # Validate all signatures, package bytes and previous authority before storage IO.
     objects, active = publication(snapshot, keyring, fingerprint, previous, now)
     current = store.inspect(ACTIVE, 32768, retain=True)
     already_current = matches(current, active)
@@ -115,8 +159,13 @@ def publish(snapshot, keyring, fingerprint, store, previous=None, now=None):
             expected = object_for(ACTIVE, previous / ACTIVE, mutable=True)
             if not matches(current, expected):
                 raise Conflict("Published channel changed from the authenticated baseline")
-    for item in objects:
-        ensure_immutable(store, item)
+    # Immutable binaries/public key first; mutable indexes next; InRelease last.
+    for item in sorted(objects, key=lambda item: item.cache != IMMUTABLE):
+        if item.cache == IMMUTABLE:
+            ensure_immutable(store, item)
+        else:
+            ensure_mutable(store, item)
+        public_verify(item)
     if not already_current:
         try:
             store.put(active, none_match=current is None, match_etag=None if current is None else current.etag)
@@ -124,11 +173,49 @@ def publish(snapshot, keyring, fingerprint, store, previous=None, now=None):
             inspect_after_write(store, active)
         else:
             inspect_after_write(store, active)
-    else:
-        # Object admission can take time; acknowledge only if this generation is still current.
-        if not matches(store.inspect(ACTIVE, 32768, retain=True), active):
-            raise Conflict("Channel changed before idempotent acknowledgement")
+    if not matches(store.inspect(ACTIVE, 32768, retain=True), active):
+        raise Conflict("Channel changed before acknowledgement")
+    public_verify(active)
     return active.sha256
+
+
+def latest_manifest(snapshot, keyring, fingerprint, commit, now=None):
+    apt.require(isinstance(commit, str) and re.fullmatch(r"[a-f0-9]{40}", commit), "Expected exact source commit")
+    state = apt.verify(snapshot, keyring, fingerprint, now)
+    version, revision = state["version"].rsplit("-", 1)
+    import native_release_tag
+    tag = native_release_tag.tag_from_version(version)
+    files = {}
+    for arch in sorted(state["packages"]):
+        item = object_for(f"linux/rquickshare-native_{state['version']}_{arch}.deb",
+                          snapshot / f"linux/rquickshare-native_{state['version']}_{arch}.deb")
+        files["deb" if arch == "amd64" else "deb_arm64"] = {"url": BASE + item.key, "sha256": item.sha256, "size": item.size}
+    return {"schema": 1, "product": "rQuickShare", "version": version, "revision": int(revision),
+            "tag": tag, "commit": commit, "files": {"linux": files}}
+
+
+def publish_release(snapshot, keyring, fingerprint, store, commit, run_id, receipt,
+                    previous=None, now=None, public_verify=public_readback):
+    apt.require(type(run_id) is int and run_id > 0, "Expected positive release run")
+    apt.require(not receipt.exists(), "Publication receipt already exists")
+    manifest = latest_manifest(snapshot, keyring, fingerprint, commit, now)
+    proofs = {}
+    def verify_public(item):
+        proofs[item.key] = public_verify(item)
+        return proofs[item.key]
+    publish(snapshot, keyring, fingerprint, store, previous, now, verify_public)
+    files = [proofs[key] for key in sorted(proofs) if key.endswith((".deb", ".deb.sha256"))]
+    with tempfile.TemporaryDirectory(prefix="rqs-latest-") as temporary:
+        path = Path(temporary) / "latest.json"
+        path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        item = object_for("latest.json", path, mutable=True)
+        ensure_mutable(store, item)
+        latest = public_verify(item)
+    result = {"schema": 1, "product": "rQuickShare", "base_url": BASE,
+              "version": manifest["version"], "revision": manifest["revision"], "commit": commit,
+              "latest": latest, "artifacts": [{"name": "native-package", "run_id": run_id, "files": files}]}
+    receipt.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    return result
 
 
 class S3Store:
@@ -149,7 +236,7 @@ class S3Store:
 
     def inspect(self, key, maximum, retain=False):
         try:
-            response = self.client.get_object(Bucket=BUCKET, Key=key)
+            response = self.client.get_object(Bucket=BUCKET, Key=PREFIX + key)
         except Exception as error:
             code = getattr(error, "response", {}).get("Error", {}).get("Code", "")
             if code == "NoSuchKey":
@@ -189,7 +276,7 @@ class S3Store:
                 # R2 documents Content-MD5 for single PUT; SHA256 trust comes from signed readback.
                 transport = hashlib.file_digest(source, lambda: hashlib.md5(usedforsecurity=False)).digest()
                 source.seek(0)
-                self.client.put_object(Bucket=BUCKET, Key=item.key, Body=source,
+                self.client.put_object(Bucket=BUCKET, Key=PREFIX + item.key, Body=source,
                                        ContentLength=item.size, ContentType=item.content_type,
                                        CacheControl=item.cache, ContentMD5=base64.b64encode(transport).decode(),
                                        **condition)
@@ -225,19 +312,27 @@ def main():
     baseline.add_argument("--first-release", action="store_true")
     baseline.add_argument("--previous", type=Path)
     parser.add_argument("--account-id")
+    parser.add_argument("--commit")
+    parser.add_argument("--run-id", type=int)
+    parser.add_argument("--receipt", type=Path)
     args = parser.parse_args()
     store = None
     try:
         if args.command == "plan":
             objects, active = publication(args.repository, args.keyring, args.fingerprint, args.previous)
             print(json.dumps({"bucket": BUCKET, "immutable_objects": len(objects), "commit_key": active.key,
-                              "commit_sha256": active.sha256, "signing": "external", "public_binding": "not configured"}, indent=2))
+                              "commit_sha256": active.sha256, "signing": "external", "public_binding": BASE}, indent=2))
         else:
             # Local admission precedes credential discovery or any external client setup.
             publication(args.repository, args.keyring, args.fingerprint, args.previous)
             apt.require(args.account_id is not None, "Explicit account identity is required")
+            apt.require(args.commit is not None and args.run_id is not None and args.receipt is not None,
+                        "Publication requires source provenance and a receipt destination")
+            latest_manifest(args.repository, args.keyring, args.fingerprint, args.commit)
             store = connect(args.account_id)
-            print("Published authenticated InRelease:", publish(args.repository, args.keyring, args.fingerprint, store, args.previous))
+            publish_release(args.repository, args.keyring, args.fingerprint, store, args.commit,
+                            args.run_id, args.receipt, args.previous)
+            print("Published flat signed APT and verified latest manifest")
     except Exception as error:
         # SDK errors can contain credentials, URLs and service text; expose only a finite class.
         print("Native R2 operation failed:", type(error).__name__, file=sys.stderr)

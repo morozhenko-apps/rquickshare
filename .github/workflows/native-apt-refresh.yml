@@ -114,7 +114,7 @@ jobs:
             > "$RUNNER_TEMP/rqs-refresh-baseline"
           [[ "$(cat "$RUNNER_TEMP/rqs-refresh-baseline")" == "previous" ]] || exit 1
           shopt -s nullglob
-          packages=("$RUNNER_TEMP"/rqs-previous/pool/main/r/rquickshare-native/*.deb)
+          packages=("$RUNNER_TEMP"/rqs-previous/linux/*.deb)
           [[ "${#packages[@]}" -ge 1 && "${#packages[@]}" -le 2 ]] || exit 1
           args=()
           for package in "${packages[@]}"; do args+=(--package "$package"); done
@@ -139,11 +139,13 @@ jobs:
             --repository "$RUNNER_TEMP/rqs-renew-signed" \
             --keyring "$RUNNER_TEMP/rqs-refresh-private/keyring.gpg" \
             --fingerprint "$SIGNING_FINGERPRINT" --account-id "$RQS_R2_ACCOUNT_ID" \
-            --previous "$RUNNER_TEMP/rqs-previous"
-          curl -fsS "https://download.morozhenko.com/dist/rQuickShare/dists/rquickshare-native-ubuntu26.04/InRelease" \
+            --previous "$RUNNER_TEMP/rqs-previous" \
+            --commit "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
+            --receipt "$RUNNER_TEMP/refresh-receipt.json"
+          curl -fsS "https://download.morozhenko.com/dist/rQuickShare/linux/InRelease" \
             -o "$RUNNER_TEMP/rqs-renew-public-InRelease"
           cmp "$RUNNER_TEMP/rqs-renew-public-InRelease" \
-              "$RUNNER_TEMP/rqs-renew-signed/dists/rquickshare-native-ubuntu26.04/InRelease"
+              "$RUNNER_TEMP/rqs-renew-signed/linux/InRelease"
       - name: Cleanup runner-local protected signing material
         if: always()
         shell: bash
