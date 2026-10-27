@@ -480,8 +480,14 @@ mod tests {
         assert_eq!(translated("pt", "Reset history"), Some("Repor histórico"));
         assert_eq!(translated("ru", "Declined"), Some("Отклонено"));
         assert_eq!(translated("pt", "Cancelled"), Some("Cancelado"));
-        assert_eq!(translated("nl", "Reset history"), Some("Geschiedenis resetten"));
-        assert_eq!(translated("nl", "Clear completed"), Some("Voltooide items wissen"));
+        assert_eq!(
+            translated("nl", "Reset history"),
+            Some("Geschiedenis resetten")
+        );
+        assert_eq!(
+            translated("nl", "Clear completed"),
+            Some("Voltooide items wissen")
+        );
         assert_eq!(translated("zh-Hant", "Completed"), Some("已完成"));
     }
 }
