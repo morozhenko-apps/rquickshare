@@ -36,3 +36,14 @@ Focused positive and N1-N12 checks: source-key uniqueness, 19×7 nonempty rows, 
 Separate docs and code commits. Open a PR targeting `dev`; merge only after source-exact required checks and no parallel changes collision. Do not overwrite active agent's changes or promote `master`. Revert this bounded locale module and display-only call sites without changing downloaded files or the portal authorization behavior.
 
 **Initial state:** design only, not implemented.
+
+## Cross-agent scope reconciliation: extend to results/text on same PR
+
+A parallel `dev` docs-only plan `docs/native-reveal-result-i18n-2026-10-27.md` independently inventories three more visible result/text **unavailable** notices. These are in-scope for the same existing guarded-reveal behavior, and ought not spawn a conflicting second catalog with the same name. Expand this PR's catalog to **10 canonical keys ×19 translated rows**, preserving all original seven and adding:
+- `Completed. The saved result is unavailable for automatic folder selection; review History.` in `panel/results.rs`, existing `reveal_revision` absent branch.
+- `Completed. Text is no longer available; review History.` in `panel/results.rs`, existing content revision/handle absent branch.
+- `Text is no longer available for review. Unlock and check the current transfer.` in `panel/text.rs`, existing `resource_current` or safety guard failure.
+
+These labels distinguish successful **metadata transfer** from unavailable file/text content. No read, reveal, clipboard, disclosure, auto-open or controller branch should change. Test invariants forbid `Containing folder shown.` or `Completed` state from claiming contents can be recovered without verified, currently-owned capability. No guessed path or file name is interpolated.
+
+This scope reconciliation follows a docs-only commit; source changes and CI are separate. Keep PR #29 against `dev`, and avoid parallel writes to its owned `reveal_notices.rs` and `i18n.rs` before merge.
