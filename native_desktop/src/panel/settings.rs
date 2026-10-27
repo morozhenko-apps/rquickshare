@@ -465,9 +465,9 @@ GNU General Public License v3.0.",
         if self.login_dirty.get() {
             if !self.login_apply.is_sensitive() {
                 self.confirming.set(false);
-                self.status.set_text(
-                    crate::i18n::label("Sign-in state changed or is unavailable. Reload it before confirming."),
-                );
+                self.status.set_text(crate::i18n::label(
+                    "Sign-in state changed or is unavailable. Reload it before confirming.",
+                ));
                 self.refresh();
                 return;
             }
@@ -639,8 +639,9 @@ GNU General Public License v3.0.",
             widget.set_sensitive(ready && writable && !model.state.settings_pending);
         }
         if !available {
-            self.status
-                .set_text(crate::i18n::label("Sharing settings are unavailable. Retry the connection from the card."));
+            self.status.set_text(crate::i18n::label(
+                "Sharing settings are unavailable. Retry the connection from the card.",
+            ));
         }
     }
     pub fn refresh_login(&self) {
@@ -772,13 +773,15 @@ GNU General Public License v3.0.",
             Operation::Restart => handle.restart_service(),
             Operation::Save => {
                 let Ok(visibility) = selected_visibility(self.visibility.selected()) else {
-                    self.status
-                        .set_text(crate::i18n::label("Choose a visibility setting before saving."));
+                    self.status.set_text(crate::i18n::label(
+                        "Choose a visibility setting before saving.",
+                    ));
                     return;
                 };
                 let Ok(port) = parse_port(self.port.text().as_str()) else {
-                    self.status
-                        .set_text(crate::i18n::label("Port must be empty or an integer from 0 to 65535."));
+                    self.status.set_text(crate::i18n::label(
+                        "Port must be empty or an integer from 0 to 65535.",
+                    ));
                     return;
                 };
                 let Ok(device_name) = self.name_input() else {
@@ -789,15 +792,17 @@ GNU General Public License v3.0.",
                     return;
                 };
                 let Ok(request) = rqs_lib::service::process::fresh_epoch() else {
-                    self.status
-                        .set_text(crate::i18n::label("Cannot create a save identity. Try again."));
+                    self.status.set_text(crate::i18n::label(
+                        "Cannot create a save identity. Try again.",
+                    ));
                     return;
                 };
                 let directory = match self.file.borrow().as_ref().map(File::try_clone).transpose() {
                     Ok(file) => file,
                     Err(_) => {
-                        self.status
-                            .set_text(crate::i18n::label("Cannot retain the selected folder. Choose it again."));
+                        self.status.set_text(crate::i18n::label(
+                            "Cannot retain the selected folder. Choose it again.",
+                        ));
                         return;
                     }
                 };

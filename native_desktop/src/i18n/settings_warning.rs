@@ -331,7 +331,13 @@ mod tests {
                 assert_ne!(get(KEYS[a]), get(KEYS[b]), "{locale}: warning collision");
             }
         }
-        assert_eq!(translated("ru", KEYS[6]), Some("Выберите видимость перед сохранением."));
-        assert_eq!(translated("pt", KEYS[7]), Some("A porta deve estar vazia ou conter um número inteiro de 0 a 65535."));
+        assert_eq!(
+            translated("ru", KEYS[6]),
+            Some("Выберите видимость перед сохранением.")
+        );
+        assert_eq!(
+            translated("pt", KEYS[7]),
+            Some("A porta deve estar vazia ou conter um número inteiro de 0 a 65535.")
+        );
     }
 }
