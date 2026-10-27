@@ -40,3 +40,7 @@ All twelve planned English error/notice literal sources were matched directly ag
 ## Executable stage and exact CI
 
 Production `2badb6c552038192aa1c0a86a0b1bdd421e2e423` introduces `native_desktop/src/i18n/client_errors.rs` (twelve canonical keys, 228 draft translations in nineteen non-English rows, two focused deterministic test functions) and `i18n.rs` registration and collision assertions. Each source literal is present in current `panel.rs` and all translation rows contain exactly twelve distinct, nonempty strings. No `panel.rs`, controller, transport, consent, settings state or outbound send logic changed. [Native GTK 40596891097](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891097) and [Preflight 40596891115](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891115) were **PENDING** when recorded; a green older source is not accepted in their place. Critical recovery and do-not-resend wording is asserted but human/native speaker semantic review is still OPEN.
+
+## Final exact client-error source checks
+
+Executable `2badb6c552038192aa1c0a86a0b1bdd421e2e423`: [Native GTK 40596891097](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891097) terminal SUCCESS; [Preflight 40596891115](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891115) terminal SUCCESS. All runtime ClientError mappings remain unchanged; this CI establishes source tests only, not installed Pixel/KDE or 20-language semantic human approval. Issue #17 remains open.

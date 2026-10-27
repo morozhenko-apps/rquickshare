@@ -1,3 +1,9 @@
+## 2026-10-27 #17 client errors green; consent and partial-file card captions source
+
+Client error `2badb6c5` exact [Native GTK 40596891097](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891097) and [Preflight 40596891115](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891115) terminal **SUCCESS** (12 keys, 228 draft translations, unchanged ClientError classification). Human/device gates still open.
+
+Next, docs-first `docs/native-panel-cards-i18n-2026-10-27.md`; executable `35ab8ac2` adds **8 canonical card/control strings ×19 draft locales =152 translations** plus full-locale/disjointness/consent/partial-file regression tests. `panel.rs` wires only presentation text: preview and waiting fallback, guarded Accept/Decline, retained-vs-zero completed files, explicit text review and folder request cancellation; existing `Cancel` translation reused. No recipient, consent revision, file capability, phase, owner cancel, transport or I/O logic changed. Exact [Native GTK 40597510638](https://github.com/morozhenko-apps/rquickshare/actions/runs/40597510638) and [Preflight 40597510685](https://github.com/morozhenko-apps/rquickshare/actions/runs/40597510685) **PENDING**. #17 remains OPEN; no Mode B/hardware/release acceptance.
+
 ## 2026-10-27 #17 client error and uncertain completion localization
 
 Source-exact previous panel status follow-up `75c8e4e5`: [Native GTK 40596180592](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596180592) **SUCCESS** and [Preflight 40596180519](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596180519) **SUCCESS**. No installed or human-language acceptance implied.
