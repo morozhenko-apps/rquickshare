@@ -190,7 +190,11 @@ mod tests {
             let value = |index| translated(locale, KEYS[index]).expect("known error");
             for first in 0..KEYS.len() {
                 for second in (first + 1)..KEYS.len() {
-                    assert_ne!(value(first), value(second), "{locale}: {first} and {second}");
+                    assert_ne!(
+                        value(first),
+                        value(second),
+                        "{locale}: {first} and {second}"
+                    );
                 }
             }
         }
@@ -215,8 +219,16 @@ mod tests {
             Some("لم يتأكد إغلاق البطاقة. قد تظهر مرة أخرى بعد إعادة الاتصال.")
         );
         for locale in LOCALES {
-            assert_ne!(translated(locale, KEYS[3]), translated(locale, KEYS[4]), "{locale}");
-            assert_ne!(translated(locale, KEYS[1]), translated(locale, KEYS[2]), "{locale}");
+            assert_ne!(
+                translated(locale, KEYS[3]),
+                translated(locale, KEYS[4]),
+                "{locale}"
+            );
+            assert_ne!(
+                translated(locale, KEYS[1]),
+                translated(locale, KEYS[2]),
+                "{locale}"
+            );
         }
     }
 }
