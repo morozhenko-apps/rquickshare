@@ -10,7 +10,7 @@
 
 Received-text review completed as a bounded source slice via merged [PR #28](https://github.com/morozhenko-apps/rquickshare/pull/28) at `e1abea6d`. Exact-source feature PR Preflight `40468865775` and Native GTK `40468865774` **SUCCESS**, while KDE, Arabic RTL and professional linguistic acceptance remain OPEN.
 
-New text composer production `120ca2f18f0481636687c18192778f77a6c37030` adds 11 catalog keys × 19 translations for the 20 canonical locales, wiring the explicit paste/preparation dialogs without changing clipboard access, bounds or Send semantics. Static inventory and wiring checks PASS, but **source-exact CI pending**; no general 20-language GTK completion, 1.0.0 Mode B or physical acceptance claim. [Implementation and separate negative/fallback test plan](native-text-compose-localization-2026-10-27.md). #17 stays OPEN, #16 verified-route requirements and #8 BWU residual risk are unchanged.
+New text composer production `120ca2f18f0481636687c18192778f77a6c37030` adds 11 catalog keys × 19 translations for the 20 canonical locales, wiring the explicit paste/preparation dialogs without changing clipboard access, bounds or Send semantics. Static inventory and wiring checks PASS; exact-source `120ca2f` GTK formatter FAIL was corrected by format-only `9cfe63fa`, whose fresh Preflight/GTK runs remain **pending**; no general 20-language GTK completion, 1.0.0 Mode B or physical acceptance claim. [Implementation and separate negative/fallback test plan](native-text-compose-localization-2026-10-27.md). #17 stays OPEN, #16 verified-route requirements and #8 BWU residual risk are unchanged.
 
 ## 2026-10-26 #16 Core exact-route registry: implementation / CI gate
 

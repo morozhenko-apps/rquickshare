@@ -27,3 +27,9 @@ Date 2026-10-27. Mode A (feature); source baseline `e1abea6db124a4bb3117a2a18bd2
 - All thirteen static GTK callsites in `native_desktop/src/panel/compose.rs` now use the catalog; the existing `Send`/`Cancel` keys are shared. The inserted source calls do **not** change actual clipboard, selection, byte validation or authorization logic.
 - Independent source structural check **PASS**: 19 catalog rows × 11 values, 11 canonical keys, eleven declared messages present in the composer, original explicit paste/prepare callbacks and middle-click suppression intact. This is **not** a compiler, test-suite or KDE/RTL/human language acceptance result.
 - Exact-source Preflight and Native GTK source CI are still **pending**, and the final source-exact outcome must be added after terminal status. #17 remains **PARTIAL** and existing 0.9.0/1.0.0 release blockers are unchanged.
+
+## Formatter follow-up / final source gate
+
+- Exact earlier Native GTK workflow `40470209556` on `120ca2f1` ended **FAIL** in strict formatting, at seven diagnostic locations in `i18n.rs` and `panel/compose.rs`; no source evidence of a runtime, security or translation-test failure from that workflow.
+- Format-only source follow-up `9cfe63facfc409525520358d4200fab51966b559` applied every reported multiline layout change without altering any message, validation branch or consent/clipboard behavior. The independent source catalog/wiring audit remains PASS.
+- New exact-source Preflight `40470625873` and Native GTK `40470625837` were **IN PROGRESS** at this checkpoint. The task must not be marked complete until their terminal jobs and outcomes have been read. Historical cancelled/failed runs remain recorded rather than reclassified as success.
