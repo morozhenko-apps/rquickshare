@@ -1,0 +1,25 @@
+# Native Settings residual static text localization, #17
+
+Date: 2026-10-27. Primary MODE A, source-first audit / bounded feature implementation. Baseline `dev` `fce92e067d2a7d856bbe1fa6c1f845d76460e746`. User wants all pre-Mode-B work except #8 accepted exception and #16 approved Google-certificate A left OPEN/blocked; do not run final Mode B, publish or install.
+
+## Repository scan and existing proof
+
+Latest executable `84bcff96dbd56d93c2693871ca32fd71c35a560a` has source-exact Preflight `40563016992` SUCCESS and Native GTK `40563016773` SUCCESS. The 20 canonical locales and English fallback are in `native_desktop/src/i18n.rs`; settings chrome, safety warnings and 32 independent status/error branches already have separate catalogs.
+
+Exact source `native_desktop/src/panel/settings.rs` (1,263 lines) still displays **15 unique static UI messages** in English through `label`, `set_text`, `set_label` or GTK window content. Audit scope is precisely:
+- UI static guidance: `Leave empty to use the computer name. OK applies changes to new connections.`, `Starts sharing and the tray at sign-in, with the card hidden.`, `Default Downloads folder`, `Send and receive nearby files and text.\nGNU General Public License v3.0.`
+- State/action captions: `Changes will apply after OK.`, `Start sharing`, `Waiting for login settings…`, `Sign-in choice will apply after OK.`, `Daemon and tray will start at sign-in; the card stays hidden.`, `Login start is off.`, `Login settings are unavailable.`, `Waiting for the service…`, `Sharing restart requested. Retry the connection from the card to read its state.`, `Choose an accessible local folder.`, `Cannot open the folder chooser.`
+- The initial `Sharing settings are unavailable.` is an already defined `settings_state` source key: REUSE, no duplicate catalog key. The dynamically resolved device name and directory are already display-only FSI-isolated; preserve that architecture. The product name `rQuickShare`, program version, `CARGO_PKG_VERSION`, `general`/etc stable widget identifiers and the `GNU General Public License v3.0` legal designation must not be modified.
+
+## Implementation contract
+
+1. Add scoped `native_desktop/src/i18n/settings_residual.rs` holding exactly 15 static English source keys, 19 model-assisted draft locale rows and fallback to the source English string. No dynamic text lookup, no FFI/provider changes.
+2. Update `i18n.rs` dispatch and cross-catalog collision tests. Update exact GTK callsites (two Default Downloads folder displays, constructor initial unavailable and login default reuse existing settings state). The `refresh_login` state decision and `refresh` Start-vs-Restart condition must remain byte-for-byte the same conditional logic; only return captions are translated.
+3. Regression tests: 20-locale nonempty, no duplicates, source English fallback for unsupported pt-BR/zh-Hans, exact RU/PT captions, legal label retains `GNU General Public License v3.0`, `Start sharing` not equal `Restart sharing` from existing settings chrome, pending/login-off/unknown distinct and no 'saved and applied' semantic collisions. Retain selected visibility indices, saved user data, port parser, status matcher, login controller, directory chooser capability, explicit per-transfer consent.
+4. Exact source Native GTK strict formatter, Clippy, widget tests + Preflight checks *after last executable edit*. No 'green' before terminal source-exact job results. Never run full Mode B as part of this work, no release, master, tags, R2 or installed package.
+
+## Risk and rollback
+
+Literal source keys are consumed only through `i18n::label(&'static str)`; the original `&str` statuses and `glib` closures stay unchanged. Translation errors can confuse action state and privacy warnings; tests forbid key collisions but do not replace human review. RTL/GTK narrow-card and PT-PT/Traditional Chinese semantics still require acceptance. Roll back this one executable source commit independently. Subsequent GTK rows/reveal/tray i18n remain in #17.
+
+Status before executable code: NOT IMPLEMENTED.
