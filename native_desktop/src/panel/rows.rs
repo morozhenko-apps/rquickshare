@@ -637,9 +637,21 @@ impl Panel {
                 strip.set_transition_duration(160);
                 let inputs = gtk::Box::new(gtk::Orientation::Horizontal, 3);
                 for (kind, icon, title) in [
-                    (outbound::Kind::Files, "text-x-generic-symbolic", crate::i18n::label("File")),
-                    (outbound::Kind::Folder, "folder-symbolic", crate::i18n::label("Folder")),
-                    (outbound::Kind::Text, "insert-text-symbolic", crate::i18n::label("Text")),
+                    (
+                        outbound::Kind::Files,
+                        "text-x-generic-symbolic",
+                        crate::i18n::label("File"),
+                    ),
+                    (
+                        outbound::Kind::Folder,
+                        "folder-symbolic",
+                        crate::i18n::label("Folder"),
+                    ),
+                    (
+                        outbound::Kind::Text,
+                        "insert-text-symbolic",
+                        crate::i18n::label("Text"),
+                    ),
                     (
                         outbound::Kind::Clipboard,
                         "edit-paste-symbolic",
@@ -1279,10 +1291,7 @@ mod untrusted_payload_label_tests {
                 "Link" => crate::i18n::label("Link").to_owned(),
                 _ => expected.to_owned(),
             };
-            assert_eq!(
-                actual, localized_expected,
-                "kind={kind:?} names={names:?}"
-            );
+            assert_eq!(actual, localized_expected, "kind={kind:?} names={names:?}");
             assert!(!actual.contains('<') && !actual.contains('/') && !actual.contains('>'));
         }
     }

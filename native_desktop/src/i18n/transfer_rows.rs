@@ -358,7 +358,10 @@ mod tests {
     #[test]
     fn given_all_locales_when_rendering_transfer_rows_then_keys_are_complete_and_distinct() {
         for (index, key) in KEYS.iter().enumerate() {
-            assert!(!KEYS[..index].contains(key), "duplicate transfer row source");
+            assert!(
+                !KEYS[..index].contains(key),
+                "duplicate transfer row source"
+            );
             assert_eq!(translated("en", key), Some(*key));
             for locale in LOCALES {
                 let text = translated(locale, key).expect("known row key");
@@ -375,20 +378,16 @@ mod tests {
     fn given_incoming_rows_when_translated_then_consent_and_metadata_remain_unambiguous() {
         for locale in LOCALES {
             let get = |index| translated(locale, KEYS[index]).expect("row caption");
-            for (left, right) in [
-                (0, 1),
-                (3, 4),
-                (5, 12),
-                (6, 7),
-                (9, 10),
-                (11, 12),
-            ] {
+            for (left, right) in [(0, 1), (3, 4), (5, 12), (6, 7), (9, 10), (11, 12)] {
                 assert_ne!(get(left), get(right), "{locale}: {left} vs {right}");
             }
             assert!(!get(8).trim().is_empty(), "{locale}: PIN consent");
         }
         assert_eq!(translated("ru", KEYS[0]), Some("Ожидание сведений"));
-        assert_eq!(translated("pt", KEYS[8]), Some("Confirme este código no dispositivo de envio antes de aceitar."));
+        assert_eq!(
+            translated("pt", KEYS[8]),
+            Some("Confirme este código no dispositivo de envio antes de aceitar.")
+        );
         assert_eq!(translated("ar", KEYS[6]), Some("طلب وارد"));
     }
 }
