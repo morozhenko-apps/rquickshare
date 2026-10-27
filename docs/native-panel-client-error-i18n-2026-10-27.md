@@ -32,3 +32,7 @@ These are selected exclusively by existing typed `ClientError`, native settings 
 ## Risks and scope boundary
 
 Do not convert `Operation needs recovery. Do not repeat the send.` into a retry invitation, or a pending/uncertain setting into applied success, or unavailable recipient into queued transfer. Rollback reverts only new translations/routing. Unsupported 0.9 parity, #8 accepted A2.2 DoS risk, #16 genuine Google credential provider, Pixel/KDE Cancel/first BLE connection, Windows native UI and signing remain open independently. This document authorizes no release tag or package.
+
+## Pre-code structural review
+
+All twelve planned English error/notice literal sources were matched directly against the current `native_desktop/src/panel.rs`. The prepared `client_errors.rs` catalog has 19 additional locale rows ×12 labels, complete, nonempty, without placeholders or duplicate translated entries within any row. Two focused test functions cover all supported locales and critical RU/PT/Arabic/English fallback cases. The production classification branch and completion handling are unchanged; only future `i18n.rs` registration is planned. **No executable changes to client error catalogs had been published at this checkpoint**; the previous panel-status Preflight is still pending. The next executable change must receive independent source-exact GTK and Preflight proof.
