@@ -34,3 +34,7 @@ Rollback by reversing the isolated presentation catalog and label-only wiring. #
 ## Native GTK first-run formatter gate
 
 `35ab8ac2` [Native GTK 40597510638](https://github.com/morozhenko-apps/rquickshare/actions/runs/40597510638) terminal FAILURE at strict rustfmt; only one exact source diff at `src/i18n/panel_cards.rs` zero-saved Russian expectation. Clippy/widgets not executed. Production logic and locale contents were not implicated. An exact formatter correction was prepared separately; it must be committed as source-only after prior [Preflight 40597510685](https://github.com/morozhenko-apps/rquickshare/actions/runs/40597510685) finishes, followed by new source-exact Native GTK/Preflight. Until then #17 still OPEN and this slice does not have complete CI evidence.
+
+## Strict GTK formatter correction and source CI
+
+Original `35ab8ac2` Preflight 40597510685 terminal SUCCESS but GTK 40597510638 FAILED during strict source formatting only (one `Some(...)` assertion in Russian zero-published-files oracle). Style-only `783449678dcccdf2b81758cc8f65a70782c84cd9` fixes that exact layout. [Native GTK 40598208746](https://github.com/morozhenko-apps/rquickshare/actions/runs/40598208746) terminal SUCCESS, including strict lint and actual widgets; [Preflight 40598208443](https://github.com/morozhenko-apps/rquickshare/actions/runs/40598208443) **IN PROGRESS** at checkpoint. No developer/hardware, Arabic RTL context, Mode B or release sign-off.
