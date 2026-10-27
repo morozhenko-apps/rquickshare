@@ -153,10 +153,8 @@ jobs:
           [[ "$RQS_R2_ACCOUNT_ID" =~ ^[a-f0-9]{32}$ ]] || exit 1
           test -s "$RUNNER_TEMP/native-package/rquickshare-native_${VERSION}-${REVISION}_amd64.deb"
           test -s "$RUNNER_TEMP/native-package/rquickshare-native_${VERSION}-${REVISION}_amd64.deb.sha256"
-      # Worker deployment is owned by Cloudflare Git Builds from protected master.
-      # The signed R2 publisher never modifies Worker routing or requests a
-      # second Cloudflare API token. Admission already validates Worker source;
-      # public HTTPS and isolated APT acquisition below enforce serving readiness.
+      # The existing R2 Custom Domain serves the flat public files directly.
+      # The publisher verifies public bytes before committing release metadata.
       - name: Prepare flat APT metadata from the single verified package
         shell: bash
         run: |

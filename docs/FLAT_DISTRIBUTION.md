@@ -200,3 +200,10 @@ product's former Worker/route from its retained Git source/config if needed.
 The dedicated old rQuickShare bucket and all historical published R2 objects
 were retained. No remote snapshot or alternate DEB copy is created by the
 new pipeline. All task-owned command sessions exited; no watcher/server remains.
+
+Final comment audit removed a retired Worker-ownership comment from the
+tag workflow and corrected the publisher's CLI description to name the
+shared app-dist prefix. Python AST excluding the module description and
+workflow content excluding YAML comments remain identical to the accepted
+source. No behavioral test is added for this documentation correction;
+mandatory automatic workflow policy remains enabled.

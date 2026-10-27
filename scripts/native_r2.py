@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish a verified signed APT snapshot to a dedicated R2 bucket. Never signs."""
+"""Publish verified flat APT files to app-dist/dist/rQuickShare. Never signs."""
 import argparse
 import base64
 from dataclasses import dataclass
