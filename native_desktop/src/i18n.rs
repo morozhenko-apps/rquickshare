@@ -5,8 +5,8 @@
 
 mod dynamic;
 mod history;
-mod menu_extra;
 mod image;
+mod menu_extra;
 mod reveal_notices;
 mod settings;
 mod settings_errors;
