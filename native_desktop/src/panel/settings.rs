@@ -722,7 +722,8 @@ GNU General Public License v3.0.",
             Err(error) => {
                 self.confirming.set(false);
                 self.login_dirty.set(true);
-                self.login_status.set_text(crate::i18n::label(login_failure(error)));
+                self.login_status
+                    .set_text(crate::i18n::label(login_failure(error)));
                 self.refresh();
                 return;
             }

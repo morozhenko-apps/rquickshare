@@ -7,8 +7,8 @@ mod dynamic;
 mod history;
 mod image;
 mod settings;
-mod settings_state;
 mod settings_errors;
+mod settings_state;
 
 const MENU_KEYS: [&str; 17] = [
     "Visible",
