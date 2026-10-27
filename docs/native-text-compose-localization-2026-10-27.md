@@ -20,3 +20,10 @@ Date 2026-10-27. Mode A (feature); source baseline `e1abea6db124a4bb3117a2a18bd2
 - Arabic bidi and font/width behavior are separate visual gates not established by catalog cardinality. Machine-assisted strings require human linguistic review.
 - Keep code and documentation in separate commits. Use optimistic expected-SHA update on shared dev; no release/master, package, Pixel, Google identity, signer or R2 changes. Roll back code commit separately from docs.
 - **State before code:** planned, NOT IMPLEMENTED, NOT TESTED; #17 stays PARTIAL until full surfaces and release gates are met.
+
+## Implementation checkpoint
+
+- Production commit `120ca2f18f0481636687c18192778f77a6c37030` adds 11 distinct text-composer messages across all 19 non-English rows (209 additional draft translations), with English fallback and tests for exact `UTF-8`, `NUL`, `128 KiB`, 20-locale completeness, key uniqueness, error-vs-captured and manual-paste-vs-preparation distinctions.
+- All thirteen static GTK callsites in `native_desktop/src/panel/compose.rs` now use the catalog; the existing `Send`/`Cancel` keys are shared. The inserted source calls do **not** change actual clipboard, selection, byte validation or authorization logic.
+- Independent source structural check **PASS**: 19 catalog rows × 11 values, 11 canonical keys, eleven declared messages present in the composer, original explicit paste/prepare callbacks and middle-click suppression intact. This is **not** a compiler, test-suite or KDE/RTL/human language acceptance result.
+- Exact-source Preflight and Native GTK source CI are still **pending**, and the final source-exact outcome must be added after terminal status. #17 remains **PARTIAL** and existing 0.9.0/1.0.0 release blockers are unchanged.

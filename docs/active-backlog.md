@@ -6,6 +6,12 @@
 
 **#16 still PARTIAL:** Google-compatible trusted certificate provider, actual advertised route-to-device binding (beyond credential identity), outbound addressable BLE adapter, accountable per-medium quality measurements and verified-only backend dedup projection remain. Windows Native adapter unchanged; 20 GTK locales #17 separately PARTIAL. No visual, master/tag/release or installed package changes. Refrain from releasing an untested new binary.
 
+## 2026-10-27 #17 native GTK text review and composer localization slices
+
+Received-text review completed as a bounded source slice via merged [PR #28](https://github.com/morozhenko-apps/rquickshare/pull/28) at `e1abea6d`. Exact-source feature PR Preflight `40468865775` and Native GTK `40468865774` **SUCCESS**, while KDE, Arabic RTL and professional linguistic acceptance remain OPEN.
+
+New text composer production `120ca2f18f0481636687c18192778f77a6c37030` adds 11 catalog keys × 19 translations for the 20 canonical locales, wiring the explicit paste/preparation dialogs without changing clipboard access, bounds or Send semantics. Static inventory and wiring checks PASS, but **source-exact CI pending**; no general 20-language GTK completion, 1.0.0 Mode B or physical acceptance claim. [Implementation and separate negative/fallback test plan](native-text-compose-localization-2026-10-27.md). #17 stays OPEN, #16 verified-route requirements and #8 BWU residual risk are unchanged.
+
 ## 2026-10-26 #16 Core exact-route registry: implementation / CI gate
 
 Production-compiled `core_lib/src/service/runtime/route_registry.rs` now owns all Native outbound **exact route generations** instead of a raw map; `NativeRuntime::dispatch` calls its source-owned route selector and pins one concrete chosen transport before an outbound job enters the queue. Real anonymous Pixel peers retain their exact choice and existing UI. Independently verified same-peer routes *can* be ranked by known connection latency under a bounded certificate-evidence lifetime, with stable tie order; route removal, IP/port generation replacement and expiry revoke the linking evidence. Separate verified peers, equal display names and temporary Google 4-byte IDs cannot redirect or multicast a user Send. Only `#[cfg(test)]` fixtures currently create route proofs to verify the selector end-to-end. There is **no production certificate provider or route attestation hook yet**; this is architectural groundwork and **#16 remains OPEN**.
