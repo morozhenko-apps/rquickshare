@@ -1,3 +1,7 @@
+## 2026-10-27 #17 Settings source-exact Preflight proven
+
+Executable `51b416e6`: Preflight `40513766961` **SUCCESS, all five jobs** (Rust format, Core tests/Clippy, Tauri Clippy, Frontend). Native GTK `40513766561` **IN PROGRESS** at last read (prerequisite install), so full GTK source acceptance is still PENDING. [Settings proof and remaining stages](native-settings-i18n-staged-plan-2026-10-27.md). Issue #17 remains OPEN; no 20-language human/RTL and no hardware/1.0.0 release claim.
+
 ## 2026-10-27 #17 Settings chrome (first source slice, 20 locales)
 
 Executed source `51b416e6` creates isolated `src/i18n/settings.rs` with **25 new static keys ×19 translated rows = 475 draft translations**, hooks static buttons/visibility choices/pages in `panel/settings.rs`; existing visible/hidden/cancel reused, and settings write/recovery/retry/restart/login/port validation callbacks remain untouched. Static source audit PASS; **Native GTK 40513766561 and Preflight 40513766961 pending** (no source-exact terminal proof). [Settings staged plan and remaining status/error work](native-settings-i18n-staged-plan-2026-10-27.md). #17 remains PARTIAL.
