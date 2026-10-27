@@ -1,3 +1,8 @@
+> Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
+> Historical Worker, nested archive and full remote snapshot instructions
+> below are superseded. The owner approved a fresh flat channel without
+> a legacy migration; production cutover has not been performed.
+
 # Native APT on Cloudflare R2 with external signing
 
 Current implementation, selected distribution/signing bindings and remaining gates:

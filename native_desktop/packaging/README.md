@@ -1,3 +1,8 @@
+> Current distribution contract: [flat R2 distribution](../../docs/FLAT_DISTRIBUTION.md).
+> Historical Worker, nested archive and full remote snapshot instructions
+> below are superseded. The owner approved a fresh flat channel without
+> a legacy migration; production cutover has not been performed.
+
 # Native Linux package
 
 The source builds a native Debian package with GTK4/Layer Shell GUI, independent
