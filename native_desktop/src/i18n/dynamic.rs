@@ -56,21 +56,63 @@ pub(super) fn file_count_for(locale: &str, count: usize) -> String {
             Few => "файла",
             _ => "файлов",
         },
-        "es" => if category == One { "archivo" } else { "archivos" },
-        "pt" => if category == One { "ficheiro" } else { "ficheiros" },
-        "de" => if category == One { "Datei" } else { "Dateien" },
-        "fr" => if category == One { "fichier" } else { "fichiers" },
+        "es" => {
+            if category == One {
+                "archivo"
+            } else {
+                "archivos"
+            }
+        }
+        "pt" => {
+            if category == One {
+                "ficheiro"
+            } else {
+                "ficheiros"
+            }
+        }
+        "de" => {
+            if category == One {
+                "Datei"
+            } else {
+                "Dateien"
+            }
+        }
+        "fr" => {
+            if category == One {
+                "fichier"
+            } else {
+                "fichiers"
+            }
+        }
         "it" => "file",
         "pl" => match category {
             One => "plik",
             Few => "pliki",
             _ => "plików",
         },
-        "hi" => if category == One { "फ़ाइल" } else { "फ़ाइलें" },
+        "hi" => {
+            if category == One {
+                "फ़ाइल"
+            } else {
+                "फ़ाइलें"
+            }
+        }
         "zh-Hant" => "個檔案",
         "ja" => "件のファイル",
-        "nl" => if category == One { "bestand" } else { "bestanden" },
-        "sv" => if category == One { "fil" } else { "filer" },
+        "nl" => {
+            if category == One {
+                "bestand"
+            } else {
+                "bestanden"
+            }
+        }
+        "sv" => {
+            if category == One {
+                "fil"
+            } else {
+                "filer"
+            }
+        }
         "tr" => "dosya",
         "ko" => "개 파일",
         "bn" => "ফাইল",
@@ -84,7 +126,13 @@ pub(super) fn file_count_for(locale: &str, count: usize) -> String {
             Many => "ملفًا",
             _ => "ملف",
         },
-        _ => if category == One { "file" } else { "files" },
+        _ => {
+            if category == One {
+                "file"
+            } else {
+                "files"
+            }
+        }
     };
     format!("{count} {noun}")
 }
@@ -180,7 +228,10 @@ mod tests {
         for locale in LOCALES {
             for count in [0, 1, 2, 3, 4, 5, 11, 21, 101, 1000, usize::MAX] {
                 let rendered = file_count_for(locale, count);
-                assert!(rendered.starts_with(&count.to_string()), "{locale}: {count}");
+                assert!(
+                    rendered.starts_with(&count.to_string()),
+                    "{locale}: {count}"
+                );
                 assert!(!rendered.trim().is_empty(), "{locale}: {count}");
                 assert!(!rendered.contains('<'), "{locale}: {count}");
             }
@@ -208,7 +259,16 @@ mod tests {
         }
         assert_eq!(code_for("en", "0123"), "Code: \u{2066}0123\u{2069}");
         assert_eq!(code_for("ar", "0123"), "الرمز: \u{2066}0123\u{2069}");
-        for invalid in ["", "1", "123", "12345", "12 3", "١٢٣٤", "ab12", "1\u{2069}23"] {
+        for invalid in [
+            "",
+            "1",
+            "123",
+            "12345",
+            "12 3",
+            "١٢٣٤",
+            "ab12",
+            "1\u{2069}23",
+        ] {
             assert!(code_for("en", invalid).is_empty(), "{invalid:?}");
         }
     }
