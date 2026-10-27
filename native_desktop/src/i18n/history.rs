@@ -227,8 +227,8 @@ pub(super) fn translated(locale: &str, source: &str) -> Option<&'static str> {
         ],
         "nl" => &[
             "Vernieuwen",
-            "Voltooide wissen",
-            "Geschiedenis herstellen",
+            "Voltooide items wissen",
+            "Geschiedenis resetten",
             "Serviceverbinding verbroken. Live-statussen kunnen verouderd zijn; maak opnieuw verbinding voordat u een overdracht bestuurt.",
             "Geschiedenis kon niet worden opgeslagen. Delen blijft mogelijk. Vernieuw om opnieuw te proberen of herstel de geschiedenis met behoud van een herstelkopie.",
             "Geschiedenis laden…",
@@ -480,6 +480,8 @@ mod tests {
         assert_eq!(translated("pt", "Reset history"), Some("Repor histórico"));
         assert_eq!(translated("ru", "Declined"), Some("Отклонено"));
         assert_eq!(translated("pt", "Cancelled"), Some("Cancelado"));
+        assert_eq!(translated("nl", "Reset history"), Some("Geschiedenis resetten"));
+        assert_eq!(translated("nl", "Clear completed"), Some("Voltooide items wissen"));
         assert_eq!(translated("zh-Hant", "Completed"), Some("已完成"));
     }
 }
