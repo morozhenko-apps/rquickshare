@@ -1313,11 +1313,13 @@ impl Panel {
             self.rows.borrow_mut().clear();
             for id in ["nearby", "incoming", "transfers"] {
                 clear(&self.box_widget(id));
-                self.box_widget(id).append(&label(if preview {
+                let caption = if preview {
                     "Preview only"
                 } else {
                     "Waiting for complete service state"
-                }));
+                };
+                self.box_widget(id)
+                    .append(&label(crate::i18n::label(caption)));
             }
             if let Some(page) = model.preview_page.as_deref() {
                 self.render_preview(page);
@@ -1374,7 +1376,7 @@ impl Panel {
         let row = details_card_mode(&transfer.details, full);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         for (title, accept) in [("Decline", false), ("Accept", true)] {
-            let button = gtk::Button::with_label(title);
+            let button = gtk::Button::with_label(crate::i18n::label(title));
             button.set_widget_name(if accept { "accept" } else { "decline" });
             button.set_sensitive(
                 ready
@@ -1427,11 +1429,12 @@ impl Panel {
                 full,
                 self.file_action(transfer, full),
             ));
-            row.append(&label(if transfer.completed_files.is_empty() {
+            let saved_notice = if transfer.completed_files.is_empty() {
                 "No complete files were saved. Ask the sender to send again."
             } else {
                 "Completed files were kept. Ask the sender to resend the remaining files."
-            }));
+            };
+            row.append(&label(crate::i18n::label(saved_notice)));
         }
         if let Some(recipient) = &transfer.recipient {
             row.prepend(&label(&format!("Recipient: {recipient}")));
@@ -1459,7 +1462,7 @@ impl Panel {
         }
         if full && transfer.direction == Direction::Inbound && transfer.phase == Phase::Finished {
             if let Some(revision) = transfer.content_revision {
-                let review = gtk::Button::with_label("Review text");
+                let review = gtk::Button::with_label(crate::i18n::label("Review text"));
                 review.set_widget_name("review-text");
                 review.set_sensitive(ready);
                 let weak = Rc::downgrade(self);
@@ -1475,7 +1478,7 @@ impl Panel {
             }
         }
         if full && transfer.reveal_revision.is_some() {
-            let cancel = gtk::Button::with_label("Cancel folder request");
+            let cancel = gtk::Button::with_label(crate::i18n::label("Cancel folder request"));
             cancel.set_widget_name("cancel-reveal");
             cancel.set_visible(self.revealing(&transfer.transfer));
             let weak = Rc::downgrade(self);
@@ -1489,7 +1492,7 @@ impl Panel {
             row.append(&cancel);
         }
         if !transfer.phase.is_terminal() {
-            let cancel = gtk::Button::with_label("Cancel");
+            let cancel = gtk::Button::with_label(crate::i18n::label("Cancel"));
             cancel.set_widget_name("cancel");
             cancel.set_sensitive(
                 ready
