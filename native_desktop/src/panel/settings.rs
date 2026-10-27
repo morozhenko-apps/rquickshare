@@ -279,7 +279,7 @@ impl Editor {
         folder.append(&editor.choose);
         folder.append(&editor.default);
         receiving.append(&folder);
-        receiving.append(&label("Each incoming transfer still requires your confirmation. Folder changes affect new requests."));
+        receiving.append(&label(crate::i18n::label("Each incoming transfer still requires your confirmation. Folder changes affect new requests.")));
         pages.add_titled(
             &receiving,
             Some("receiving"),
@@ -291,7 +291,7 @@ impl Editor {
             crate::i18n::label("Port"),
             editor.port.upcast_ref(),
         );
-        advanced.append(&label("Leave empty or use 0 for automatic selection. A changed port requires restarting sharing when idle."));
+        advanced.append(&label(crate::i18n::label("Leave empty or use 0 for automatic selection. A changed port requires restarting sharing when idle.")));
         advanced.append(&editor.recover);
         advanced.append(&editor.reload);
         advanced.append(&editor.retry);
@@ -466,7 +466,7 @@ GNU General Public License v3.0.",
             if !self.login_apply.is_sensitive() {
                 self.confirming.set(false);
                 self.status.set_text(
-                    "Sign-in state changed or is unavailable. Reload it before confirming.",
+                    crate::i18n::label("Sign-in state changed or is unavailable. Reload it before confirming."),
                 );
                 self.refresh();
                 return;
@@ -511,7 +511,7 @@ GNU General Public License v3.0.",
         }
         self.dirty.set(true);
         self.status.set_text(if self.name_input().is_err() {
-            "Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name."
+            crate::i18n::label("Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name.")
         } else { "Changes will apply after OK." });
         self.refresh();
     }
@@ -640,7 +640,7 @@ GNU General Public License v3.0.",
         }
         if !available {
             self.status
-                .set_text("Sharing settings are unavailable. Retry the connection from the card.");
+                .set_text(crate::i18n::label("Sharing settings are unavailable. Retry the connection from the card."));
         }
     }
     pub fn refresh_login(&self) {
@@ -743,7 +743,7 @@ GNU General Public License v3.0.",
                     if let Err(error) = result {
                         editor.confirming.set(false);
                         editor.login_status.set_text(crate::i18n::label(login_failure(error)));
-                        editor.status.set_text("Sign-in change was not confirmed. Any acknowledged sharing settings remain saved.");
+                        editor.status.set_text(crate::i18n::label("Sign-in change was not confirmed. Any acknowledged sharing settings remain saved."));
                     } else if editor.confirming.get() {
                         editor.finish_confirmation();
                     }
@@ -773,16 +773,16 @@ GNU General Public License v3.0.",
             Operation::Save => {
                 let Ok(visibility) = selected_visibility(self.visibility.selected()) else {
                     self.status
-                        .set_text("Choose a visibility setting before saving.");
+                        .set_text(crate::i18n::label("Choose a visibility setting before saving."));
                     return;
                 };
                 let Ok(port) = parse_port(self.port.text().as_str()) else {
                     self.status
-                        .set_text("Port must be empty or an integer from 0 to 65535.");
+                        .set_text(crate::i18n::label("Port must be empty or an integer from 0 to 65535."));
                     return;
                 };
                 let Ok(device_name) = self.name_input() else {
-                    self.status.set_text("Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name.");
+                    self.status.set_text(crate::i18n::label("Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name."));
                     return;
                 };
                 let Some(base) = self.base.borrow().clone() else {
@@ -790,14 +790,14 @@ GNU General Public License v3.0.",
                 };
                 let Ok(request) = rqs_lib::service::process::fresh_epoch() else {
                     self.status
-                        .set_text("Cannot create a save identity. Try again.");
+                        .set_text(crate::i18n::label("Cannot create a save identity. Try again."));
                     return;
                 };
                 let directory = match self.file.borrow().as_ref().map(File::try_clone).transpose() {
                     Ok(file) => file,
                     Err(_) => {
                         self.status
-                            .set_text("Cannot retain the selected folder. Choose it again.");
+                            .set_text(crate::i18n::label("Cannot retain the selected folder. Choose it again."));
                         return;
                     }
                 };
@@ -845,7 +845,7 @@ GNU General Public License v3.0.",
                         }
                     },
                     Ok(_) if matches!(operation, Operation::Restart) => editor.status.set_text("Sharing restart requested. Retry the connection from the card to read its state."),
-                    Ok(_) => { editor.confirming.set(false); editor.status.set_text("Settings acknowledgement was incomplete. Reload before making another edit."); },
+                    Ok(_) => { editor.confirming.set(false); editor.status.set_text(crate::i18n::label("Settings acknowledgement was incomplete. Reload before making another edit.")); },
                     Err(error) => { editor.confirming.set(false); editor.status.set_text(crate::i18n::label(failure(error))); },
                 }
                 editor.refresh();
@@ -888,7 +888,7 @@ GNU General Public License v3.0.",
                     editor.busy.set(false);
                     match result {
                         Ok(Ok((file, display))) => { editor.file.replace(Some(file)); editor.directory_intent.set(2); editor.directory.set_text(&display); editor.changed(); },
-                        _ => editor.status.set_text("Cannot acquire the selected folder. Check access and choose again."),
+                        _ => editor.status.set_text(crate::i18n::label("Cannot acquire the selected folder. Check access and choose again.")),
                     }
                     editor.refresh();
                 }
