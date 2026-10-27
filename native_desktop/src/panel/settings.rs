@@ -183,7 +183,9 @@ impl Editor {
             directory: label(crate::i18n::label("Connect to read the receive folder")),
             directory_intent: Cell::new(0),
             file: RefCell::new(None),
-            recover: gtk::CheckButton::with_label(crate::i18n::label("Back up and replace damaged settings")),
+            recover: gtk::CheckButton::with_label(crate::i18n::label(
+                "Back up and replace damaged settings",
+            )),
             status: label("Sharing settings are unavailable."),
             save: gtk::Button::with_label(crate::i18n::label("OK")),
             cancel: gtk::Button::with_label(crate::i18n::label("Cancel")),
@@ -250,7 +252,11 @@ impl Editor {
             column.append(&row);
         };
         let general = section();
-        field(&general, crate::i18n::label("Device name"), editor.name.upcast_ref());
+        field(
+            &general,
+            crate::i18n::label("Device name"),
+            editor.name.upcast_ref(),
+        );
         general.append(&editor.name_hint);
         general.append(&editor.login);
         general.append(&label(
@@ -259,16 +265,32 @@ impl Editor {
         general.append(&editor.login_status);
         pages.add_titled(&general, Some("general"), crate::i18n::label("General"));
         let receiving = section();
-        field(&receiving, crate::i18n::label("Visibility"), editor.visibility.upcast_ref());
-        field(&receiving, crate::i18n::label("Receive folder"), editor.directory.upcast_ref());
+        field(
+            &receiving,
+            crate::i18n::label("Visibility"),
+            editor.visibility.upcast_ref(),
+        );
+        field(
+            &receiving,
+            crate::i18n::label("Receive folder"),
+            editor.directory.upcast_ref(),
+        );
         let folder = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         folder.append(&editor.choose);
         folder.append(&editor.default);
         receiving.append(&folder);
         receiving.append(&label("Each incoming transfer still requires your confirmation. Folder changes affect new requests."));
-        pages.add_titled(&receiving, Some("receiving"), crate::i18n::label("Receiving"));
+        pages.add_titled(
+            &receiving,
+            Some("receiving"),
+            crate::i18n::label("Receiving"),
+        );
         let advanced = section();
-        field(&advanced, crate::i18n::label("Port"), editor.port.upcast_ref());
+        field(
+            &advanced,
+            crate::i18n::label("Port"),
+            editor.port.upcast_ref(),
+        );
         advanced.append(&label("Leave empty or use 0 for automatic selection. A changed port requires restarting sharing when idle."));
         advanced.append(&editor.recover);
         advanced.append(&editor.reload);

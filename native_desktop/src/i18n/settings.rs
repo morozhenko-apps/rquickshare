@@ -587,9 +587,21 @@ mod tests {
                 assert_ne!(get(left), get(right), "{locale}: {left} / {right}");
             }
         }
-        assert_eq!(translated("ru", "Restart sharing"), Some("Перезапустить обмен"));
-        assert_eq!(translated("pt", "Retry pending save"), Some("Repetir gravação pendente"));
-        assert_eq!(translated("pt", "Back up and replace damaged settings"), Some("Criar cópia de segurança e substituir definições danificadas"));
-        assert_eq!(translated("ru", "Visible for one minute"), Some("Виден одну минуту"));
+        assert_eq!(
+            translated("ru", "Restart sharing"),
+            Some("Перезапустить обмен")
+        );
+        assert_eq!(
+            translated("pt", "Retry pending save"),
+            Some("Repetir gravação pendente")
+        );
+        assert_eq!(
+            translated("pt", "Back up and replace damaged settings"),
+            Some("Criar cópia de segurança e substituir definições danificadas")
+        );
+        assert_eq!(
+            translated("ru", "Visible for one minute"),
+            Some("Виден одну минуту")
+        );
     }
 }
