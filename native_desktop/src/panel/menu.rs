@@ -372,7 +372,7 @@ impl Panel {
             .logo_icon_name(crate::tray::ICON_NAME)
             .license_type(gtk::License::Gpl30Only)
             .website("https://github.com/morozhenko-apps/rquickshare")
-            .website_label("Project website")
+            .website_label(crate::i18n::label("Project website"))
             .build();
         about.set_hide_on_close(true);
         self.watch_idle_widget(&about);
