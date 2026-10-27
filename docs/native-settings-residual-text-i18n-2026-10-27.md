@@ -31,3 +31,7 @@ Executable `723e7c033f87082b8e070d2feaf57832eaeba68a` adds `native_desktop/src/i
 A source-structural pass independently checked 19×15 translated rows, canonical 20 locale registration, key routing and visible Start/Restart captions. Unmodified critical code: `status(SettingsView)`, `failure(ControllerError)`, `login_failure`, `confirmation_applied`, user `device_name`, `gio::File` capability, input/port/visibility and explicit actions. This is source-only evidence; no native-speaker approval claimed.
 
 Source-exact **Native GTK `40571862841`** and **Preflight `40571863031`** were in progress at checkpoint, not PASS by inference. No final Mode B, physical KDE/Pixel, Windows, master/tag/R2/install actions. #17 remains OPEN until transfer rows, reveal, notifications/tray/a11y/packaging and RTL language review are complete.
+
+## Final source-exact Settings proof (2026-10-27)
+
+Formatter-only follow-up `dc1da6a700087f8106b8748a05be9150098b0cd2` validated with **Native GTK `40572346978` SUCCESS** and **Preflight `40572346805` SUCCESS across all five jobs**. Source `723e7c03` initially failed Native GTK `40571862841` in seven strict `rustfmt` layout differences; no tests were run in the failed invocation. Exact formatter correction made no behavior, catalog value or assertion change. The new transfer-row source `3fceee03` starts a separate source-exact validation; no inference of pass there.

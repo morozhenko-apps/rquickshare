@@ -34,3 +34,7 @@ The release order is feature/reliability blockers → all intended native UI tex
 ## Native settings residual update 2026-10-27
 
 Executable `723e7c03` now covers 15 formerly English static Settings guide/pending/login/restart/chooser/About messages and initial Settings unavailable label (reused), including default Downloads text. Dynamic name/path isolation was previously covered. Remaining Settings visible text, if any, must be found with a precise source/behavior audit, not inferred from earlier inventory; transfer row, reveal, countdown, outbound, tray/a11y and packaging are still unfinished. Source-exact Preflight `40571863031`, Native GTK `40571862841` PENDING. No release/Mode B claim.
+
+## Transfer-row source update 2026-10-27
+
+Production `3fceee03` covers 15 native content/consent/accessible labels (19 draft locale rows), exact count/bytes from existing typed helpers and display-only completed filename bidi isolation; Send/Receive reuse menu labels. Source-only audit PASS, CI `40573609635` and `40573609686` pending. Later reveal, results, countdown, outbound, tray/notifications, packaging and full RTL remain independently OPEN.

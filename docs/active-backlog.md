@@ -1,3 +1,9 @@
+## 2026-10-27 #17 transfer rows source slice (consent and bidi-safe files)
+
+Code `3fceee03` adds **15 new UI labels ×19 additional locales = 285 draft translations** for transfer-row content, PIN-review accessible tooltip, incoming/advertised status and saved-file actions. Untrusted completed filename text is now displayed through existing FSI/PDI isolate; original file/capability unchanged. Sender-specific consent, file metadata and cancel/reveal controls remain unchanged. Independent structural source audit PASS; **Preflight `40573609635` and Native GTK `40573609686` running**, not yet accepted. [Source plan/test coverage/rollback](native-transfer-rows-i18n-2026-10-27.md). #17 OPEN.
+
+Previous Settings residual source `dc1da6a7` now has **Preflight `40572346805` SUCCESS (5/5) + Native GTK `40572346978` SUCCESS**; human-language/physical tests still OPEN. [Settings source gate](native-settings-residual-text-i18n-2026-10-27.md). #16 stays OPEN pending legitimate Google-certificate provider, #8 sole explicit exception; final Mode B not run.
+
 ## 2026-10-27 #17 Native Settings residual captions, first executable gate
 
 Doc-first `docs/native-settings-residual-text-i18n-2026-10-27.md`; production `723e7c03` localizes **15 new source strings ×19 draft non-English locales = 285 translations** and **18 GTK display sites** (login/restart/folder chooser/About etc.), reuses existing Settings unavailable status and preserves original settings controllers. Structural audit PASS; source-exact Preflight `40571863031` and Native GTK `40571862841` **IN PROGRESS**, not terminal green. No Mode B or physical tests. #8 remains sole exception; #16 Google certificate provider OPEN/external blocked. [Detailed settings locale plan and checkpoint](native-settings-residual-text-i18n-2026-10-27.md).
