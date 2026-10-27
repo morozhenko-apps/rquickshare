@@ -73,7 +73,7 @@ impl Composer {
         prepared: impl Fn(Option<rqs_lib::service::client::Selection>) + 'static,
     ) -> Rc<Self> {
         let window = gtk::Window::builder()
-            .title("Send text")
+            .title(crate::i18n::label("Send text"))
             .default_width(480)
             .default_height(360)
             .build();
@@ -85,7 +85,9 @@ impl Composer {
         root.set_margin_bottom(16);
         root.set_margin_start(16);
         root.set_margin_end(16);
-        let heading = label("Write or paste text, then prepare it and choose recipients.");
+        let heading = label(crate::i18n::label(
+            "Write or paste text, then prepare it and choose recipients.",
+        ));
         heading.set_selectable(false);
         root.append(&heading);
         let buffer = gtk::TextBuffer::new(None::<&gtk::TextTagTable>);
@@ -99,13 +101,15 @@ impl Composer {
             .child(&editor)
             .build();
         root.append(&scroll);
-        let status = label("Clipboard is read only when you paste. Nothing is sent yet.");
+        let status = label(crate::i18n::label(
+            "Clipboard is read only when you paste. Nothing is sent yet.",
+        ));
         status.set_selectable(false);
         root.append(&status);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let paste = gtk::Button::with_label("Paste clipboard");
-        let prepare = gtk::Button::with_label("Prepare text");
-        let cancel = gtk::Button::with_label("Cancel");
+        let paste = gtk::Button::with_label(crate::i18n::label("Paste clipboard"));
+        let prepare = gtk::Button::with_label(crate::i18n::label("Prepare text"));
+        let cancel = gtk::Button::with_label(crate::i18n::label("Cancel"));
         buttons.append(&paste);
         buttons.append(&prepare);
         buttons.append(&cancel);
@@ -138,7 +142,9 @@ impl Composer {
                 if let Some(composer) = weak.upgrade() {
                     composer
                         .status
-                        .set_text("Text must be UTF-8 without NUL and at most 128 KiB.");
+                        .set_text(crate::i18n::label(
+                            "Text must be UTF-8 without NUL and at most 128 KiB.",
+                        ));
                 }
             }
         });
@@ -227,13 +233,13 @@ impl Composer {
                 match result {
                     Ok(text) => {
                         composer.buffer.set_text(text.text());
-                        composer.status.set_text(
+                        composer.status.set_text(crate::i18n::label(
                             "Text captured. Review it, then prepare and choose recipients.",
-                        );
+                        ));
                     }
-                    Err(()) => composer.status.set_text(
+                    Err(()) => composer.status.set_text(crate::i18n::label(
                         "No supported text was captured. Use 1–128 KiB of UTF-8 text without NUL.",
-                    ),
+                    )),
                 }
                 composer.refresh();
             }
@@ -247,15 +253,15 @@ impl Composer {
             return;
         }
         let Some(text) = self.body() else {
-            self.status.set_text("Enter 1–128 KiB of text without NUL.");
+            self.status.set_text(crate::i18n::label("Enter 1–128 KiB of text without NUL."));
             return;
         };
         let completion = match (self.submit)(text) {
             Ok(completion) => completion,
             Err(_) => {
-                self.status.set_text(
+                self.status.set_text(crate::i18n::label(
                     "Preparation was not queued. Review the current source and connection.",
-                );
+                ));
                 return;
             }
         };
@@ -407,11 +413,13 @@ impl Panel {
         );
         composer
             .prepare
-            .set_label(if direct { "Send" } else { "Prepare text" });
+            .set_label(crate::i18n::label(if direct { "Send" } else { "Prepare text" }));
         if direct {
             composer
                 .heading
-                .set_text("Write or paste text, then send it to the selected device.");
+                .set_text(crate::i18n::label(
+                    "Write or paste text, then send it to the selected device.",
+                ));
         }
         self.watch_idle_widget(&composer.window);
         composer.window.set_transient_for(Some(&self.window));
