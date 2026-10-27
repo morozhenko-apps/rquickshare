@@ -1,3 +1,9 @@
+## 2026-10-27 #17 client error and uncertain completion localization
+
+Source-exact previous panel status follow-up `75c8e4e5`: [Native GTK 40596180592](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596180592) **SUCCESS** and [Preflight 40596180519](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596180519) **SUCCESS**. No installed or human-language acceptance implied.
+
+Docs-first client error inventory `c12c8640` and precode review; executable `2badb6c5` adds twelve immutable client error/uncertain-completion keys ×19 draft non-English translations = **228 entries**, with 20-locale completeness, RU/PT/Arabic/fallback semantic oracles and cross-catalog disjointness. Source and controller classifications in `panel.rs` are untouched; labels are translated through the existing GTK presentation boundary. Exact [Native GTK 40596891097](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891097) and [Preflight 40596891115](https://github.com/morozhenko-apps/rquickshare/actions/runs/40596891115) **PENDING**. No 1.0.0 closure, physical Pixel/KDE, full Mode B, master or protected publishing.
+
 ## 2026-10-27 #17 operation notices exact CI success; panel states source added
 
 Prior operation notice source `d29a0614` now has exact [Native GTK 40593093964](https://github.com/morozhenko-apps/rquickshare/actions/runs/40593093964) **SUCCESS** and [Preflight 40593093965](https://github.com/morozhenko-apps/rquickshare/actions/runs/40593093965) **SUCCESS**. Its six notice sources, 114 translated drafts and both status display projection points have passed source tests; no installed/human-linguistic signoff.
