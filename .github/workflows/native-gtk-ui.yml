@@ -7,6 +7,12 @@ on:
       - "native_desktop/**"
       - "core_lib/**"
       - ".github/workflows/native-gtk-ui.yml"
+  pull_request:
+    branches: [dev]
+    paths:
+      - "native_desktop/**"
+      - "core_lib/**"
+      - ".github/workflows/native-gtk-ui.yml"
   workflow_dispatch:
 
 permissions:
