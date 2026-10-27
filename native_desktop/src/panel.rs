@@ -779,7 +779,7 @@ impl Panel {
     }
     pub fn notice(&self, text: &'static str) {
         self.model.borrow_mut().notice = Some(text);
-        self.text("status", text);
+        self.text("status", crate::i18n::label(text));
         self.builder
             .object::<gtk::Label>("status")
             .unwrap()
@@ -1300,7 +1300,7 @@ impl Panel {
         } else {
             error_message(None)
         };
-        self.text("status", status);
+        self.text("status", crate::i18n::label(status));
         self.builder
             .object::<gtk::Label>("status")
             .unwrap()
