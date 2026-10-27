@@ -24,6 +24,18 @@ const MENU_KEYS: [&str; 17] = [
 ];
 const ENGLISH: [&str; 17] = MENU_KEYS;
 
+const REVIEW_KEYS: [&str; 8] = [
+    "Received text",
+    "Received link · plain text",
+    "Copy",
+    "Close",
+    "Nothing has been copied. Use Copy to replace this clipboard.",
+    "Copy unavailable. Unlock and review the current transfer.",
+    "Copy failed. This clipboard did not accept the text.",
+    "Copied to this clipboard",
+];
+const ENGLISH_REVIEW: [&str; 8] = REVIEW_KEYS;
+
 /// Canonical PersonalLanding locale IDs; never infer pt-BR or zh-Hans.
 pub(crate) const LOCALES: [&str; 20] = [
     "en", "ru", "es", "pt", "de", "fr", "it", "pl", "hi", "zh-Hant", "ja", "nl", "sv", "tr", "ko",
@@ -82,7 +94,206 @@ pub(crate) fn label(source: &'static str) -> &'static str {
     translated(active(), source)
 }
 
+fn translated_review(locale: &str) -> &'static [&'static str; 8] {
+    match locale {
+        "ru" => &[
+            "Полученный текст",
+            "Полученная ссылка · обычный текст",
+            "Копировать",
+            "Закрыть",
+            "Ничего не скопировано. Нажмите «Копировать», чтобы заменить содержимое буфера обмена.",
+            "Копирование недоступно. Снимите блокировку и проверьте текущую передачу.",
+            "Не удалось скопировать. Буфер обмена не принял текст.",
+            "Скопировано в буфер обмена",
+        ],
+        "es" => &[
+            "Texto recibido",
+            "Enlace recibido · texto sin formato",
+            "Copiar",
+            "Cerrar",
+            "No se ha copiado nada. Usa «Copiar» para sustituir el contenido del portapapeles.",
+            "No se puede copiar. Desbloquea el dispositivo y comprueba la transferencia actual.",
+            "No se pudo copiar. El portapapeles no aceptó el texto.",
+            "Copiado al portapapeles",
+        ],
+        "pt" => &[
+            "Texto recebido",
+            "Ligação recebida · texto simples",
+            "Copiar",
+            "Fechar",
+            "Ainda não foi copiado nada. Use «Copiar» para substituir o conteúdo da área de transferência.",
+            "Não é possível copiar. Desbloqueie o dispositivo e reveja a transferência atual.",
+            "Falha ao copiar. A área de transferência não aceitou o texto.",
+            "Copiado para a área de transferência",
+        ],
+        "de" => &[
+            "Empfangener Text",
+            "Empfangener Link · Klartext",
+            "Kopieren",
+            "Schließen",
+            "Es wurde nichts kopiert. Mit „Kopieren“ ersetzen Sie den Inhalt der Zwischenablage.",
+            "Kopieren nicht verfügbar. Entsperren Sie das Gerät und prüfen Sie die aktuelle Übertragung.",
+            "Kopieren fehlgeschlagen. Die Zwischenablage hat den Text nicht angenommen.",
+            "In die Zwischenablage kopiert",
+        ],
+        "fr" => &[
+            "Texte reçu",
+            "Lien reçu · texte brut",
+            "Copier",
+            "Fermer",
+            "Rien n’a été copié. Utilisez « Copier » pour remplacer le contenu du presse-papiers.",
+            "Copie indisponible. Déverrouillez l’appareil et vérifiez le transfert en cours.",
+            "Échec de la copie. Le presse-papiers n’a pas accepté le texte.",
+            "Copié dans le presse-papiers",
+        ],
+        "it" => &[
+            "Testo ricevuto",
+            "Link ricevuto · testo semplice",
+            "Copia",
+            "Chiudi",
+            "Non è stato copiato nulla. Usa «Copia» per sostituire il contenuto degli appunti.",
+            "Copia non disponibile. Sblocca il dispositivo e verifica il trasferimento corrente.",
+            "Copia non riuscita. Gli appunti non hanno accettato il testo.",
+            "Copiato negli appunti",
+        ],
+        "pl" => &[
+            "Odebrany tekst",
+            "Odebrany link · zwykły tekst",
+            "Kopiuj",
+            "Zamknij",
+            "Nic nie skopiowano. Wybierz „Kopiuj”, aby zastąpić zawartość schowka.",
+            "Kopiowanie niedostępne. Odblokuj urządzenie i sprawdź bieżący transfer.",
+            "Nie udało się skopiować. Schowek nie przyjął tekstu.",
+            "Skopiowano do schowka",
+        ],
+        "hi" => &[
+            "प्राप्त टेक्स्ट",
+            "प्राप्त लिंक · सादा टेक्स्ट",
+            "कॉपी करें",
+            "बंद करें",
+            "अभी कुछ भी कॉपी नहीं किया गया है। क्लिपबोर्ड की सामग्री बदलने के लिए «कॉपी करें» चुनें।",
+            "कॉपी उपलब्ध नहीं है। डिवाइस अनलॉक करें और मौजूदा ट्रांसफ़र जाँचें।",
+            "कॉपी नहीं हो सका। क्लिपबोर्ड ने टेक्स्ट स्वीकार नहीं किया।",
+            "क्लिपबोर्ड पर कॉपी किया गया",
+        ],
+        "zh-Hant" => &[
+            "已接收的文字",
+            "已接收的連結 · 純文字",
+            "複製",
+            "關閉",
+            "尚未複製任何內容。按「複製」將取代剪貼簿中的內容。",
+            "無法複製。請解鎖裝置並檢查目前的傳輸。",
+            "複製失敗。剪貼簿未接受文字。",
+            "已複製到剪貼簿",
+        ],
+        "ja" => &[
+            "受信したテキスト",
+            "受信したリンク · プレーンテキスト",
+            "コピー",
+            "閉じる",
+            "まだコピーしていません。「コピー」を押すとクリップボードの内容が置き換わります。",
+            "コピーできません。端末のロックを解除し、現在の転送を確認してください。",
+            "コピーに失敗しました。クリップボードがテキストを受け付けませんでした。",
+            "クリップボードにコピーしました",
+        ],
+        "nl" => &[
+            "Ontvangen tekst",
+            "Ontvangen link · platte tekst",
+            "Kopiëren",
+            "Sluiten",
+            "Er is niets gekopieerd. Gebruik 'Kopiëren' om de inhoud van het klembord te vervangen.",
+            "Kopiëren niet beschikbaar. Ontgrendel het apparaat en controleer de huidige overdracht.",
+            "Kopiëren mislukt. Het klembord accepteerde de tekst niet.",
+            "Gekopieerd naar het klembord",
+        ],
+        "sv" => &[
+            "Mottagen text",
+            "Mottagen länk · oformaterad text",
+            "Kopiera",
+            "Stäng",
+            "Ingenting har kopierats. Använd ”Kopiera” för att ersätta urklippets innehåll.",
+            "Kopiering är inte tillgänglig. Lås upp enheten och kontrollera den aktuella överföringen.",
+            "Kopieringen misslyckades. Urklippet tog inte emot texten.",
+            "Kopierat till urklipp",
+        ],
+        "tr" => &[
+            "Alınan metin",
+            "Alınan bağlantı · düz metin",
+            "Kopyala",
+            "Kapat",
+            "Henüz hiçbir şey kopyalanmadı. Panodaki içeriği değiştirmek için “Kopyala”yı kullanın.",
+            "Kopyalama kullanılamıyor. Cihazın kilidini açın ve geçerli aktarımı kontrol edin.",
+            "Kopyalama başarısız oldu. Pano metni kabul etmedi.",
+            "Panoya kopyalandı",
+        ],
+        "ko" => &[
+            "받은 텍스트",
+            "받은 링크 · 일반 텍스트",
+            "복사",
+            "닫기",
+            "아직 복사한 내용이 없습니다. '복사'를 누르면 클립보드 내용이 바뀝니다.",
+            "복사할 수 없습니다. 기기 잠금을 해제하고 현재 전송을 확인하세요.",
+            "복사하지 못했습니다. 클립보드가 텍스트를 받아들이지 않았습니다.",
+            "클립보드에 복사했습니다",
+        ],
+        "bn" => &[
+            "প্রাপ্ত লেখা",
+            "প্রাপ্ত লিংক · সাধারণ লেখা",
+            "কপি করুন",
+            "বন্ধ করুন",
+            "এখনও কিছু কপি করা হয়নি। ক্লিপবোর্ডের বিষয়বস্তু বদলাতে ‘কপি করুন’ চাপুন।",
+            "কপি করা যাচ্ছে না। ডিভাইস আনলক করে বর্তমান স্থানান্তর পরীক্ষা করুন।",
+            "কপি ব্যর্থ হয়েছে। ক্লিপবোর্ড লেখাটি গ্রহণ করেনি।",
+            "ক্লিপবোর্ডে কপি হয়েছে",
+        ],
+        "th" => &[
+            "ข้อความที่ได้รับ",
+            "ลิงก์ที่ได้รับ · ข้อความธรรมดา",
+            "คัดลอก",
+            "ปิด",
+            "ยังไม่ได้คัดลอกอะไร กด «คัดลอก» เพื่อแทนที่เนื้อหาในคลิปบอร์ด",
+            "คัดลอกไม่ได้ ปลดล็อกอุปกรณ์และตรวจสอบการถ่ายโอนปัจจุบัน",
+            "คัดลอกไม่สำเร็จ คลิปบอร์ดไม่ยอมรับข้อความ",
+            "คัดลอกไปยังคลิปบอร์ดแล้ว",
+        ],
+        "id" => &[
+            "Teks diterima",
+            "Tautan diterima · teks biasa",
+            "Salin",
+            "Tutup",
+            "Belum ada yang disalin. Gunakan “Salin” untuk mengganti isi papan klip.",
+            "Tidak dapat menyalin. Buka kunci perangkat dan periksa transfer saat ini.",
+            "Gagal menyalin. Papan klip tidak menerima teks.",
+            "Disalin ke papan klip",
+        ],
+        "fil" => &[
+            "Natanggap na text",
+            "Natanggap na link · plain text",
+            "Kopyahin",
+            "Isara",
+            "Wala pang nakopya. Gamitin ang “Kopyahin” upang palitan ang laman ng clipboard.",
+            "Hindi makakopya. I-unlock ang device at suriin ang kasalukuyang paglilipat.",
+            "Hindi nakopya. Hindi tinanggap ng clipboard ang text.",
+            "Nakopya sa clipboard",
+        ],
+        "ar" => &[
+            "النص المستلَم",
+            "الرابط المستلَم · نص عادي",
+            "نسخ",
+            "إغلاق",
+            "لم يُنسخ أي شيء. استخدم «نسخ» لاستبدال محتوى الحافظة.",
+            "النسخ غير متاح. افتح قفل الجهاز وتحقق من عملية النقل الحالية.",
+            "فشل النسخ. لم تقبل الحافظة النص.",
+            "تم النسخ إلى الحافظة",
+        ],
+        _ => &ENGLISH_REVIEW,
+    }
+}
+
 fn translated(locale: &str, source: &'static str) -> &'static str {
+    if let Some(index) = REVIEW_KEYS.iter().position(|key| *key == source) {
+        return translated_review(locale)[index];
+    }
     let Some(index) = MENU_KEYS.iter().position(|key| *key == source) else {
         return source;
     };
@@ -488,6 +699,9 @@ mod tests {
             for source in MENU_KEYS {
                 assert!(!translated(locale, source).is_empty());
             }
+            for source in REVIEW_KEYS {
+                assert!(!translated(locale, source).is_empty());
+            }
         }
     }
 
@@ -507,6 +721,72 @@ mod tests {
                 "Uncataloged safety text"
             );
         }
+    }
+
+    #[test]
+    fn received_text_review_catalog_preserves_copy_consent_in_every_locale() {
+        assert_eq!(REVIEW_KEYS.len(), 8);
+        for (index, source) in REVIEW_KEYS.iter().enumerate() {
+            assert!(!REVIEW_KEYS[..index].contains(source));
+            assert!(!MENU_KEYS.contains(source));
+            assert_eq!(translated("en", source), *source);
+            for locale in LOCALES {
+                let translation = translated(locale, source);
+                assert!(!translation.trim().is_empty(), "{locale}: {source}");
+                assert!(!translation.contains('{'), "{locale}: {source}");
+            }
+        }
+        for locale in LOCALES {
+            assert_ne!(
+                translated(locale, "Copy"),
+                translated(locale, "Close"),
+                "{locale}: action collision"
+            );
+            assert_ne!(
+                translated(locale, "Copied to this clipboard"),
+                translated(
+                    locale,
+                    "Copy failed. This clipboard did not accept the text."
+                ),
+                "{locale}: success/failure collision"
+            );
+            assert_ne!(
+                translated(locale, "Copied to this clipboard"),
+                translated(
+                    locale,
+                    "Copy unavailable. Unlock and review the current transfer."
+                ),
+                "{locale}: success/blocked collision"
+            );
+            assert_ne!(
+                translated(locale, "Received text"),
+                translated(locale, "Received link · plain text"),
+                "{locale}: payload type collision"
+            );
+        }
+        assert_eq!(translated("ru", "Copy"), "Копировать");
+        assert_eq!(translated("pt", "Copy"), "Copiar");
+        assert_eq!(translated("pt", "Close"), "Fechar");
+        assert_eq!(
+            translated("ru", "Copied to this clipboard"),
+            "Скопировано в буфер обмена"
+        );
+        assert_eq!(
+            translated("pt", "Copied to this clipboard"),
+            "Copiado para a área de transferência"
+        );
+        assert_eq!(
+            translated("en", "Copy failed. This clipboard did not accept the text."),
+            "Copy failed. This clipboard did not accept the text."
+        );
+        assert_eq!(
+            translated(
+                "en",
+                "Nothing has been copied. Use Copy to replace this clipboard."
+            ),
+            "Nothing has been copied. Use Copy to replace this clipboard."
+        );
+        assert_eq!(translated("not-a-locale", "Copy"), "Copy");
     }
 
     #[test]
