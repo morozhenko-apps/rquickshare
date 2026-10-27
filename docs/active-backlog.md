@@ -1,3 +1,7 @@
+## 2026-10-27 Native GTK preview test ETXTBSY incident and fixture publication fix
+
+On `e9b4e4b4`, Preflight `40537441279` **SUCCESS**. Native GTK `40537441309` passed rustfmt/strict Clippy but FAILED **1 of 10** preview tests in `src/preview/tests.rs`: Linux `ETXTBSY` (`Text file busy`) spawning a newly written executable fixture. Not a proven localization regression and **not** counted as flaky/pass. [Failure evidence and root-cause plan](native-preview-fixture-etxtbsy-2026-10-27.md). Test-only fix `1fe649ed` stages, closes and atomically publishes fixtures and reports the original Decoder classification on diagnostic spawn failure; no production preview/security/locale changes. **Final exact-source Preflight `40539063998` and Native GTK `40539064009` PENDING**. Issue #17 still OPEN; no release or physical acceptance claim.
+
 ## 2026-10-27 #17 final exact-source gate for 32 Settings states/errors
 
 Error + login status catalog source `fe49c9ec` failed Native GTK `40536975905` **only** in strict `rustfmt` (two exact source layout issues). Style-only fix `e9b4e4b4`; new final-source Preflight `40537441279` and Native GTK `40537441309` **IN PROGRESS**, not called green. Existing original domain error/status branch code unchanged. Third Settings UI warning/dynamic fields are inventoried but **not implemented**. [Detailed chronology and test plan](native-settings-i18n-staged-plan-2026-10-27.md). #17 still OPEN, release/master/tags unchanged.

@@ -27,3 +27,11 @@ Expected: fixtures are fully written, closed and executable before the **first**
 - Roll back test-only commit independently. No release/master, protocol, clipboard, peer identity, installed app or R2 changes. This addresses a CI test infrastructure fixture defect, not application image-preview security.
 
 **State before source change:** root cause candidate documented; test fix NOT YET IMPLEMENTED or VALIDATED.
+
+## Implementation and final verification checkpoint
+
+Test-only source `1fe649ed8b3947e4d61ffdc11d3050adee444f70` adopts the deterministic fixture hand-off: unique staging path, explicit `write_all`, `sync_all`, closure of writable `File` scope, chmod and atomic rename into `fixture` only after no test-owned writable handle remains. The diagnostic probe still runs ONLY after actual Decoder classification differs from the expected error. If the probe itself cannot exec, its errno is reported alongside `actual` and `expected` rather than swallowed by a generic `expect`. No production module or test classification changed.
+
+Static source audit confirms the writer is scoped/dropped before renaming, that real `Decoder::decode` remains the first launch, `assert_eq!(actual, expected)` and cancellation/deadline/child-reaping assertions remain present. This is **not** proof that `ETXTBSY` is eliminated until real-runner CI completes. Native GTK workflow `40539064009` and Preflight `40539063998` were **IN PROGRESS/QUEUED** for exact source `1fe649ed` at checkpoint; do not claim green. Older `e9b4e4b4` Preflight `40537441279` was terminal **SUCCESS** across all required jobs, and its native GTK `40537441309` failed the single preview fixture test after strict formatting/Clippy PASSED. Source code coverage of settings errors was not the failing test path.
+
+Next continuation: read terminal `40539064009` and `40539063998` jobs; if failing, inspect the exact step/log before changing code. Any repeated `ETXTBSY` should be diagnosed with open writable descriptor evidence rather than arbitrary wait/retry, and the test must stay required.
