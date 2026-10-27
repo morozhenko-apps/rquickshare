@@ -8,6 +8,7 @@ mod history;
 mod image;
 mod settings;
 mod settings_errors;
+mod settings_residual;
 mod settings_state;
 mod settings_warning;
 
@@ -605,6 +606,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
     if let Some(value) = settings_warning::translated(locale, source) {
         return value;
     }
+    if let Some(value) = settings_residual::translated(locale, source) {
+        return value;
+    }
     if let Some(index) = COMPOSE_KEYS.iter().position(|key| *key == source) {
         return translated_compose(locale)[index];
     }
@@ -1070,6 +1074,23 @@ mod tests {
                 assert!(!settings_state::KEYS.contains(&source));
                 assert!(!settings_errors::KEYS.contains(&source));
             }
+            for source in settings_residual::KEYS {
+                assert!(!translated(locale, source).is_empty());
+                assert!(!MENU_KEYS.contains(&source));
+                assert!(!REVIEW_KEYS.contains(&source));
+                assert!(!COMPOSE_KEYS.contains(&source));
+                assert!(!history::KEYS.contains(&source));
+                assert!(!image::KEYS.contains(&source));
+                assert!(!settings::KEYS.contains(&source));
+                assert!(!settings_state::KEYS.contains(&source));
+                assert!(!settings_errors::KEYS.contains(&source));
+                assert!(!settings_warning::KEYS.contains(&source));
+            }
+            assert_ne!(
+                settings_residual::translated(locale, "Start sharing"),
+                settings::translated(locale, "Restart sharing"),
+                "{locale}: Start versus Restart"
+            );
         }
     }
 

@@ -174,7 +174,7 @@ impl Editor {
                 .placeholder_text(crate::i18n::label("Automatic computer name"))
                 .build(),
             name_hint: label(
-                "Leave empty to use the computer name. OK applies changes to new connections.",
+                crate::i18n::label("Leave empty to use the computer name. OK applies changes to new connections."),
             ),
             port: gtk::Entry::builder()
                 .placeholder_text(crate::i18n::label("Automatic"))
@@ -186,7 +186,7 @@ impl Editor {
             recover: gtk::CheckButton::with_label(crate::i18n::label(
                 "Back up and replace damaged settings",
             )),
-            status: label("Sharing settings are unavailable."),
+            status: label(crate::i18n::label("Sharing settings are unavailable.")),
             save: gtk::Button::with_label(crate::i18n::label("OK")),
             cancel: gtk::Button::with_label(crate::i18n::label("Cancel")),
             window: window.clone(),
@@ -206,7 +206,7 @@ impl Editor {
             login: gtk::CheckButton::with_label(crate::i18n::label("Start at sign-in")),
             login_apply: gtk::Button::with_label(crate::i18n::label("Apply login start")),
             login_reload: gtk::Button::with_label(crate::i18n::label("Reload login state")),
-            login_status: label("Login settings are unavailable."),
+            login_status: label(crate::i18n::label("Login settings are unavailable.")),
             login_dirty: Cell::new(false),
             login_loading: Cell::new(false),
             login_busy: Cell::new(false),
@@ -260,7 +260,7 @@ impl Editor {
         general.append(&editor.name_hint);
         general.append(&editor.login);
         general.append(&label(
-            "Starts sharing and the tray at sign-in, with the card hidden.",
+            crate::i18n::label("Starts sharing and the tray at sign-in, with the card hidden."),
         ));
         general.append(&editor.login_status);
         pages.add_titled(&general, Some("general"), crate::i18n::label("General"));
@@ -304,8 +304,8 @@ impl Editor {
             env!("CARGO_PKG_VERSION")
         )));
         information.append(&label(
-            "Send and receive nearby files and text.
-GNU General Public License v3.0.",
+            crate::i18n::label("Send and receive nearby files and text.
+GNU General Public License v3.0."),
         ));
         information.append(&about);
         pages.add_titled(&information, Some("about"), crate::i18n::label("About"));
@@ -401,7 +401,7 @@ GNU General Public License v3.0.",
             if let Some(editor) = weak.upgrade() {
                 editor.file.borrow_mut().take();
                 editor.directory_intent.set(1);
-                editor.directory.set_text("Default Downloads folder");
+                editor.directory.set_text(crate::i18n::label("Default Downloads folder"));
                 editor.changed();
             }
         });
@@ -512,14 +512,14 @@ GNU General Public License v3.0.",
         self.dirty.set(true);
         self.status.set_text(if self.name_input().is_err() {
             crate::i18n::label("Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name.")
-        } else { "Changes will apply after OK." });
+        } else { crate::i18n::label("Changes will apply after OK.") });
         self.refresh();
     }
     fn load(&self, view: SettingsView) {
         self.loading.set(true);
         self.name.set_text(&view.device_name);
         self.name_hint.set_text(&if view.resolved_name.is_empty() {
-            "Leave empty to use the computer name. OK applies changes to new connections."
+            crate::i18n::label("Leave empty to use the computer name. OK applies changes to new connections.")
                 .to_owned()
         } else {
             crate::i18n::resolved_name(&view.resolved_name)
@@ -532,7 +532,7 @@ GNU General Public License v3.0.",
         });
         self.directory
             .set_text(&if view.directory_display.is_empty() {
-                "Default Downloads folder".to_owned()
+                crate::i18n::label("Default Downloads folder").to_owned()
             } else {
                 crate::i18n::isolate_untrusted(&view.directory_display)
             });
@@ -618,7 +618,7 @@ GNU General Public License v3.0.",
             .set_label(if latest.is_some_and(|view| view.running) {
                 "Restart sharing"
             } else {
-                "Start sharing"
+                crate::i18n::label("Start sharing")
             });
         self.restart.set_visible(latest.is_some_and(|view| {
             view.available && (!view.running || view.restart_required || view.error == 4)
@@ -680,17 +680,17 @@ GNU General Public License v3.0.",
             .set_visible(view.error.is_some() || view.enabled.is_none());
         self.login_reload.set_sensitive(ready);
         let caption = if self.login_busy.get() || view.busy {
-            "Waiting for login settings…"
+            crate::i18n::label("Waiting for login settings…")
         } else if let Some(error) = view.error {
             login_failure(error)
         } else if self.login_dirty.get() {
-            "Sign-in choice will apply after OK."
+            crate::i18n::label("Sign-in choice will apply after OK.")
         } else if view.enabled == Some(true) {
-            "Daemon and tray will start at sign-in; the card stays hidden."
+            crate::i18n::label("Daemon and tray will start at sign-in; the card stays hidden.")
         } else if view.enabled == Some(false) {
-            "Login start is off."
+            crate::i18n::label("Login start is off.")
         } else {
-            "Login settings are unavailable."
+            crate::i18n::label("Login settings are unavailable.")
         };
         self.login_status.set_text(crate::i18n::label(caption));
     }
@@ -833,7 +833,7 @@ GNU General Public License v3.0.",
             }
         };
         self.busy.set(true);
-        self.status.set_text("Waiting for the service…");
+        self.status.set_text(crate::i18n::label("Waiting for the service…"));
         self.refresh();
         let weak = Rc::downgrade(self);
         self.task.replace(Some(glib::spawn_future_local(async move {
@@ -849,7 +849,7 @@ GNU General Public License v3.0.",
                             else { editor.confirming.set(false); editor.sections.set_visible_child_name("advanced"); }
                         }
                     },
-                    Ok(_) if matches!(operation, Operation::Restart) => editor.status.set_text("Sharing restart requested. Retry the connection from the card to read its state."),
+                    Ok(_) if matches!(operation, Operation::Restart) => editor.status.set_text(crate::i18n::label("Sharing restart requested. Retry the connection from the card to read its state.")),
                     Ok(_) => { editor.confirming.set(false); editor.status.set_text(crate::i18n::label("Settings acknowledgement was incomplete. Reload before making another edit.")); },
                     Err(error) => { editor.confirming.set(false); editor.status.set_text(crate::i18n::label(failure(error))); },
                 }
@@ -878,10 +878,10 @@ GNU General Public License v3.0.",
             editor.dialog.borrow_mut().take();
             let Some(panel) = editor.panel.upgrade() else { return };
             let path = match result {
-                Ok(file) => match file.path() { Some(path) => path, None => { editor.busy.set(false); editor.status.set_text("Choose an accessible local folder."); editor.refresh(); return } },
+                Ok(file) => match file.path() { Some(path) => path, None => { editor.busy.set(false); editor.status.set_text(crate::i18n::label("Choose an accessible local folder.")); editor.refresh(); return } },
                 Err(error) => {
                     editor.busy.set(false);
-                    if !error.matches(gtk::DialogError::Dismissed) && !error.matches(gio::IOErrorEnum::Cancelled) { editor.status.set_text("Cannot open the folder chooser."); }
+                    if !error.matches(gtk::DialogError::Dismissed) && !error.matches(gio::IOErrorEnum::Cancelled) { editor.status.set_text(crate::i18n::label("Cannot open the folder chooser.")); }
                     editor.refresh(); return;
                 }
             };
