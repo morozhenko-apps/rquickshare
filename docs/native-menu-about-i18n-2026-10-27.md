@@ -23,3 +23,10 @@ Date: 2026-10-27. MODE A, documentation before executable changes. Direct `dev` 
 ## Risks, rollback and remaining acceptance
 
 Primary risks are translating a menu action rather than its caption, aliasing two different commands, accidental About website URL changes, localization-regressed RTL layout and brand/attribution confusion. This stage must be presentation-only. Single code-and-test atomic commit; docs commits independent. Rollback through inverse source commit; no settings/data transport changes. #17 remains OPEN until all GTK/notification/package surfaces, 20-language semantic/Arabic RTL and device acceptance; #16 Google-certified provider remains blocked and #8 BWU compatible-A2.2 exception independent. No Mode B release sign-off or publication.
+
+## Implementation checkpoint
+
+- Documentation commit `911eed86a883dea528e91302e204ce2274c96a91`; executable code-and-test commit `7a25595e722f303ef2458c8ef3514100930983f2` on `dev`.
+- `i18n/menu_extra.rs` implements 4 keys ×19 additional translated locale rows; `i18n.rs` routes them and checks catalog disjointness; `panel/menu.rs` routes the static About website *caption* without altering its URL or menu action identifiers.
+- Structural source audit: 19 non-English rows and English fallback; translation test covers all twenty locales, specific RU/PT/Arabic and unsupported-locale English behavior, and distinct action captions. No human semantic/GTK RTL review or physical device test.
+- Final source-exact [Native GTK 40582034197](https://github.com/morozhenko-apps/rquickshare/actions/runs/40582034197) and [Preflight 40582034216](https://github.com/morozhenko-apps/rquickshare/actions/runs/40582034216) **PENDING**, not claimed successful. If either fails, diagnose the exact log before corrective source change, and rerun the required exact-source gate. #17 OPEN, release/Mode B not executed.

@@ -1,3 +1,7 @@
+## 2026-10-27 #17 remaining native menu and About source
+
+Docs-first `911eed86`; source `7a25595e` is now on **dev** (no PR/feature branch). Four additional exact menu/About captions ×19 draft non-English locale rows =76 translations, with distinct Hide card/Hide, Files/Add files, Text or link and website caption. `panel.hide`, send-menu actions, About website URL and fork attribution remain byte-identical. Existing translations for "Visible for one minute", "About rQuickShare" and Clipboard are reused, not duplicated. Target source-exact [Native GTK 40582034197](https://github.com/morozhenko-apps/rquickshare/actions/runs/40582034197) and [Preflight 40582034216](https://github.com/morozhenko-apps/rquickshare/actions/runs/40582034216) **PENDING**, no acceptance claim. [Source/test/rollback plan](native-menu-about-i18n-2026-10-27.md). #17 OPEN; full Mode B and hardware/public release remain blocked.
+
 ## 2026-10-27 #17 direct dev: guarded reveal and Receive visibility
 
 Guarded Reveal/Result/Text locale source `6deb3645` was committed directly on `dev`, without a PR merge. Exact-source [Preflight 40579092072](https://github.com/morozhenko-apps/rquickshare/actions/runs/40579092072) and [Native GTK 40579091917](https://github.com/morozhenko-apps/rquickshare/actions/runs/40579091917) both **SUCCESS**. Original temporary PR #29 was closed unmerged after its source changes were incorporated directly (with the CI rustfmt correction). The obsolete remote topic branch is not evidence of concurrent ownership; no new PR or branch was created.
