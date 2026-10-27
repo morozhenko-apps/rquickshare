@@ -1,3 +1,7 @@
+> Owner-approved distribution refactor: [flat R2 plan](FLAT_DISTRIBUTION.md).
+> Work is isolated from concurrent Native/UI development; release issue #14
+> remains open until real signing, R2 readback and release acceptance.
+
 ## 2026-10-27 #17 card captions strict source follow-up
 
 Original card source `35ab8ac2` [Preflight 40597510685](https://github.com/morozhenko-apps/rquickshare/actions/runs/40597510685) terminal **SUCCESS**, [Native GTK 40597510638](https://github.com/morozhenko-apps/rquickshare/actions/runs/40597510638) **FAILED rustfmt-only** before Clippy/widgets (one long RU partial-files assertion). Formatting-only executable `78344967` corrects exactly the reported `Some(...)` layout, with no text, consent, file or protocol change. [Native GTK 40598208746](https://github.com/morozhenko-apps/rquickshare/actions/runs/40598208746) terminal **SUCCESS**, matching [Preflight 40598208443](https://github.com/morozhenko-apps/rquickshare/actions/runs/40598208443) **IN PROGRESS** (four of five jobs success). No source-exact combined 6/6 pass until it completes. Next documented [dynamic/phase/preview inventory](native-panel-dynamic-transfer-i18n-2026-10-27.md) is documentation only. #17 OPEN; Mode B/device/human signoff not started.

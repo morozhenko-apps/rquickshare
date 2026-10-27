@@ -1,3 +1,8 @@
+> Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
+> The owner-approved flat layout supersedes the historical Worker, nested
+> archive and binary GitHub attachment instructions below. Live cutover and
+> a new release have not been executed by this source refactor.
+
 # Automated tagged release and independent package versioning
 
 2026-10-18. Mode A, user selected option B: GitHub Actions signs and publishes

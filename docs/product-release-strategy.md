@@ -1,3 +1,8 @@
+> Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
+> Historical Worker, nested archive and full remote snapshot instructions
+> below are superseded. The owner approved a fresh flat channel without
+> a legacy migration; production cutover has not been performed.
+
 # rQuickShare product identity, platform direction and release distribution
 
 > **Current release readiness, native tag namespace and blockers:** [Active backlog and release handoff](active-backlog.md) and [issue #14](https://github.com/morozhenko-apps/rquickshare/issues/14). Dated `v0.9.0` suggestions elsewhere in this journal are **superseded** by the user-selected native tag `native/v0.9.0`; do not create or replace the upstream `v0.9.0` tag. No production publish is authorized by the strategy document.

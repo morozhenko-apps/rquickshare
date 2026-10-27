@@ -92,7 +92,9 @@ class NativeAptTests(unittest.TestCase):
             self.assertEqual((output / "FINGERPRINT").read_text(), self.fingerprint + "\n")
             self.assertEqual((output / "rquickshare-native-archive-keyring.gpg").read_bytes(), self.keyring.read_bytes())
             text = (output / "rquickshare-native.sources").read_text()
-            self.assertIn("By-Hash: force\n", text)
+            self.assertIn("Suites: ./\n", text)
+            self.assertNotIn("Components:", text)
+            self.assertNotIn("By-Hash:", text)
             self.assertIn(f"Signed-By: /etc/apt/keyrings/rquickshare-native-archive-keyring.gpg {self.fingerprint}\n", text)
             self.assertNotIn("Trusted:", text)
             self.assertNotIn("Allow-Insecure", text)
@@ -106,21 +108,21 @@ class NativeAptTests(unittest.TestCase):
         for keyring, fingerprint in [(wrong_keyring, wrong_fingerprint), (self.keyring, wrong_fingerprint)]:
             with self.subTest(key=fingerprint), self.assertRaises((ValueError, subprocess.CalledProcessError)):
                 apt.verify(self.signed, keyring, fingerprint, self.now)
-        base = Path("dists") / apt.SUITE
-        index = base / "main/binary-amd64"
-        pool = Path("pool/main/r/rquickshare-native/rquickshare-native_1.0.0-1_amd64.deb")
-        for name in [base / "Release", base / "InRelease", base / "Release.gpg", index / "Packages", index / "Packages.gz", pool, Path(str(pool) + ".sha256")]:
+        base = Path("linux")
+        index = base
+        pool = Path("linux/rquickshare-native_1.0.0-1_amd64.deb")
+        for name in [base / "Release", base / "InRelease", index / "Packages", index / "Packages.gz", pool, Path(str(pool) + ".sha256")]:
             with self.subTest(file=name), tempfile.TemporaryDirectory() as temporary:
                 root = self.copy(Path(temporary))
                 path = root / name
                 path.write_bytes(path.read_bytes() + b"tampered")
                 with self.assertRaises((ValueError, subprocess.CalledProcessError)):
                     apt.verify(root, self.keyring, self.fingerprint, self.now)
-        for kind in ["by-hash", "extra", "missing", "symlink", "directory-link", "fifo"]:
+        for kind in ["unexpected-directory", "extra", "missing", "symlink", "directory-link", "fifo"]:
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
                 root = self.copy(Path(temporary))
-                if kind == "by-hash":
-                    next((root / index / "by-hash/SHA256").iterdir()).write_bytes(b"wrong")
+                if kind == "unexpected-directory":
+                    (root / "unexpected-directory").mkdir()
                 elif kind == "extra":
                     (root / "unexpected").write_bytes(b"extra")
                 elif kind == "missing":
@@ -128,8 +130,8 @@ class NativeAptTests(unittest.TestCase):
                 elif kind == "symlink":
                     (root / "outside").symlink_to(self.package)
                 elif kind == "directory-link":
-                    shutil.rmtree(root / "pool")
-                    (root / "pool").symlink_to(self.signed / "pool", target_is_directory=True)
+                    shutil.rmtree(root / "linux")
+                    (root / "linux").symlink_to(self.signed / "linux", target_is_directory=True)
                 else:
                     os.mkfifo(root / "special")
                 with self.assertRaises((ValueError, OSError, subprocess.CalledProcessError)):
@@ -166,7 +168,7 @@ class NativeAptTests(unittest.TestCase):
         control = tree / "DEBIAN/control"
         control.write_text(control.read_text().replace("Version: 1.0.0-1\n", f"Version: {version}\n"))
 
-    def test_given_two_architectures_when_staged_then_indexes_remain_separate_and_mixed_versions_or_architecture_removal_fail(self):
+    def test_given_two_architectures_when_staged_then_flat_index_is_complete_and_mixed_versions_or_architecture_removal_fail(self):
         # Arrange: metadata/ELF-header fixture only, never an executable ARM build claim.
         def arm_fixture(tree):
             control = tree / "DEBIAN/control"
@@ -221,7 +223,7 @@ class NativeAptTests(unittest.TestCase):
                     self.assertFalse(signed.exists())
 
     def test_given_real_apt_with_isolated_state_when_signed_channel_is_acquired_then_candidate_and_download_match_and_wrong_key_fails(self):
-        self.assert_apt_acquisition(self.signed.as_uri())
+        self.assert_apt_acquisition((self.signed / "linux").as_uri())
 
     def assert_apt_acquisition(self, repository_uri):
         # Arrange: no host apt config, trust, status, hooks, lists or installation.
@@ -232,7 +234,7 @@ class NativeAptTests(unittest.TestCase):
             (root / "state/status").write_text("")
             keyring = root / "keyring.gpg"
             shutil.copyfile(self.keyring, keyring)
-            (root / "etc/apt/sources.sources").write_text(f"Types: deb\nURIs: {repository_uri}\nSuites: {apt.SUITE}\nComponents: main\nArchitectures: amd64\nBy-Hash: force\nSigned-By: {keyring} {self.fingerprint}\n")
+            (root / "etc/apt/sources.sources").write_text(f"Types: deb\nURIs: {repository_uri}\nSuites: {apt.SUITE}\nArchitectures: amd64\nSigned-By: {keyring} {self.fingerprint}\n")
             config = root / "apt.conf"
             config.write_text(f'''Dir "{root}";
 Dir::Etc "etc/apt";

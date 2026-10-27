@@ -1,10 +1,15 @@
+> Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
+> Historical Worker, nested archive and full remote snapshot instructions
+> below are superseded. The owner approved a fresh flat channel without
+> a legacy migration; production cutover has not been performed.
+
 # Native download Worker: Git build verification
 
 2026-10-18. MODE B: testing/verification only. Scope is `infra/native-download` in
 `morozhenko-apps/rquickshare`. This is a deployment-pipeline audit, not a new
 package publication, production Worker behavior change or signing decision.
 Read [native-download-route.md](native-download-route.md) and
-[infra/native-download/README.md](../infra/native-download/README.md) first.
+[infra/native-download/README.md](https://github.com/morozhenko-apps/rquickshare/blob/0d4f88b58fb01e03f55862253d72e340db48daf3/infra/native-download/README.md) first.
 
 ## Initial repository scan and invariant review
 

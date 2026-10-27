@@ -17,7 +17,7 @@ def request(snapshot, keyring, fingerprint, source_commit, previous=None, now=No
     previous_digest = None
     if previous is not None:
         apt.compare_previous(current, apt.verify(previous, keyring, fingerprint, now, check_time=False))
-        previous_digest = apt.digest(previous / "dists" / apt.SUITE / "InRelease")
+        previous_digest = apt.digest(previous / "linux/InRelease")
     files = [{"path": path.relative_to(snapshot).as_posix(), "size": path.stat().st_size, "sha256": apt.digest(path)}
              for path in sorted(apt.inventory(snapshot)) if path.is_file()]
     value = {"schema": 1, "suite": apt.SUITE, "source_commit": source_commit, "primary_fingerprint": fingerprint,
