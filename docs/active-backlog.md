@@ -1,3 +1,7 @@
+## 2026-10-27 #17 Dutch destructive history label correction
+
+Code `36c3a1b7` narrows the Dutch history reset vs completed-clear distinction, with literal semantic regressions: `Geschiedenis resetten` is not a restoration claim; `Voltooide items wissen` denotes completed record removal. No journal deletion logic or backend authority changed. New exact-source Preflight `40485030868` and Native GTK `40485030921` **PENDING**; #17 remains OPEN/PARTIAL and human 20-locale review is still outstanding.
+
 ## 2026-10-27 #17 native GTK history metadata translations, bounded source slice
 
 Production `ae1c5cdc` introduces isolated history static-message catalog `native_desktop/src/i18n/history.rs` (18 keys ×19 translations across the existing 20 locales), reuses base menu keys, and keeps terminal failures/unknown journal status separate from `Completed`. History storage/metadata disclosure, clear/reset distinction, 30-day/1000-operation privacy limits and existing action permissions are unchanged. Initial static completeness/semantic collision checks PASS. `cargo fmt` gate failed on new test layout, corrected by style-only `25d8daa8`.

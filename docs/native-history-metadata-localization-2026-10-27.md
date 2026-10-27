@@ -35,3 +35,9 @@ Add a **separate internal source module** `native_desktop/src/i18n/history.rs` f
 - Native GTK workflow `40484017873` on `ae1c5cdc` FAILED solely in `cargo fmt --check` with six formatting locations in test assertions. Production/translation messages and safety logic were not changed by formatter repair `25d8daa8b79385ddae9e897e6d972fdd40e20883`, code-only.
 - Final exact-source Preflight `40484330580` and Native GTK `40484330621` for `25d8daa8`: **pending terminal receipt**. Neither success nor 6/6 is asserted until each final job is checked. Tests with future run numbers are not invented.
 - Dynamic `{} · {} bytes`, `record.kind`, peer names, file-count pluralization, PIN bidi and per-language typography/RTL are **not addressed** in this slice. Security trust route #16, BWU #8, Windows, Pixel/KDE, 10x Mode B and protected release gates remain open. #17 is PARTIAL.
+
+## Dutch history action semantic correction
+
+- A contextual review found a destructive-action meaning drift: previous Dutch `Reset history` was `Geschiedenis herstellen` (may mean **restore history**), and `Clear completed` was elliptic `Voltooide wissen`. Production commit `36c3a1b72404f9d0d3b50a2edbbe286ee2518228` corrects them to `Geschiedenis resetten` and `Voltooide items wissen`, adding source-exact semantic assertions. Existing button actions, permission gates and recovery-copy behavior are untouched.
+- Newly started Preflight `40485030868` and Native GTK `40485030921` target this final executable SHA. Their terminal outcome was **NOT YET READ** at this documentation checkpoint. Earlier `25d8daa8` checks cannot substitute for the corrected text code.
+- This was machine-assisted/contextual technical review for one locale, **not** 20-language professional linguistic signoff. Remaining translations (including text direction, layout, long labels, and dynamic count/plural/PIN values) are still open.
