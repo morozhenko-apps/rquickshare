@@ -207,3 +207,12 @@ shared app-dist prefix. Python AST excluding the module description and
 workflow content excluding YAML comments remain identical to the accepted
 source. No behavioral test is added for this documentation correction;
 mandatory automatic workflow policy remains enabled.
+
+Final delivery: merged-dev Preflight 40603490677 and Native GTK 40603490593
+completed successfully. The final description-only correction at
+8da547087c2547a30ed35196d66a9e132ea84630 also passed the full automatic
+[Preflight 40604395151](https://github.com/morozhenko-apps/rquickshare/actions/runs/40604395151).
+Only this documentation receipt follows that exact verified source. Source
+and scoped Worker retirement are complete; actual signing/R2 publication
+remains the normal separately authorized protected release, not part of this
+refactor. No release version or tag was allocated or rewritten.
