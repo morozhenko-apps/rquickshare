@@ -1,3 +1,7 @@
+## 2026-10-27 #17 final exact-source gate for 32 Settings states/errors
+
+Error + login status catalog source `fe49c9ec` failed Native GTK `40536975905` **only** in strict `rustfmt` (two exact source layout issues). Style-only fix `e9b4e4b4`; new final-source Preflight `40537441279` and Native GTK `40537441309` **IN PROGRESS**, not called green. Existing original domain error/status branch code unchanged. Third Settings UI warning/dynamic fields are inventoried but **not implemented**. [Detailed chronology and test plan](native-settings-i18n-staged-plan-2026-10-27.md). #17 still OPEN, release/master/tags unchanged.
+
 ## 2026-10-27 #17 Settings errors, locale Stage 2b implemented
 
 Source `fe49c9ec`: 17 more exact source messages for controller/save/login failures ×19 translated locales = **323 new translated entries** in `src/i18n/settings_errors.rs`. Stage 2a+2b: **32 settings/error keys, 608 draft translation entries** across 19 non-English locales; original status/error branch functions byte-identical and only GTK output localized. Static safety/locale wiring audit PASS; final source-exact Preflight `40536976093` and Native GTK `40536975905` **PENDING**, not declared green. Prior Stage 2a source `2dcab389` Preflight `40535127513` SUCCESS; Native GTK `40535126993` FAIL in formatter only, fixed by separate style commit `f934906e` included before new Stage 2b source. [Design and exact evidence](native-settings-i18n-staged-plan-2026-10-27.md). #17 remains open; physical/native-linguistic acceptance and final MODE B not performed.
