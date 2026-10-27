@@ -148,10 +148,9 @@ impl Review {
     }
     fn copy_explicitly(&self) {
         if self.closed.get() || !(self.guard)(&self.key) {
-            self.status
-                .set_text(crate::i18n::label(
-                    "Copy unavailable. Unlock and review the current transfer.",
-                ));
+            self.status.set_text(crate::i18n::label(
+                "Copy unavailable. Unlock and review the current transfer.",
+            ));
             return;
         }
         let body = self.body.borrow();
@@ -159,13 +158,13 @@ impl Review {
         let display = gtk::prelude::WidgetExt::display(&self.window);
         let provider = gtk::gdk::ContentProvider::for_value(&body.text().to_value());
         if display.is_closed() || display.clipboard().set_content(Some(&provider)).is_err() {
-            self.status
-                .set_text(crate::i18n::label(
-                    "Copy failed. This clipboard did not accept the text.",
-                ));
+            self.status.set_text(crate::i18n::label(
+                "Copy failed. This clipboard did not accept the text.",
+            ));
             return;
         }
-        self.status.set_text(crate::i18n::label("Copied to this clipboard"));
+        self.status
+            .set_text(crate::i18n::label("Copied to this clipboard"));
     }
     pub(super) fn close(&self) {
         if self.closed.replace(true) {

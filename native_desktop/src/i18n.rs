@@ -36,7 +36,6 @@ const REVIEW_KEYS: [&str; 8] = [
 ];
 const ENGLISH_REVIEW: [&str; 8] = REVIEW_KEYS;
 
-
 /// Canonical PersonalLanding locale IDs; never infer pt-BR or zh-Hans.
 pub(crate) const LOCALES: [&str; 20] = [
     "en", "ru", "es", "pt", "de", "fr", "it", "pl", "hi", "zh-Hant", "ja", "nl", "sv", "tr", "ko",
@@ -745,7 +744,10 @@ mod tests {
             );
             assert_ne!(
                 translated(locale, "Copied to this clipboard"),
-                translated(locale, "Copy failed. This clipboard did not accept the text."),
+                translated(
+                    locale,
+                    "Copy failed. This clipboard did not accept the text."
+                ),
                 "{locale}: success/failure collision"
             );
             assert_ne!(
