@@ -49,7 +49,7 @@ cutover gates, not properties proven by source tests.
 5. [x] Adapt existing tests to the approved format and add meaningful
    ordering, direct/APT byte identity, tamper, conflict and public-readback
    regressions. Run normal suites only at the final validation gate.
-6. [ ] Final stable release-contract suites and workflow/static checks once;
+6. [x] Final stable release-contract suites and workflow/static checks once;
    record commands, outcomes, known-flaky separation and external limitations.
    Publish through a reviewed dev-targeted PR after refreshing concurrent dev.
 
@@ -132,3 +132,32 @@ publication, malformed signed catalogs, incomplete receipts and foreign GitHub
 artifact provenance are tested without production access. No secret values,
 production signing, R2 mutation, route retirement or release tag was used.
 Hosted CI and final dev integration are the remaining source-delivery gates.
+
+## Hosted source acceptance and integration
+
+PR [#30](https://github.com/morozhenko-apps/rquickshare/pull/30) merged into
+`dev` as `2e38352d219338575f7016564796e895415e3962` after exact source
+`11e853df839ea673d192cb7719632482d9b31a28` passed
+[Preflight 40602815633](https://github.com/morozhenko-apps/rquickshare/actions/runs/40602815633)
+and [Native GTK UI 40602815618](https://github.com/morozhenko-apps/rquickshare/actions/runs/40602815618).
+All source checks succeeded: formatting, offline publication contracts, frontend,
+core tests/Clippy, Tauri Clippy and native GTK widget/strict lint verification.
+No required check was bypassed or reclassified as flaky.
+
+Source refactor is accepted. Operational retirement is still pending: the
+read-only Cloudflare inventory confirms `rquickshare-download` bound to
+`rquickshare-native-apt`, exact route
+`https://download.morozhenko.com/dist/rQuickShare/*`, route ID
+`4646f9b9a5274c829b3c8e06771250ca`. The shared app-dist Custom Domain is
+active. Current OAuth can inspect Worker/settings/routes, but the Builds
+triggers API returns 403 (authentication scope); the in-app browser is not
+authenticated. The owner was asked to disconnect both retired Workers' Git
+build integrations before their scoped removal. No provider mutation or
+production upload was performed. The RQS R2 credential must authorize
+app-dist before a future explicitly approved release; secret names alone
+do not prove this permission. No signing-key change is required.
+
+The release readiness issue #14 stays open: source simplification does not
+prove production signing, actual R2 publication or physical release acceptance.
+Rollback is a scoped executable/docs revert; preserve the original private
+bucket and signing identity, existing objects and all sibling routes.
