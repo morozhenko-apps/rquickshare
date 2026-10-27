@@ -1,3 +1,9 @@
+## 2026-10-27 #17 native image capture dialog localized (20 locales)
+
+Production `b849003e` includes 10 new static image-capture safety labels ×19 additional translated locale rows; existing Cancel/queue-failure messages reused. Static audit PASS; actual native image copy/prepare/epoch/authorization logic is unchanged. Frame dimensions and byte count remain exact with `px`/`B`. **Source-exact Preflight 40511038788 and Native GTK 40511038773 IN PROGRESS**, final result must be read. [Image locale design and negative tests](native-image-dialog-i18n-2026-10-27.md). Image translation is a bounded partial #17 stage, not 20-language holistic UI/RTL signoff.
+
+Earlier typed transfer metadata formatter `b8064a09` is **confirmed PASS**: Preflight `40509819442` and Native GTK `40509819419` terminal SUCCESS. [Counts/PIN/bidi record](native-dynamic-counts-bidi-2026-10-27.md).
+
 ## 2026-10-27 #17 typed counts and bidi-safe dynamic transfer labels
 
 Production `7b7ac325` introduces pure GTK presentation helpers: integer-aware localized file count, exact byte symbol `B` without rounding, LTR isolation of four-digit session PIN, and display-only isolation/stripping of untrusted Unicode direction controls for peer/file/kind text. Applied to nearby/device/history/transfer text only; original transport/consent/data structures unaffected. Documented five focused regression tests; **actual exact-source Preflight `40509466138` and Native GTK `40509466348` are running, not yet PASS**. See [dynamic formatting and RTL invariants](native-dynamic-counts-bidi-2026-10-27.md). #17 OPEN/PARTIAL; source and physically installed 1.0.0 status unchanged.

@@ -38,3 +38,7 @@ The code-only commit triggers source-exact Preflight `40509466138` and Native GT
 ### Deferred follow-up
 
 The static incoming code-verification sentence, other consent/action labels and complete native UI translation remain separate #17 tasks. History `record.kind` and sender names still display their original (not localized or trusted) source values, now visually isolated only. Counts must never be used as proof of completed file/transport delivery. RTL widget layout and native speaker review remain physical acceptance gates.
+
+## Final source-exact validation of typed dynamic values
+
+Executable `b8064a09076c698c62a4794ec545babd1d74bd96` (exact formatter followup of `7b7ac325`) was confirmed by **Preflight 40509819442 SUCCESS** and **Native GTK 40509819419 SUCCESS**; all five Preflight jobs terminal SUCCESS, including Core tests and Tauri Clippy. This confirms the *source code* tests but not physical RTL layout or linguistic signoff. The later image-dialog slice is tracked separately and does not invalidate these source-exact receipts.

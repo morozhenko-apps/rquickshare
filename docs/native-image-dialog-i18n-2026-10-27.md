@@ -31,3 +31,11 @@ Implement another scoped internal catalog `native_desktop/src/i18n/image.rs` wit
 - Documentation in a separate preceding commit, source+tests in one atomic executable commit, status/evidence documentation afterward. Do not touch `master`, signing, package publication, existing user settings or other #16/#8 work.
 
 Before executable changes: NOT IMPLEMENTED, NOT TESTED; #17 remains open.
+
+## Implementation checkpoint (2026-10-27)
+
+- Executable `b849003e6f74d9dba71572c18a1fb5cb29cdd52d`: `src/i18n/image.rs` includes 10 new static keys ×19 translated rows = 190 draft translations, English fallback, limit/semantic-collision checks and RU/PT positive oracles. `src/i18n.rs` routes only static keys through the existing 20-locale lookup and validates no collisions with menu, text review, composer and history catalogs.
+- The GTK capture dialog, source validation, image preview, stale epoch, resource and cancel paths retain their existing authoritative callback logic. Labels/status/notice use `i18n::label`; `Cancel` and `Preparation was not queued` share existing translations. Capture preview reports exact `width × height px · bytes B · Clipboard.png`, with its separately translated review instruction.
+- Static source audit PASS: 19 ×10 catalog rows, all key definitions, resource literals `PNG` / `32 MiB` / `64` present, explicit capture callback, PNG MIME whitelist and cancellation path preserved. **This is not a Rust build/test or native-speaker proof.**
+- Exact-source Preflight `40511038788` and Native GTK `40511038773` for this executable SHA **IN PROGRESS** at checkpoint. Must read terminal job results; no 6/6 green claimed.
+- Human acceptance remains: all 20 language semantics, Arabic RTL and font metrics, long captions, unchanged privacy statement and physical desktop/Pixel. No master, release, tag, R2 or installed binary was touched.
