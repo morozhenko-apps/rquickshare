@@ -979,9 +979,8 @@ fn given_managed_outbound_session_when_authenticated_then_proof_is_private_order
     );
 
     hub.close();
-    let stopped = hub
-        .subscribe_route_proofs_fresh()
-        .err()
-        .expect("shut down hub must reject proof subscriptions");
-    assert_eq!(stopped, SessionError::Closed);
+    assert!(
+        matches!(hub.subscribe_route_proofs_fresh(), Err(SessionError::Closed)),
+        "shut down hub must reject proof subscriptions"
+    );
 }
