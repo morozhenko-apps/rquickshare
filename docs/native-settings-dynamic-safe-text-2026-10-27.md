@@ -23,3 +23,10 @@ Date: 2026-10-27. MODE A, slice of issue #17, based on `ca24939729592f33edca5510
 Critical boundaries: a path/name is **not authenticated peer identity**, directional controls only filtered in the display projection; PIN and consent unchanged; user editable value must be preserved; storage save/Apply/Cancel and FileDialog semantics remain exactly unchanged. Revert only this new module/helper plus three GTK projections to return to previous display text. No `master`, tags, signed R2, .deb install or release changes.
 
 State before production modification: **NOT IMPLEMENTED**. Issue #17 remains OPEN/PARTIAL and still has other GTK/tray, semantic language/RTL/physical gates. No work on #8's agreed compatibility exception.
+
+## 2026-10-27 executable implementation and gate
+
+- Source-only `378834ac270517c90b9823c2448b8f1150ce3e8c` adds `resolved_name_for(locale, name)` with **20 canonical locale prefixes**, display-only FSI/PDI isolation, unknown-locale fallback and empty-value protection. `i18n::resolved_name` is the sole OS-locale wrapper.
+- `Editor::load` projects `resolved_name` into its hint and `directory_display` into a read-only label; the existing folder-chooser success callback isolates the displayed `display`. `name.set_text(&view.device_name)`, retained `gio::File`, controller save/retry/recover and phase matching remain unmodified.
+- Source audit PASS: all 19 non-English locale branches; exact three GTK display sites; original editable-name and save-action code still present. New direct tests include RU/PT/Arabic labels, unknown locale fallback, Unicode bidi attack controls, literal angle-bracket text and empty value. This is **source-only**, not human/native UI proof.
+- On this exact source `378834ac`, Preflight `40561114184` and Native GTK `40561114130` were **IN PROGRESS** at checkpoint. Do not claim PASS until the full terminal jobs are observed; if Native GTK rustfmt or Clippy fails, use its exact diff. No Mode B, installed KDE binary, Windows or physical Pixel hardware test.
