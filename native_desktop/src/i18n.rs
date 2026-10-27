@@ -3,6 +3,7 @@
 //! semantics, the daemon protocol, or the user's persisted settings.
 //! This is the first menu slice of #17, NOT completion of 20-locale GTK coverage.
 
+mod client_errors;
 mod dynamic;
 mod history;
 mod image;
@@ -637,6 +638,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
     if let Some(value) = panel_status::translated(locale, source) {
         return value;
     }
+    if let Some(value) = client_errors::translated(locale, source) {
+        return value;
+    }
     if let Some(index) = COMPOSE_KEYS.iter().position(|key| *key == source) {
         return translated_compose(locale)[index];
     }
@@ -1206,6 +1210,25 @@ mod tests {
                 assert!(!visibility::KEYS.contains(&source));
                 assert!(!menu_extra::KEYS.contains(&source));
                 assert!(!operation_notices::KEYS.contains(&source));
+            }
+            for source in client_errors::KEYS {
+                assert!(!translated(locale, source).is_empty());
+                assert!(!MENU_KEYS.contains(&source));
+                assert!(!REVIEW_KEYS.contains(&source));
+                assert!(!COMPOSE_KEYS.contains(&source));
+                assert!(!history::KEYS.contains(&source));
+                assert!(!image::KEYS.contains(&source));
+                assert!(!settings::KEYS.contains(&source));
+                assert!(!settings_state::KEYS.contains(&source));
+                assert!(!settings_errors::KEYS.contains(&source));
+                assert!(!settings_warning::KEYS.contains(&source));
+                assert!(!settings_residual::KEYS.contains(&source));
+                assert!(!transfer_rows::KEYS.contains(&source));
+                assert!(!reveal_notices::KEYS.contains(&source));
+                assert!(!visibility::KEYS.contains(&source));
+                assert!(!menu_extra::KEYS.contains(&source));
+                assert!(!operation_notices::KEYS.contains(&source));
+                assert!(!panel_status::KEYS.contains(&source));
             }
             assert_ne!(
                 settings_residual::translated(locale, "Start sharing"),
