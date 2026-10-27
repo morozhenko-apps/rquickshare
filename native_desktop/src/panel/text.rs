@@ -272,9 +272,9 @@ impl Panel {
                 && model.safety.manual_allowed()
         };
         if !safe || !self.resource_current(&key) {
-            self.notice(
-                crate::i18n::label("Text is no longer available for review. Unlock and check the current transfer."),
-            );
+            self.notice(crate::i18n::label(
+                "Text is no longer available for review. Unlock and check the current transfer.",
+            ));
             return;
         }
         self.close_text_review();

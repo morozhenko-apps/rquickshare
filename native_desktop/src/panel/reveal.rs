@@ -215,9 +215,9 @@ impl Panel {
         let completion = match request {
             Ok(completion) => completion,
             Err(_) => {
-                self.notice(
-                    crate::i18n::label("Cannot show this file right now. Review the current transfer and try again."),
-                );
+                self.notice(crate::i18n::label(
+                    "Cannot show this file right now. Review the current transfer and try again.",
+                ));
                 return;
             }
         };
@@ -263,9 +263,9 @@ impl Panel {
                 }
                 _ => {
                     panel.close_reveal();
-                    panel.notice(
-                        crate::i18n::label("Cannot show this file. It may have moved, changed, or become unavailable."),
-                    );
+                    panel.notice(crate::i18n::label(
+                        "Cannot show this file. It may have moved, changed, or become unavailable.",
+                    ));
                     panel.render();
                     return;
                 }
@@ -274,7 +274,9 @@ impl Panel {
                 Ok(file) => Arc::new(file),
                 Err(_) => {
                     panel.close_reveal();
-                    panel.notice(crate::i18n::label("Cannot access this received file right now."));
+                    panel.notice(crate::i18n::label(
+                        "Cannot access this received file right now.",
+                    ));
                     panel.render();
                     return;
                 }
@@ -314,7 +316,9 @@ impl Panel {
                         Ok(Err(crate::portal::Error::Cancelled)) => {
                             panel.notice(crate::i18n::label("Folder request cancelled."))
                         }
-                        _ => panel.notice(crate::i18n::label("Your desktop could not show this folder. Try again.")),
+                        _ => panel.notice(crate::i18n::label(
+                            "Your desktop could not show this folder. Try again.",
+                        )),
                     }
                     panel.render();
                 }

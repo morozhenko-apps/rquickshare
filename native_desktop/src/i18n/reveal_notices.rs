@@ -274,7 +274,20 @@ mod tests {
     fn cancelled_pending_success_and_portal_failure_do_not_collide() {
         for locale in LOCALES {
             let value = |index| translated(locale, KEYS[index]).expect("known reveal notice");
-            for (first, second) in [(0, 1), (1, 2), (2, 3), (3, 4), (3, 5), (3, 6), (4, 6), (3, 7), (3, 8), (3, 9), (7, 8), (8, 9)] {
+            for (first, second) in [
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 4),
+                (3, 5),
+                (3, 6),
+                (4, 6),
+                (3, 7),
+                (3, 8),
+                (3, 9),
+                (7, 8),
+                (8, 9),
+            ] {
                 assert_ne!(value(first), value(second), "{locale}: {first} vs {second}");
             }
         }

@@ -148,14 +148,18 @@ impl Panel {
                     if let Some(revision) = row.reveal_revision {
                         self.reveal_result(row.transfer, revision);
                     } else {
-                        self.notice(crate::i18n::label("Completed. The saved result is unavailable for automatic folder selection; review History."));
+                        self.notice(crate::i18n::label(
+                            "Completed. The saved result is unavailable for automatic folder selection; review History.",
+                        ));
                     }
                 }
                 _ => {
                     if let (Some(revision), Some(handle)) = (row.content_revision, &self.handle) {
                         self.submit(|| handle.read_text(row.transfer, revision));
                     } else {
-                        self.notice(crate::i18n::label("Completed. Text is no longer available; review History."));
+                        self.notice(crate::i18n::label(
+                            "Completed. Text is no longer available; review History.",
+                        ));
                     }
                 }
             }
