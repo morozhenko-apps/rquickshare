@@ -1,3 +1,7 @@
+## 2026-10-27 #17 Settings dynamic name/path native formatter gate
+
+Source `378834ac` typed 20-locale resolved-name and display-only FSI/PDI paths: Preflight `40561114184` **SUCCESS all five jobs**, Native GTK `40561114130` **FAIL** in exactly three strict rustfmt layout differences, before widgets. Code-only formatting followup `84bcff96` corrects those diagnostics with no behavior change. Exact-source final Preflight `40563016992` / Native GTK `40563016773` **PENDING**. [Full exact-source receipt and pending RTL acceptance](native-settings-dynamic-safe-text-2026-10-27.md). #17 still OPEN; full MODE B intentionally not run.
+
 ## 2026-10-27 Read-only trust and visibility invariants
 
 Current source audit: #16 has fail-closed route-credential *infrastructure* but **no proven real Pixel certificate source+authenticated advertised-route association**, so A's alias-collapsing acceptance remains blocked (a new trust/API decision needs owner STOP FACTOR). #8 compatibility exception **does not cover this**. #21 startup/inactive settings reload preserves default Hidden/no implicit saved Temporary rearm at source, but present installed/race tests still required. [Pre-Mode-B issue and trust audit](pre-mode-b-readiness-gates-2026-10-27.md). Latest Settings dynamic display `378834ac` source audited; Preflight `40561114184` and GTK `40561114130` pending, not terminal PASS.
