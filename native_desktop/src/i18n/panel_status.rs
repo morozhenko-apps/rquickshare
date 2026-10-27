@@ -315,14 +315,7 @@ mod tests {
     fn given_hidden_uncertain_and_pending_states_when_localizing_then_none_claims_completion() {
         for locale in LOCALES {
             let read = |i| translated(locale, KEYS[i]).expect("known state");
-            for (first, second) in [
-                (4, 5),
-                (6, 7),
-                (0, 8),
-                (9, 10),
-                (9, 11),
-                (10, 11),
-            ] {
+            for (first, second) in [(4, 5), (6, 7), (0, 8), (9, 10), (9, 11), (10, 11)] {
                 assert_ne!(read(first), read(second), "{locale}: {first}/{second}");
             }
         }
