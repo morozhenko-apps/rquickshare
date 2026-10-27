@@ -1,0 +1,33 @@
+# Native clipboard image dialog, 20-locale static localization (#17)
+
+Date: 2026-10-27. MODE A feature, planned after the dynamic amount/PIN/bidi code `b8064a09076c698c62a4794ec545babd1d74bd96` passed Native GTK `40509819419`, with its exact-source Preflight `40509819442` still awaiting terminal result at planning time. No current other PR. This is a bounded follow-on to #17, not a 1.0.0 release signoff.
+
+## Inventory / plan
+
+`native_desktop/src/panel/image.rs` is the single manually initiated clipboard-image composition window. It displays ten **new** static English safety/operation messages:
+
+1. `Send image`
+2. `Capture a clipboard image, review it, then choose recipients.`
+3. `Clipboard is read only when you capture. Nothing is sent yet.`
+4. `Capture clipboard image`
+5. `Prepare image`
+6. `No supported PNG was captured. Use a static image up to 32 MiB and 64 million pixels.`
+7. `Image capture failed validation or exceeded resource limits. The previous image is kept.`
+8. `Image source could not be prepared. Capture it again.`
+9. `Review the image, then prepare and choose recipients.`
+10. `Image preparation did not complete. Review Recover or discard the pending preparation.`
+
+Existing `Cancel` (menu) and `Preparation was not queued. Review the current source and connection.` (composer) must reuse their original translations.
+
+Implement another scoped internal catalog `native_desktop/src/i18n/image.rs` with 19 translated rows ×10 new keys, English fallback and no runtime schema. Use `i18n::label` for static source strings only. Replace the assembled image-size status with exact `width × height px · source-byte-count B · Clipboard.png` plus a separately translated instruction. `px` and `B` are unambiguous technical unit symbols; neither dimension nor source byte count may be rounded or transformed. `Clipboard.png` remains a constant local file title, not a user/peer path, and is not localized.
+
+## Critical boundaries / test plan
+
+- Image clipboard is read **only on explicit Capture**. Do not move, bypass, alter or duplicate `clipboard_png`, MIME whitelist, bounded PNG streaming, image validation (32 MiB / 64 million pixels), `PreparationPermit`, epoch/guard checks, task cancellation, worker dispatch, preview replacement, session selection or user action callbacks.
+- Review / captured / prepared / sent are **distinct phases**. Translation may never claim the image has been sent before the controller has completed recipient selection/consent.
+- Resource/negative/error text: `PNG`, `32 MiB`, `64` remain present for all supported locales. `previous image is kept` must not translate as cleared, replaced, transmitted or automatically copied. `nothing sent yet` must remain explicit in every locale; native-speaker visual confirmation is still pending.
+- Tests: unique full source-key matrix across MENU/REVIEW/COMPOSE/HISTORY/IMAGE for 20 canonical locales, nonempty translations with exact unit constants, RU/PT semantic examples, distinguish capture and prepare actions, fail/not-sent/captured warning collision, correct fallback for unsupported locale, source-level exact capture behavior verification. Mutation review should fail for missing keys, wrong limits or success/failure caption collisions. Test actual `i18n::label` and existing GTK widget path; never mock clipboard subject.
+- Source-exact final Preflight stable and Native GTK Xvfb/strict Clippy/test workflow only **after last implementation edit**. Treat any network/formatter failure separately from regressions. No full 10× Mode B, hardware/RTL font/native-speaker review or signed release is implied.
+- Documentation in a separate preceding commit, source+tests in one atomic executable commit, status/evidence documentation afterward. Do not touch `master`, signing, package publication, existing user settings or other #16/#8 work.
+
+Before executable changes: NOT IMPLEMENTED, NOT TESTED; #17 remains open.
