@@ -385,25 +385,15 @@ mod tests {
         for locale in LOCALES {
             let success = translated(locale, "Saved and applied.").expect("success key");
             for key in KEYS.iter().filter(|key| **key != "Saved and applied.") {
-                assert_ne!(
-                    translated(locale, key),
-                    Some(success),
-                    "{locale}: {key}"
-                );
+                assert_ne!(translated(locale, key), Some(success), "{locale}: {key}");
             }
             let uncertain = translated(locale, KEYS[3]).expect("uncertain");
-            assert_ne!(
-                uncertain,
-                translated(locale, KEYS[2]).expect("damaged")
-            );
+            assert_ne!(uncertain, translated(locale, KEYS[2]).expect("damaged"));
             assert_ne!(
                 uncertain,
                 translated(locale, KEYS[5]).expect("apply failed")
             );
-            assert_ne!(
-                uncertain,
-                translated(locale, KEYS[9]).expect("stopped")
-            );
+            assert_ne!(uncertain, translated(locale, KEYS[9]).expect("stopped"));
             assert_ne!(
                 success,
                 translated(locale, KEYS[13]).expect("restart pending")
