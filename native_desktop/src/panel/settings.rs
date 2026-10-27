@@ -530,11 +530,12 @@ GNU General Public License v3.0.",
         } else {
             view.port.to_string()
         });
-        self.directory.set_text(&if view.directory_display.is_empty() {
-            "Default Downloads folder".to_owned()
-        } else {
-            crate::i18n::isolate_untrusted(&view.directory_display)
-        });
+        self.directory
+            .set_text(&if view.directory_display.is_empty() {
+                "Default Downloads folder".to_owned()
+            } else {
+                crate::i18n::isolate_untrusted(&view.directory_display)
+            });
         self.directory_intent
             .set(if view.configured { 0 } else { 1 });
         self.file.borrow_mut().take();

@@ -223,13 +223,15 @@ mod tests {
     use super::*;
     use crate::i18n::LOCALES;
 
-
     #[test]
     fn resolved_name_is_fsi_isolated_without_mutating_the_source() {
         let hostile = "PC\u{2069}\u{202e}<unsafe>\u{202c}.txt";
         for locale in LOCALES {
             let actual = resolved_name_for(locale, hostile);
-            assert!(actual.contains("\u{2068}PC<unsafe>.txt\u{2069}"), "{locale}");
+            assert!(
+                actual.contains("\u{2068}PC<unsafe>.txt\u{2069}"),
+                "{locale}"
+            );
             assert!(!actual.contains('\u{202e}'), "{locale}");
             assert!(!actual.contains('\u{2069}') || actual.ends_with('\u{2069}'));
             assert!(!actual.starts_with(':'));
