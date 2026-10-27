@@ -101,7 +101,7 @@ fn payload_label(details: &TransferDetails) -> String {
             })
             .map(|ext| ext.to_ascii_uppercase())
             .unwrap_or_else(|| "File".into()),
-        PayloadKind::Files => format!("{} files", details.files.len()),
+        PayloadKind::Files => crate::i18n::file_count(details.files.len()),
         PayloadKind::Text => "Text".into(),
         PayloadKind::Url => "Link".into(),
     }
@@ -230,15 +230,15 @@ pub(super) fn transfer_row(
         phase_text(phase),
         Badge::Transfer(phase),
     ));
-    let title = label(if sender.is_empty() {
-        if incoming {
+    let title = if sender.is_empty() {
+        label(if incoming {
             "Incoming request"
         } else {
             "Transfer"
-        }
+        })
     } else {
-        sender
-    });
+        label(&crate::i18n::isolate_untrusted(sender))
+    };
     title.set_widget_name("row-peer");
     title.set_selectable(false);
     title.set_hexpand(true);
@@ -453,7 +453,11 @@ impl Panel {
                     String::new()
                 };
                 for file in transfer.details.files.iter() {
-                    description.push_str(&format!("\n{} · {} bytes", file.name, file.size));
+                    description.push_str(&format!(
+                        "\n{} · {}",
+                        crate::i18n::isolate_untrusted(&file.name),
+                        crate::i18n::byte_count(file.size)
+                    ));
                 }
                 summary.set_tooltip_text(Some(&description));
                 summary.update_property(&[gtk::accessible::Property::Description(&description)]);
@@ -537,16 +541,17 @@ impl Panel {
         {
             let text = if transfer.phase.is_terminal() {
                 format!(
-                    "{} · {} bytes",
+                    "{} · {}",
                     payload_label(&transfer.details),
-                    transfer.details.total_bytes
+                    crate::i18n::byte_count(transfer.details.total_bytes)
                 )
             } else if !transfer.details.pin.is_empty() {
-                format!(
-                    "{} · Code: {}",
-                    payload_label(&transfer.details),
-                    transfer.details.pin
-                )
+                let code = crate::i18n::pin_code(&transfer.details.pin);
+                if code.is_empty() {
+                    payload_label(&transfer.details)
+                } else {
+                    format!("{} · {}", payload_label(&transfer.details), code)
+                }
             } else {
                 payload_label(&transfer.details)
             };
@@ -607,7 +612,7 @@ impl Panel {
                     },
                     state,
                 ));
-                let title = label(&projection.0);
+                let title = label(&crate::i18n::isolate_untrusted(&projection.0));
                 title.set_selectable(false);
                 title.set_selectable(false);
                 title.set_hexpand(true);
@@ -719,8 +724,9 @@ impl Panel {
                 let pin = active
                     .map(|transfer| transfer.details.pin.as_str())
                     .unwrap_or_default();
-                code.set_visible(!pin.is_empty());
-                code.set_text(&format!("Code: {pin}"));
+                let displayed = crate::i18n::pin_code(pin);
+                code.set_visible(!displayed.is_empty());
+                code.set_text(&displayed);
             }
             if let Some(send) = named(root.upcast_ref(), "send-device") {
                 send.set_sensitive(ready && projection.1 && active.is_none());

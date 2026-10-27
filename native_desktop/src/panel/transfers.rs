@@ -211,10 +211,10 @@ impl Window {
                 .rev()
                 .filter(|r| !ids.contains(&r.id))
             {
-                let peer = label(if record.peer.is_empty() {
-                    crate::i18n::label("Unnamed device")
+                let peer = label(&if record.peer.is_empty() {
+                    crate::i18n::label("Unnamed device").to_owned()
                 } else {
-                    &record.peer
+                    crate::i18n::isolate_untrusted(&record.peer)
                 });
                 peer.set_wrap(false);
                 peer.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -230,7 +230,11 @@ impl Window {
                 } else {
                     "Send"
                 }));
-                let content = field(&format!("{} · {} bytes", record.kind, record.total));
+                let content = field(&format!(
+                    "{} · {}",
+                    crate::i18n::isolate_untrusted(&record.kind),
+                    crate::i18n::byte_count(record.total)
+                ));
                 let status = label(crate::i18n::label(journal_status_source(&record.status)));
                 status.set_wrap(false);
                 let date = timestamp(Some(record.updated));

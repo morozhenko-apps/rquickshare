@@ -3,6 +3,7 @@
 //! semantics, the daemon protocol, or the user's persisted settings.
 //! This is the first menu slice of #17, NOT completion of 20-locale GTK coverage.
 
+mod dynamic;
 mod history;
 
 const MENU_KEYS: [&str; 17] = [
@@ -105,6 +106,22 @@ pub(crate) fn active() -> &'static str {
         }
     }
     "en"
+}
+
+pub(crate) fn file_count(count: usize) -> String {
+    dynamic::file_count_for(active(), count)
+}
+
+pub(crate) fn byte_count(count: u64) -> String {
+    dynamic::bytes_for(count)
+}
+
+pub(crate) fn pin_code(pin: &str) -> String {
+    dynamic::code_for(active(), pin)
+}
+
+pub(crate) fn isolate_untrusted(value: &str) -> String {
+    dynamic::isolate_untrusted(value)
 }
 
 pub(crate) fn label(source: &'static str) -> &'static str {
