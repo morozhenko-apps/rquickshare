@@ -47,3 +47,7 @@ Source `b849003e` Native GTK `40511038773` completed **FAIL**, with exact `rustf
 Code-only follow-up `9e6251d340dd0a40a5efb09eb7db0979d75e8aff` adopts those four exact formatting changes without changing a translation or runtime behavior. Final source-exact Native GTK `40511449070` and Preflight `40511449089` were **IN PROGRESS / QUEUED** on last read. No final CI success claimed yet. Previous dynamic transfer formatter remains separately confirmed SUCCESS on `b8064a09`.
 
 The next #17 area is native Settings. The source spans 1,235 lines with at least 40 user-visible static/dynamic message candidates and validation/save/login/recovery states, so it needs a separate risk inventory and catalog rather than treating untrusted values or error codes as static keys. No settings behavior has been changed in this slice.
+
+## Image Preflight supersession
+
+Native GTK on `9e6251d3` was **SUCCESS** in run `40511449070`. Preflight `40511449089` was **CANCELLED** by newer development after Rust format, Frontend, Core Rust tests and Core Clippy reached success; Tauri Clippy did not finish and there was no final overall PASS. The newer source-exact Preflight `40513766961` will validate image and settings code together and is **PENDING**. Do not relabel the cancelled image run as a successful all-jobs gate.

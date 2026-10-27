@@ -1,3 +1,9 @@
+## 2026-10-27 #17 Settings chrome (first source slice, 20 locales)
+
+Executed source `51b416e6` creates isolated `src/i18n/settings.rs` with **25 new static keys ×19 translated rows = 475 draft translations**, hooks static buttons/visibility choices/pages in `panel/settings.rs`; existing visible/hidden/cancel reused, and settings write/recovery/retry/restart/login/port validation callbacks remain untouched. Static source audit PASS; **Native GTK 40513766561 and Preflight 40513766961 pending** (no source-exact terminal proof). [Settings staged plan and remaining status/error work](native-settings-i18n-staged-plan-2026-10-27.md). #17 remains PARTIAL.
+
+Image `9e6251d3` GTK run `40511449070` SUCCESS; the matching Preflight `40511449089` was **CANCELLED**, not a terminal PASS (four jobs passed, Tauri Clippy uncompleted), superseded by current newer code's Preflight. [Image details](native-image-dialog-i18n-2026-10-27.md).
+
 ## 2026-10-27 #17 native image formatter follow-up
 
 Exact Native GTK `40511038773` on `b849003e` failed in rustfmt-only new test/status layout. Follow-up `9e6251d3` exactly applies four suggested formatting changes without behavior changes; new exact-source Native GTK `40511449070` and Preflight `40511449089` **PENDING**, not yet PASS. [Source diagnosis and gate](native-image-dialog-i18n-2026-10-27.md). Next planned #17 surface: settings validation, destructive recovery and login state captions (separate bounded implementation).
