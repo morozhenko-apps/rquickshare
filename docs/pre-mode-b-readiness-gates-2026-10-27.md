@@ -60,3 +60,24 @@ It does **not** prove every accelerated save/restart, reconnection and race inva
 ### New UI source receipt
 
 `378834ac` typed `resolved_name_for(locale, name)` with Arabic/European Portuguese/Traditional Chinese and unknown-locale English fallback, FSI/PDI-only projected values, no alteration of editable input, `gio::File` or persisted directory. Static wiring check PASS. Full source CI Preflight `40561114184` and GTK `40561114130` **still pending on most recent read**, not code-complete acceptance. No physical KDE/Pixel or Windows testing occurred.
+
+## #16 additional security/public-contract STOP FACTOR: external standards evidence
+
+The user's earlier approval of **Option A = only cryptographically proven device aliases** remains binding. This review is a read-only contract investigation, **not** permission to source credentials from Google or merge anonymous routes.
+
+Primary external specifications, consulted 2026-10-27 (independent of current repository code):
+- Google Nearby's [PublicCertificate wire schema](https://chromium.googlesource.com/external/github.com/google/nearby/+/refs/heads/upstream/cl/627439305/sharing/proto/wire_format.proto) documents `secret_id`, `authenticity_key`, certificate `public_key`, validity interval and encrypted metadata; the mere presence of protobuf fields does **not** provide our client with a trusted key.
+- Google's [Nearby Share certificate manager](https://chromium.googlesource.com/external/github.com/google/nearby-connections/+/664513121dad7ee1b8f29a897cfb337a09c60660/sharing/certificates/nearby_share_certificate_manager.h) manages private and contacts' public certificates and server upload/download; there is no source evidence that an independent Linux anonymous "Everyone" client obtains that backend trust.
+- Third-party NearShare's [security notes](https://github.com/Dhiva-Labs/NearShare) independently document anonymous `PairedKeyResult.UNABLE` + user PIN confirmation, not identity-based auto-trust; this is developer testimony and not a normative Google API contract.
+
+**Confirmed repo code:** Our `runtime/route_registry.rs` only accepts a real `VerifiedPeerCredential` for same-generation socket and authenticated route binding, but its own comment says no provider wires this in. New external links explain why naming/mDNS cannot fill that gap, not that any proposed external API is licensed/stable/available.
+
+Material architectural alternatives to resolve **only** the missing certificate/trust-provisioning contract:
+
+1. **Account-backed interoperable certificate source**. Require real authenticated provider certificate provenance, rotation/revocation and cryptographic proof linking each advertised route to a matched certificate, while preserving manual consent/fail-closed anonymous fallback. Advantage: could enable genuine Pixel route grouping. Risks: backend authorization, account/privacy contract, undocumented/certain unsupported service APIs and new persistent trust model. **No permission to implement without separately approved architecture and evidence that the source exists.**
+2. **Explicit rQuickShare-to-rQuickShare pairing** using app-owned credentials and a route-bound challenge. Advantage: maintainable and independently auditable cryptographic proof among cooperating clients. Disadvantage: Google's stock Pixel Quick Share does **not** participate in our new pairing contract; anonymous stock-device routes must remain independent. Requires new user-visible product/API scope and lifecycle of certificates.
+3. **Retain distinct unverified Pixel routes**, change #16 acceptance to "group proven peers when proof is available, display unverified candidate routes separately". Advantage: no unsafe identity claim or proprietary certificate dependency, preserves current Google-compatible experience and explicit consent. Disadvantage: drops the originally requested automatic grouping of a stock Pixel; this is a **new explicit exception distinct from #8**, so it cannot be chosen silently under the owner's current instruction.
+
+**Engineering preference while awaiting the required decision:** retain independent anonymous routes and keep route proof infrastructure fail-closed; investigate official account-backed integration as research, never invent a Google credential or treat matching IP/name as trust. Because the owner permits only #8 as an exception, #16 **cannot be marked closed by choosing option 3 automatically**. Await explicit owner decision before changing this additional trust or public-API contract. Unrelated bug and localization work can proceed.
+
+Current implementation/CI status: `378834ac` typed GTK projection source was committed; Preflight `40561114184`, Native GTK `40561114130` not terminal at the checkpoint. Mode B remains intentionally unrun.
