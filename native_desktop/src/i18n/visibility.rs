@@ -6,23 +6,53 @@ pub(super) fn translated(locale: &str, source: &str) -> Option<&'static str> {
     let index = KEYS.iter().position(|key| *key == source)?;
     let row: &[&str; 2] = match locale {
         "ru" => &["Виден устройствам поблизости", "Обновление видимости…"],
-        "es" => &["Visible para dispositivos cercanos", "Actualizando visibilidad…"],
-        "pt" => &["Visível para dispositivos nas proximidades", "A atualizar a visibilidade…"],
-        "de" => &["Für Geräte in der Nähe sichtbar", "Sichtbarkeit wird aktualisiert…"],
-        "fr" => &["Visible pour les appareils à proximité", "Actualisation de la visibilité…"],
-        "it" => &["Visibile ai dispositivi vicini", "Aggiornamento della visibilità…"],
-        "pl" => &["Widoczny dla urządzeń w pobliżu", "Aktualizowanie widoczności…"],
-        "hi" => &["आस-पास के डिवाइस को दिखाई दे रहा है", "दृश्यता अपडेट की जा रही है…"],
+        "es" => &[
+            "Visible para dispositivos cercanos",
+            "Actualizando visibilidad…",
+        ],
+        "pt" => &[
+            "Visível para dispositivos nas proximidades",
+            "A atualizar a visibilidade…",
+        ],
+        "de" => &[
+            "Für Geräte in der Nähe sichtbar",
+            "Sichtbarkeit wird aktualisiert…",
+        ],
+        "fr" => &[
+            "Visible pour les appareils à proximité",
+            "Actualisation de la visibilité…",
+        ],
+        "it" => &[
+            "Visibile ai dispositivi vicini",
+            "Aggiornamento della visibilità…",
+        ],
+        "pl" => &[
+            "Widoczny dla urządzeń w pobliżu",
+            "Aktualizowanie widoczności…",
+        ],
+        "hi" => &[
+            "आस-पास के डिवाइस को दिखाई दे रहा है",
+            "दृश्यता अपडेट की जा रही है…",
+        ],
         "zh-Hant" => &["附近裝置可見", "正在更新可見性…"],
         "ja" => &["近くのデバイスに表示中", "公開設定を更新中…"],
-        "nl" => &["Zichtbaar voor apparaten in de buurt", "Zichtbaarheid bijwerken…"],
+        "nl" => &[
+            "Zichtbaar voor apparaten in de buurt",
+            "Zichtbaarheid bijwerken…",
+        ],
         "sv" => &["Synlig för enheter i närheten", "Uppdaterar synlighet…"],
         "tr" => &["Yakındaki cihazlara görünür", "Görünürlük güncelleniyor…"],
         "ko" => &["주변 기기에 표시 중", "공개 상태 업데이트 중…"],
         "bn" => &["কাছাকাছি ডিভাইসগুলির কাছে দৃশ্যমান", "দৃশ্যমানতা আপডেট করা হচ্ছে…"],
         "th" => &["อุปกรณ์ใกล้เคียงมองเห็นได้", "กำลังอัปเดตการมองเห็น…"],
-        "id" => &["Terlihat oleh perangkat di sekitar", "Memperbarui visibilitas…"],
-        "fil" => &["Nakikita ng mga device sa malapit", "Ina-update ang visibility…"],
+        "id" => &[
+            "Terlihat oleh perangkat di sekitar",
+            "Memperbarui visibilitas…",
+        ],
+        "fil" => &[
+            "Nakikita ng mga device sa malapit",
+            "Ina-update ang visibility…",
+        ],
         "ar" => &["مرئي للأجهزة القريبة", "جارٍ تحديث إمكانية الظهور…"],
         _ => &KEYS,
     };
@@ -56,8 +86,14 @@ mod tests {
             assert!(!visible.contains('{'), "{locale}");
             assert!(!updating.contains('{'), "{locale}");
         }
-        assert_eq!(translated("ru", KEYS[0]), Some("Виден устройствам поблизости"));
-        assert_eq!(translated("pt", KEYS[1]), Some("A atualizar a visibilidade…"));
+        assert_eq!(
+            translated("ru", KEYS[0]),
+            Some("Виден устройствам поблизости")
+        );
+        assert_eq!(
+            translated("pt", KEYS[1]),
+            Some("A atualizar a visibilidade…")
+        );
         assert_eq!(translated("ar", KEYS[1]), Some("جارٍ تحديث إمكانية الظهور…"));
         assert_eq!(translated("en", KEYS[0]), Some(KEYS[0]));
         assert_eq!(translated("pt-BR", KEYS[0]), Some(KEYS[0]));
@@ -76,11 +112,23 @@ mod tests {
                 assert!(shown.ends_with(&expected_time), "{locale}: {remaining}");
                 assert_eq!(shown.matches('\u{2066}').count(), 1, "{locale}");
                 assert_eq!(shown.matches('\u{2069}').count(), 1, "{locale}");
-                assert!(shown.starts_with(translated(locale, KEYS[0]).unwrap()), "{locale}");
+                assert!(
+                    shown.starts_with(translated(locale, KEYS[0]).unwrap()),
+                    "{locale}"
+                );
             }
         }
-        assert_eq!(countdown_for("en", 60), "Visible to nearby devices · \u{2066}1:00\u{2069}");
-        assert_eq!(countdown_for("pt", 1), "Visível para dispositivos nas proximidades · \u{2066}0:01\u{2069}");
-        assert_eq!(countdown_for("ar", 59), "مرئي للأجهزة القريبة · \u{2066}0:59\u{2069}");
+        assert_eq!(
+            countdown_for("en", 60),
+            "Visible to nearby devices · \u{2066}1:00\u{2069}"
+        );
+        assert_eq!(
+            countdown_for("pt", 1),
+            "Visível para dispositivos nas proximidades · \u{2066}0:01\u{2069}"
+        );
+        assert_eq!(
+            countdown_for("ar", 59),
+            "مرئي للأجهزة القريبة · \u{2066}0:59\u{2069}"
+        );
     }
 }
