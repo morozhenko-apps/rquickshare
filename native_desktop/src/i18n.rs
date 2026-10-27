@@ -129,6 +129,10 @@ pub(crate) fn isolate_untrusted(value: &str) -> String {
     dynamic::isolate_untrusted(value)
 }
 
+pub(crate) fn resolved_name(value: &str) -> String {
+    dynamic::resolved_name_for(active(), value)
+}
+
 pub(crate) fn label(source: &'static str) -> &'static str {
     translated(active(), source)
 }

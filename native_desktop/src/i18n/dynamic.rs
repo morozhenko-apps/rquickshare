@@ -187,10 +187,76 @@ pub(super) fn isolate_untrusted(value: &str) -> String {
     visible
 }
 
+/// A display-only projection; the original resolved device name remains unmodified.
+/// This is not a peer-authentication or verified-route identity statement.
+pub(super) fn resolved_name_for(locale: &str, name: &str) -> String {
+    if name.is_empty() {
+        return String::new();
+    }
+    let caption = match locale {
+        "ru" => "Имя для новых подключений",
+        "es" => "Nombre para conexiones nuevas",
+        "pt" => "Nome para novas ligações",
+        "de" => "Name für neue Verbindungen",
+        "fr" => "Nom pour les nouvelles connexions",
+        "it" => "Nome per le nuove connessioni",
+        "pl" => "Nazwa dla nowych połączeń",
+        "hi" => "नए कनेक्शन के लिए नाम",
+        "zh-Hant" => "新連線使用的名稱",
+        "ja" => "新しい接続で使用する名前",
+        "nl" => "Naam voor nieuwe verbindingen",
+        "sv" => "Namn för nya anslutningar",
+        "tr" => "Yeni bağlantılar için ad",
+        "ko" => "새 연결에 사용할 이름",
+        "bn" => "নতুন সংযোগের নাম",
+        "th" => "ชื่อสำหรับการเชื่อมต่อใหม่",
+        "id" => "Nama untuk koneksi baru",
+        "fil" => "Pangalan para sa mga bagong koneksyon",
+        "ar" => "الاسم المستخدم للاتصالات الجديدة",
+        _ => "Name for new connections",
+    };
+    format!("{caption}: {}", isolate_untrusted(name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::i18n::LOCALES;
+
+
+    #[test]
+    fn resolved_name_is_fsi_isolated_without_mutating_the_source() {
+        let hostile = "PC\u{2069}\u{202e}<unsafe>\u{202c}.txt";
+        for locale in LOCALES {
+            let actual = resolved_name_for(locale, hostile);
+            assert!(actual.contains("\u{2068}PC<unsafe>.txt\u{2069}"), "{locale}");
+            assert!(!actual.contains('\u{202e}'), "{locale}");
+            assert!(!actual.contains('\u{2069}') || actual.ends_with('\u{2069}'));
+            assert!(!actual.starts_with(':'));
+            assert!(resolved_name_for(locale, "").is_empty(), "{locale}");
+        }
+        assert!(hostile.contains('\u{202e}'));
+        assert_eq!(
+            resolved_name_for("en", "Desktop"),
+            "Name for new connections: \u{2068}Desktop\u{2069}"
+        );
+        assert_eq!(
+            resolved_name_for("pt", "Desktop"),
+            "Nome para novas ligações: \u{2068}Desktop\u{2069}"
+        );
+        assert_eq!(
+            resolved_name_for("ru", "Desktop"),
+            "Имя для новых подключений: \u{2068}Desktop\u{2069}"
+        );
+        assert_eq!(
+            resolved_name_for("ar", "Desktop"),
+            "الاسم المستخدم للاتصالات الجديدة: \u{2068}Desktop\u{2069}"
+        );
+        assert_eq!(
+            resolved_name_for("pt-BR", "Desktop"),
+            resolved_name_for("en", "Desktop")
+        );
+    }
 
     #[test]
     fn cardinal_integer_boundaries_keep_russian_polish_and_arabic_distinct() {

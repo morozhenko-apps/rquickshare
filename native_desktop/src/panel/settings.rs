@@ -522,7 +522,7 @@ GNU General Public License v3.0.",
             "Leave empty to use the computer name. OK applies changes to new connections."
                 .to_owned()
         } else {
-            format!("Name for new connections: {}", view.resolved_name)
+            crate::i18n::resolved_name(&view.resolved_name)
         });
         self.visibility.set_selected(u32::from(view.visibility) + 1);
         self.port.set_text(&if view.port < 0 {
@@ -530,12 +530,11 @@ GNU General Public License v3.0.",
         } else {
             view.port.to_string()
         });
-        self.directory
-            .set_text(if view.directory_display.is_empty() {
-                "Default Downloads folder"
-            } else {
-                &view.directory_display
-            });
+        self.directory.set_text(&if view.directory_display.is_empty() {
+            "Default Downloads folder".to_owned()
+        } else {
+            crate::i18n::isolate_untrusted(&view.directory_display)
+        });
         self.directory_intent
             .set(if view.configured { 0 } else { 1 });
         self.file.borrow_mut().take();
@@ -892,7 +891,7 @@ GNU General Public License v3.0.",
                 if let Some(editor) = weak.upgrade().filter(|editor| !editor.closed.get()) {
                     editor.busy.set(false);
                     match result {
-                        Ok(Ok((file, display))) => { editor.file.replace(Some(file)); editor.directory_intent.set(2); editor.directory.set_text(&display); editor.changed(); },
+                        Ok(Ok((file, display))) => { editor.file.replace(Some(file)); editor.directory_intent.set(2); editor.directory.set_text(&crate::i18n::isolate_untrusted(&display)); editor.changed(); },
                         _ => editor.status.set_text(crate::i18n::label("Cannot acquire the selected folder. Check access and choose again.")),
                     }
                     editor.refresh();
