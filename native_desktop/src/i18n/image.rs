@@ -279,11 +279,20 @@ mod tests {
 
     #[test]
     fn image_privacy_and_error_captions_have_known_portuguese_russian_readings() {
-        assert_eq!(translated("ru", "Send image"), Some("Отправить изображение"));
+        assert_eq!(
+            translated("ru", "Send image"),
+            Some("Отправить изображение")
+        );
         assert_eq!(translated("pt", "Send image"), Some("Enviar imagem"));
         assert_eq!(translated("pt", "Prepare image"), Some("Preparar imagem"));
-        assert_eq!(translated("ru", "Prepare image"), Some("Подготовить изображение"));
-        assert_eq!(translated("no-such-locale", "Send image"), Some("Send image"));
+        assert_eq!(
+            translated("ru", "Prepare image"),
+            Some("Подготовить изображение")
+        );
+        assert_eq!(
+            translated("no-such-locale", "Send image"),
+            Some("Send image")
+        );
         assert_eq!(translated("ar", "Send image"), Some("إرسال صورة"));
     }
 }

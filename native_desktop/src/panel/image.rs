@@ -272,8 +272,9 @@ impl Image {
             .as_ref()
             .and_then(|source| source.try_clone().ok());
         let Some(source) = source else {
-            self.status
-                .set_text(crate::i18n::label("Image source could not be prepared. Capture it again."));
+            self.status.set_text(crate::i18n::label(
+                "Image source could not be prepared. Capture it again.",
+            ));
             return;
         };
         let completion = match (self.submit)(source) {
