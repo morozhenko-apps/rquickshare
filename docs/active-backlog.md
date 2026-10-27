@@ -1,3 +1,7 @@
+## 2026-10-27 #17 history exact-source CI refresh
+
+Latest executable history localization source `34e168e2` follows the Dutch reset/clear semantic correction and formats its two assertions per the GTK Rustfmt log. Previous `36c3a1b7` GTK run `40485030921` failed in formatter only; new exact-source Preflight `40485357024` and Native GTK `40485357147` **PENDING**, not green by inference. No other functional or protocol changes. Documentation: [history translation and CI record](native-history-metadata-localization-2026-10-27.md). #17 remains PARTIAL.
+
 ## 2026-10-27 #17 Dutch destructive history label correction
 
 Code `36c3a1b7` narrows the Dutch history reset vs completed-clear distinction, with literal semantic regressions: `Geschiedenis resetten` is not a restoration claim; `Voltooide items wissen` denotes completed record removal. No journal deletion logic or backend authority changed. New exact-source Preflight `40485030868` and Native GTK `40485030921` **PENDING**; #17 remains OPEN/PARTIAL and human 20-locale review is still outstanding.
