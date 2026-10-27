@@ -541,7 +541,7 @@ GNU General Public License v3.0.",
         self.file.borrow_mut().take();
         self.recover.set_active(false);
         self.dirty.set(false);
-        self.status.set_text(status(&view));
+        self.status.set_text(crate::i18n::label(status(&view)));
         self.base.replace(Some(view));
         self.loading.set(false);
         self.refresh();
