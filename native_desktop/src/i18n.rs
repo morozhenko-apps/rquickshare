@@ -13,6 +13,7 @@ mod settings_residual;
 mod settings_state;
 mod settings_warning;
 mod transfer_rows;
+mod visibility;
 
 const MENU_KEYS: [&str; 17] = [
     "Visible",
@@ -134,6 +135,10 @@ pub(crate) fn isolate_untrusted(value: &str) -> String {
 
 pub(crate) fn resolved_name(value: &str) -> String {
     dynamic::resolved_name_for(active(), value)
+}
+
+pub(crate) fn visibility_remaining(seconds: u64) -> String {
+    visibility::countdown_for(active(), seconds)
 }
 
 pub(crate) fn label(source: &'static str) -> &'static str {
@@ -615,6 +620,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
         return value;
     }
     if let Some(value) = transfer_rows::translated(locale, source) {
+        return value;
+    }
+    if let Some(value) = visibility::translated(locale, source) {
         return value;
     }
     if let Some(index) = COMPOSE_KEYS.iter().position(|key| *key == source) {
@@ -1120,6 +1128,21 @@ mod tests {
                 assert!(!settings_warning::KEYS.contains(&source));
                 assert!(!settings_residual::KEYS.contains(&source));
                 assert!(!transfer_rows::KEYS.contains(&source));
+            }
+            for source in visibility::KEYS {
+                assert!(!translated(locale, source).is_empty());
+                assert!(!MENU_KEYS.contains(&source));
+                assert!(!REVIEW_KEYS.contains(&source));
+                assert!(!COMPOSE_KEYS.contains(&source));
+                assert!(!history::KEYS.contains(&source));
+                assert!(!image::KEYS.contains(&source));
+                assert!(!settings::KEYS.contains(&source));
+                assert!(!settings_state::KEYS.contains(&source));
+                assert!(!settings_errors::KEYS.contains(&source));
+                assert!(!settings_warning::KEYS.contains(&source));
+                assert!(!settings_residual::KEYS.contains(&source));
+                assert!(!transfer_rows::KEYS.contains(&source));
+                assert!(!reveal_notices::KEYS.contains(&source));
             }
             assert_ne!(
                 settings_residual::translated(locale, "Start sharing"),
