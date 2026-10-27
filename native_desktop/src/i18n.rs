@@ -1089,7 +1089,10 @@ mod tests {
                 "Text must be UTF-8 without NUL and at most 128 KiB.",
                 "No supported text was captured. Use 1–128 KiB of UTF-8 text without NUL.",
             ] {
-                assert!(translated(locale, source).contains("UTF-8"), "{locale}: {source}");
+                assert!(
+                    translated(locale, source).contains("UTF-8"),
+                    "{locale}: {source}"
+                );
             }
             assert_ne!(
                 translated(locale, "Paste clipboard"),
@@ -1097,7 +1100,10 @@ mod tests {
                 "{locale}: paste/prepare collision"
             );
             assert_ne!(
-                translated(locale, "Text captured. Review it, then prepare and choose recipients."),
+                translated(
+                    locale,
+                    "Text captured. Review it, then prepare and choose recipients."
+                ),
                 translated(
                     locale,
                     "Preparation was not queued. Review the current source and connection."
@@ -1105,13 +1111,25 @@ mod tests {
                 "{locale}: captured/failed collision"
             );
             assert_ne!(
-                translated(locale, "Clipboard is read only when you paste. Nothing is sent yet."),
-                translated(locale, "Text captured. Review it, then prepare and choose recipients."),
+                translated(
+                    locale,
+                    "Clipboard is read only when you paste. Nothing is sent yet."
+                ),
+                translated(
+                    locale,
+                    "Text captured. Review it, then prepare and choose recipients."
+                ),
                 "{locale}: unsent/captured collision"
             );
             assert_ne!(
-                translated(locale, "Write or paste text, then prepare it and choose recipients."),
-                translated(locale, "Write or paste text, then send it to the selected device."),
+                translated(
+                    locale,
+                    "Write or paste text, then prepare it and choose recipients."
+                ),
+                translated(
+                    locale,
+                    "Write or paste text, then send it to the selected device."
+                ),
                 "{locale}: prepare/send collision"
             );
         }

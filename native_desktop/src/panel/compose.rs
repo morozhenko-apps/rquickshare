@@ -140,11 +140,9 @@ impl Composer {
             if !insertion_allowed(current, text) {
                 buffer.stop_signal_emission_by_name("insert-text");
                 if let Some(composer) = weak.upgrade() {
-                    composer
-                        .status
-                        .set_text(crate::i18n::label(
-                            "Text must be UTF-8 without NUL and at most 128 KiB.",
-                        ));
+                    composer.status.set_text(crate::i18n::label(
+                        "Text must be UTF-8 without NUL and at most 128 KiB.",
+                    ));
                 }
             }
         });
@@ -253,7 +251,8 @@ impl Composer {
             return;
         }
         let Some(text) = self.body() else {
-            self.status.set_text(crate::i18n::label("Enter 1–128 KiB of text without NUL."));
+            self.status
+                .set_text(crate::i18n::label("Enter 1–128 KiB of text without NUL."));
             return;
         };
         let completion = match (self.submit)(text) {
@@ -411,15 +410,15 @@ impl Panel {
                 }
             },
         );
-        composer
-            .prepare
-            .set_label(crate::i18n::label(if direct { "Send" } else { "Prepare text" }));
+        composer.prepare.set_label(crate::i18n::label(if direct {
+            "Send"
+        } else {
+            "Prepare text"
+        }));
         if direct {
-            composer
-                .heading
-                .set_text(crate::i18n::label(
-                    "Write or paste text, then send it to the selected device.",
-                ));
+            composer.heading.set_text(crate::i18n::label(
+                "Write or paste text, then send it to the selected device.",
+            ));
         }
         self.watch_idle_widget(&composer.window);
         composer.window.set_transient_for(Some(&self.window));
