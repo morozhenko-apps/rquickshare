@@ -1,3 +1,7 @@
+## 2026-10-27 #17 typed counts and bidi-safe dynamic transfer labels
+
+Production `7b7ac325` introduces pure GTK presentation helpers: integer-aware localized file count, exact byte symbol `B` without rounding, LTR isolation of four-digit session PIN, and display-only isolation/stripping of untrusted Unicode direction controls for peer/file/kind text. Applied to nearby/device/history/transfer text only; original transport/consent/data structures unaffected. Documented five focused regression tests; **actual exact-source Preflight `40509466138` and Native GTK `40509466348` are running, not yet PASS**. See [dynamic formatting and RTL invariants](native-dynamic-counts-bidi-2026-10-27.md). #17 OPEN/PARTIAL; source and physically installed 1.0.0 status unchanged.
+
 ## 2026-10-27 #17 history exact-source CI refresh
 
 Latest executable history localization source `34e168e2` follows the Dutch reset/clear semantic correction and formats its two assertions per the GTK Rustfmt log. Previous `36c3a1b7` GTK run `40485030921` failed in formatter only; new exact-source Preflight `40485357024` and Native GTK `40485357147` **PENDING**, not green by inference. No other functional or protocol changes. Documentation: [history translation and CI record](native-history-metadata-localization-2026-10-27.md). #17 remains PARTIAL.

@@ -26,3 +26,15 @@ Implement a **pure internal GTK presentation module**, `native_desktop/src/i18n/
 Primary risks: incorrect plural category/caption, untrusted direction-control spoofing, confusing a PIN display with authorization, altering byte count or passing content through markup, or accidentally changing file-metadata readiness. Keep helpers pure and presentation-only, with no persistence. Code/test commit separate from this documentation and subsequent checkpoint commit. Roll back independently with inverse commits. Do not touch `master`, release tags, installed package, R2, Windows, or live network/device sessions.
 
 State before code: **NOT IMPLEMENTED / NOT TESTED**. Issue #17 remains PARTIAL.
+
+## Implementation checkpoint (2026-10-27)
+
+Executable `7b7ac3255ccf29f42ffd2d669100dfd2feafc19f` adds `native_desktop/src/i18n/dynamic.rs`, a pure module for integer cardinal forms, exact `B` byte units, LRI/PDI-wrapped validated four-digit PIN and FSI/PDI-wrapped external display text with internal direction controls filtered. It is wired into the history metadata rows, session summary, nearby device code and filenames in a non-markup tooltip; untrusted domain objects, actions, backends and routes are unchanged.
+
+Five focused tests directly exercise the formatters (all locales, Russian/Polish/Arabic integer categories, byte extremes, valid/invalid PIN and injected Unicode controls); existing `rows.rs` payload tests continue to test the actual main-card projection and are not mocked. Independent Babel 2.18 integer cardinal samples checked for ru/pl/ar/fr/hi/bn as a diagnostic; decimal CLDR support and professional linguistic signoff are **not** claimed. The Arabic compact noun string, 20-locale typography and physical RTL input still require review.
+
+The code-only commit triggers source-exact Preflight `40509466138` and Native GTK UI `40509466348`. Both were **IN PROGRESS** at plan checkpoint; no final pass claimed. No user/package/Pixel or release changes.
+
+### Deferred follow-up
+
+The static incoming code-verification sentence, other consent/action labels and complete native UI translation remain separate #17 tasks. History `record.kind` and sender names still display their original (not localized or trusted) source values, now visually isolated only. Counts must never be used as proof of completed file/transport delivery. RTL widget layout and native speaker review remain physical acceptance gates.
