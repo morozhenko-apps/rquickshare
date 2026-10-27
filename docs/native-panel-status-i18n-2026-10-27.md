@@ -28,3 +28,7 @@ These direct literals do **not** currently occur in the native i18n catalogs. A 
 - Final exact-source Native GTK nightly rustfmt, strict Clippy, UI/widget unit test suite and Preflight only once after planned edits; isolate known flaky group and full Mode B later. Record exact SHA/check results, no inferred installed-physical signoff.
 
 Rollback is the new catalog and i18n registration only, with status branch model unchanged. Physical Pixel/KDE, RTL semantic review, Windows acceptance, Google-compatible verified identity #16 and the explicitly retained #8 A2.2 risk remain independent OPEN gates. No user authorization to publish 1.0.0 is inferred.
+
+## Initial implementation checkpoint
+
+`5a29c3ccb8d8803fefea7e83df633847ed9119c6` adds `src/i18n/panel_status.rs` (twelve canonical status keys, 19×12 =228 non-English draft translations, two deterministic unit suites) and adds pure catalog routing/collision tests in `i18n.rs`. Existing `panel.rs` and other daemon/control modules byte-identical to previous release slice. Independent structural audit: 19 locale rows; each includes 12 unique, nonempty values and no interpolation placeholders; English and unsupported locale fallback remain exact. Final source-exact [Native GTK 40593845460](https://github.com/morozhenko-apps/rquickshare/actions/runs/40593845460) and [Preflight 40593845531](https://github.com/morozhenko-apps/rquickshare/actions/runs/40593845531) **IN PROGRESS**. No success claim until both terminal on exact source. Other failures or unrelated physical gates not reclassified.
