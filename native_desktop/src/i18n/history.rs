@@ -437,20 +437,44 @@ mod tests {
             let get = |key| translated(locale, key).expect("history key");
             let success = get("Completed");
             for failure in [
-                "Declined", "Cancelled", "Failed", "Disconnected", "Interrupted", "In progress",
+                "Declined",
+                "Cancelled",
+                "Failed",
+                "Disconnected",
+                "Interrupted",
+                "In progress",
             ] {
-                assert_ne!(success, get(failure), "{locale}: {failure} confused with success");
+                assert_ne!(
+                    success,
+                    get(failure),
+                    "{locale}: {failure} confused with success"
+                );
             }
-            assert_ne!(get("Declined"), get("Cancelled"), "{locale}: decline/cancel collision");
-            assert_ne!(get("Clear completed"), get("Reset history"), "{locale}: destructive action collision");
+            assert_ne!(
+                get("Declined"),
+                get("Cancelled"),
+                "{locale}: decline/cancel collision"
+            );
+            assert_ne!(
+                get("Clear completed"),
+                get("Reset history"),
+                "{locale}: destructive action collision"
+            );
             assert_ne!(
                 get("Service disconnected. Live states may be stale; reconnect before controlling a transfer."),
                 get("History could not be read safely. Refresh to retry; sharing remains available."),
                 "{locale}: disconnected/read error collision"
             );
             let retention = get("Completed metadata is kept for up to 30 days and 1000 operations. File and message contents are not stored.");
-            assert!(retention.contains("30") && retention.contains("1000"), "{locale}: retention constants");
-            assert_ne!(retention, get("Completed"), "{locale}: privacy warning collision");
+            assert!(
+                retention.contains("30") && retention.contains("1000"),
+                "{locale}: retention constants"
+            );
+            assert_ne!(
+                retention,
+                get("Completed"),
+                "{locale}: privacy warning collision"
+            );
         }
         assert_eq!(translated("ru", "Reset history"), Some("Сбросить историю"));
         assert_eq!(translated("pt", "Reset history"), Some("Repor histórico"));
