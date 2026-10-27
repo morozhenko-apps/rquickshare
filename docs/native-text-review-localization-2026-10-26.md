@@ -48,3 +48,8 @@ Do not auto-merge this branch, close #17 or publish any `master`, `native/v*`, A
 - Separately, base `dev` Preflight `40412736957` exposed Clippy `err_expect` in an unrelated private route proof subscription unit test. Baseline corrected in `dev` via docs `7a73383c` and source `ce567ddd`; exact source still needs fresh CI to verify.
 - `dev` now adds Native GTK pull-request CI in docs `7c91b69d` and workflow `8cafb9e5`. The PR must receive and pass both native GTK and Preflight checks on GitHub's merge SHA before integration. Do not treat prior dev GTK success as this PR's GTK execution.
 - Keep PR #28 in draft until checks and relevant review are complete. Technical merge gate does not replace visual KDE, Arabic RTL or native-speaker content acceptance. #17 still PARTIAL.
+
+### Final base formatting correction (2026-10-27)
+
+- Exact-source Preflight format jobs at PR `40468474903` and `dev` `40468398590` found the same concrete `rustfmt` layout in the base subscriber-test assertion, unrelated to catalog values or GTK behavior. Followup `dev` source commit `2f2dbfc1` applies the formatter's exact multiline form. No assertion, production, runtime, trust or security behavior changed.
+- A fresh PR head and its GitHub merge commit must now pass current-source Preflight and Native GTK before merger. Earlier failed/cancelled checks are not accepted as passes. Keep PR draft pending verification and open #17 for unlocalized remaining surfaces.
