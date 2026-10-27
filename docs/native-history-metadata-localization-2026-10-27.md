@@ -27,3 +27,11 @@ Add a **separate internal source module** `native_desktop/src/i18n/history.rs` f
 4. Roll back executable commit without touching metadata/user history; docs inverse is independent.
 
 **Before code:** design only; #17 OPEN / PARTIAL; no feature/CI/physical claim.
+
+## Implementation checkpoint (2026-10-27)
+
+- Executable source `ae1c5cdc403029cd2cf99e6f26288dbedac91fd7`: separate `src/i18n/history.rs` typed-size internal catalog, 18 new static keys with 19 additional locale rows = **342 new translated entries**, reuse `History`/`Receive`/`Send`, plus existing GTK history integration and an exact journal status source mapper. Maintains manual journal-clear action, recovery snapshot warning and original sensitivity/permission gate.
+- Source audit PASS: **19 × 18** valid entries, all 20 locale lookups, no duplicate canonical section keys, distinct terminal states and reset/clear; 30 days/1000 operations preserved. Exact status map regression includes unknown and altered-case source codes failing closed to `In progress`. Source audit is NOT Rust compilation or human review.
+- Native GTK workflow `40484017873` on `ae1c5cdc` FAILED solely in `cargo fmt --check` with six formatting locations in test assertions. Production/translation messages and safety logic were not changed by formatter repair `25d8daa8b79385ddae9e897e6d972fdd40e20883`, code-only.
+- Final exact-source Preflight `40484330580` and Native GTK `40484330621` for `25d8daa8`: **pending terminal receipt**. Neither success nor 6/6 is asserted until each final job is checked. Tests with future run numbers are not invented.
+- Dynamic `{} · {} bytes`, `record.kind`, peer names, file-count pluralization, PIN bidi and per-language typography/RTL are **not addressed** in this slice. Security trust route #16, BWU #8, Windows, Pixel/KDE, 10x Mode B and protected release gates remain open. #17 is PARTIAL.

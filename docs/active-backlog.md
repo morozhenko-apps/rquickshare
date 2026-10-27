@@ -1,3 +1,9 @@
+## 2026-10-27 #17 native GTK history metadata translations, bounded source slice
+
+Production `ae1c5cdc` introduces isolated history static-message catalog `native_desktop/src/i18n/history.rs` (18 keys ×19 translations across the existing 20 locales), reuses base menu keys, and keeps terminal failures/unknown journal status separate from `Completed`. History storage/metadata disclosure, clear/reset distinction, 30-day/1000-operation privacy limits and existing action permissions are unchanged. Initial static completeness/semantic collision checks PASS. `cargo fmt` gate failed on new test layout, corrected by style-only `25d8daa8`.
+
+**Source-exact final Preflight `40484330580` and Native GTK `40484330621` PENDING** as of this checkpoint; no 6/6 green or hardware/translation signoff asserted. [Design, risk, test and rollback record](native-history-metadata-localization-2026-10-27.md). Counts/bytes/PIN/untrusted peer formatting require their own plural/bidi-aware design. #17 remains OPEN/PARTIAL, #16/#8/release unchanged.
+
 ## 2026-10-26 #16 authenticated session → exact route proof bridge, with fresh peer reauthentication
 
 **New code `57567bfca328732f1e12c4b59106f00622ebbd34`** (final source SHA before docs; CI still pending). Core now has a **private, bounded route-proof channel** from actual mutually verified outbound PairedKey → managed SessionLease → NativeRuntime → exact endpoint-generation registry. Connect latency is measured by the actual TcpConnector; proof can only attach to the still-live original numeric address and SessionId, never mDNS name, temporary ID or IPC. Authenticated proof TTL is **60 seconds**, with immediate invalidation on route removal/address change or loss of any proof event. Small-transfer proof is drained before terminal session cleanup. No stable credential is logged or sent to UI.
