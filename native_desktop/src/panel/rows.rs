@@ -87,8 +87,12 @@ fn card_transfer_visible(
 fn payload_label(details: &TransferDetails) -> String {
     use rqs_lib::sessions::details::PayloadKind;
     match details.status {
-        DetailsStatus::Unavailable => return "Waiting for details".into(),
-        DetailsStatus::Unsupported => return "Unsupported content".into(),
+        DetailsStatus::Unavailable => {
+            return crate::i18n::label("Waiting for details").into();
+        }
+        DetailsStatus::Unsupported => {
+            return crate::i18n::label("Unsupported content").into();
+        }
         DetailsStatus::Ready => {}
     }
     match details.kind {
@@ -100,16 +104,16 @@ fn payload_label(details: &TransferDetails) -> String {
                 !ext.is_empty() && ext.len() <= 12 && ext.bytes().all(|b| b.is_ascii_alphanumeric())
             })
             .map(|ext| ext.to_ascii_uppercase())
-            .unwrap_or_else(|| "File".into()),
+            .unwrap_or_else(|| crate::i18n::label("File").into()),
         PayloadKind::Files => crate::i18n::file_count(details.files.len()),
-        PayloadKind::Text => "Text".into(),
-        PayloadKind::Url => "Link".into(),
+        PayloadKind::Text => crate::i18n::label("Text").into(),
+        PayloadKind::Url => crate::i18n::label("Link").into(),
     }
 }
 /// Missing metadata is an in-progress handshake, not an anonymous file.
 fn peer_title(name: &str, status: DetailsStatus) -> &str {
     if name.is_empty() && status == DetailsStatus::Unavailable {
-        "Connecting…"
+        crate::i18n::label("Connecting…")
     } else {
         name
     }
@@ -232,9 +236,9 @@ pub(super) fn transfer_row(
     ));
     let title = if sender.is_empty() {
         label(if incoming {
-            "Incoming request"
+            crate::i18n::label("Incoming request")
         } else {
-            "Transfer"
+            crate::i18n::label("Transfer")
         })
     } else {
         label(&crate::i18n::isolate_untrusted(sender))
@@ -293,7 +297,7 @@ impl Panel {
         if transfer.direction == Direction::Inbound {
             if let Some(revision) = transfer.reveal_revision {
                 if transfer.phase == Phase::Finished {
-                    let reveal = gtk::Button::with_label("Show in folder");
+                    let reveal = gtk::Button::with_label(crate::i18n::label("Show in folder"));
                     reveal.set_widget_name("result-reveal");
                     reveal.set_sensitive(ready);
                     let weak = Rc::downgrade(self);
@@ -307,7 +311,7 @@ impl Panel {
                 } else if !transfer.completed_files.is_empty() {
                     let saved = gtk::Box::new(gtk::Orientation::Vertical, 8);
                     for (index, file) in transfer.completed_files.iter().enumerate() {
-                        let name = label(&file.name);
+                        let name = label(&crate::i18n::isolate_untrusted(&file.name));
                         name.set_max_width_chars(40);
                         name.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
                         saved.append(&name);
@@ -318,7 +322,7 @@ impl Panel {
                     let popover = gtk::Popover::new();
                     popover.set_child(Some(&saved));
                     let menu = gtk::MenuButton::builder()
-                        .label("Saved files")
+                        .label(crate::i18n::label("Saved files"))
                         .popover(&popover)
                         .build();
                     heading.append(&menu);
@@ -347,9 +351,9 @@ impl Panel {
             }
         }
         let direction = label(if transfer.direction == Direction::Inbound {
-            "Receive"
+            crate::i18n::label("Receive")
         } else {
-            "Send"
+            crate::i18n::label("Send")
         });
         direction.set_wrap(false);
         let date = transfers::timestamp(None);
@@ -448,7 +452,9 @@ impl Panel {
             }
             if let Some(summary) = named(root.upcast_ref(), "row-summary") {
                 let mut description = if incoming {
-                    String::from("Check this code on the sending device before accepting.")
+                    String::from(crate::i18n::label(
+                        "Check this code on the sending device before accepting.",
+                    ))
                 } else {
                     String::new()
                 };
@@ -606,9 +612,9 @@ impl Panel {
                 controls.append(&device_icon(
                     rqs_lib::service::client::state::DeviceKind::Unknown,
                     if projection.1 {
-                        "Nearby advertised device"
+                        crate::i18n::label("Nearby advertised device")
                     } else {
-                        "Unavailable"
+                        crate::i18n::label("Unavailable")
                     },
                     state,
                 ));
@@ -631,13 +637,13 @@ impl Panel {
                 strip.set_transition_duration(160);
                 let inputs = gtk::Box::new(gtk::Orientation::Horizontal, 3);
                 for (kind, icon, title) in [
-                    (outbound::Kind::Files, "text-x-generic-symbolic", "File"),
-                    (outbound::Kind::Folder, "folder-symbolic", "Folder"),
-                    (outbound::Kind::Text, "insert-text-symbolic", "Text"),
+                    (outbound::Kind::Files, "text-x-generic-symbolic", crate::i18n::label("File")),
+                    (outbound::Kind::Folder, "folder-symbolic", crate::i18n::label("Folder")),
+                    (outbound::Kind::Text, "insert-text-symbolic", crate::i18n::label("Text")),
                     (
                         outbound::Kind::Clipboard,
                         "edit-paste-symbolic",
-                        "Clipboard",
+                        crate::i18n::label("Clipboard"),
                     ),
                 ] {
                     let button = gtk::Button::from_icon_name(icon);
@@ -657,7 +663,7 @@ impl Panel {
                 }
                 strip.set_child(Some(&inputs));
                 controls.append(&strip);
-                let send = gtk::Button::with_label("Send");
+                let send = gtk::Button::with_label(crate::i18n::label("Send"));
                 send.set_widget_name("send-device");
                 let weak = Rc::downgrade(self);
                 let endpoint_for_send = id.clone();
@@ -810,12 +816,21 @@ mod metadata_label_tests {
     fn given_missing_or_unsupported_metadata_when_card_is_rendered_then_no_fake_zero_files() {
         let mut details = TransferDetails::default();
         assert_eq!(details.status, DetailsStatus::Unavailable);
-        assert_eq!(payload_label(&details), "Waiting for details");
-        assert_eq!(peer_title("", details.status), "Connecting…");
+        assert_eq!(
+            payload_label(&details),
+            crate::i18n::label("Waiting for details")
+        );
+        assert_eq!(
+            peer_title("", details.status),
+            crate::i18n::label("Connecting…")
+        );
         assert_eq!(peer_title("Sender", details.status), "Sender");
 
         details.status = DetailsStatus::Unsupported;
-        assert_eq!(payload_label(&details), "Unsupported content");
+        assert_eq!(
+            payload_label(&details),
+            crate::i18n::label("Unsupported content")
+        );
         assert_eq!(peer_title("", details.status), "");
         assert_eq!(peer_title("Sender", details.status), "Sender");
     }
@@ -843,12 +858,12 @@ mod metadata_label_tests {
             },
         ]
         .into();
-        assert_eq!(payload_label(&details), "2 files");
+        assert_eq!(payload_label(&details), crate::i18n::file_count(2));
         details.kind = PayloadKind::Text;
         details.files = std::sync::Arc::default();
-        assert_eq!(payload_label(&details), "Text");
+        assert_eq!(payload_label(&details), crate::i18n::label("Text"));
         details.kind = PayloadKind::Url;
-        assert_eq!(payload_label(&details), "Link");
+        assert_eq!(payload_label(&details), crate::i18n::label("Link"));
         assert_eq!(peer_title("", details.status), "");
     }
 }
@@ -1219,13 +1234,17 @@ mod untrusted_payload_label_tests {
             ("name.new\nline", "File"),
         ] {
             let actual = summary(PayloadKind::Files, &[filename]);
-            assert_eq!(actual, expected, "filename={filename:?}");
-            assert!(
-                actual.is_ascii(),
-                "remote extension must not escape as Unicode"
-            );
-            assert!(actual.bytes().all(|byte| byte.is_ascii_alphanumeric()));
-            assert!(!actual.contains('/') && !actual.contains('<') && !actual.contains('>'));
+            if expected == "File" {
+                assert_eq!(actual, crate::i18n::label("File"), "filename={filename:?}");
+            } else {
+                assert_eq!(actual, expected, "filename={filename:?}");
+                assert!(
+                    actual.is_ascii(),
+                    "remote extension must not escape as Unicode"
+                );
+                assert!(actual.bytes().all(|byte| byte.is_ascii_alphanumeric()));
+                assert!(!actual.contains('/') && !actual.contains('<') && !actual.contains('>'));
+            }
         }
     }
 
@@ -1253,7 +1272,17 @@ mod untrusted_payload_label_tests {
             (PayloadKind::Url, vec!["private/location.html"], "Link"),
         ] {
             let actual = summary(kind, &names);
-            assert_eq!(actual, expected, "kind={kind:?} names={names:?}");
+            let localized_expected = match expected {
+                "2 files" => crate::i18n::file_count(2),
+                "3 files" => crate::i18n::file_count(3),
+                "Text" => crate::i18n::label("Text").to_owned(),
+                "Link" => crate::i18n::label("Link").to_owned(),
+                _ => expected.to_owned(),
+            };
+            assert_eq!(
+                actual, localized_expected,
+                "kind={kind:?} names={names:?}"
+            );
             assert!(!actual.contains('<') && !actual.contains('/') && !actual.contains('>'));
         }
     }
