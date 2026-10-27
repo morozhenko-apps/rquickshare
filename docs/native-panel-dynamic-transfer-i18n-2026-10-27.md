@@ -19,3 +19,9 @@ Existing `i18n::isolate_untrusted` already removes Unicode direction controls **
 4. Separate phase caption audit and implementation if terminal conditions or implied content publication cannot be proved; no broad regex replacement. Native source-exact nightly rustfmt/strict Clippy/widgets plus Preflight. Full Mode B and physical Pixel/KDE/Arabic RTL acceptance remain later gates.
 
 This is **plan only**, not implementation or release approval. #8 keeps the expressly documented compatible-A2.2 risk, #16 actual Google-compatible certificate provider remains OPEN, and #17 still needs complete UI, human semantics, desktop launcher and notifications plus hardware verification. No master/tag/R2 change.
+
+## Verified phase mapping and preview boundary
+
+A separate source audit of `native_desktop/src/panel.rs::phase_text` found eleven exact statuses: `Queued`, `Connecting`, `Waiting for consent`, `Receiving`, `Sending`, `Cancellation requested`, `Completed`, `Declined`, `Cancelled`, `Failed`, and `Disconnected`. Keep the enum classification and terminal vs non-terminal semantics authoritative. In particular, `Cancellation requested` must not be collapsed into completed `Cancelled`, and `Declined` differs from `Failed` and `Disconnected`. No phase localization is implemented here.
+
+`Panel::render_preview` separately builds example cards with hardcoded `Recipient: {recipient}`, `2048 / 12345 bytes locally sent`, `Queued`, `Cancel` and sample PIN tooltip. These preview artifacts require their own localized source treatment, not a global replacement of live transfer labels. This checkpoint remains documentation only.
