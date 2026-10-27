@@ -23,3 +23,11 @@ Exact source `native_desktop/src/panel/settings.rs` (1,263 lines) still displays
 Literal source keys are consumed only through `i18n::label(&'static str)`; the original `&str` statuses and `glib` closures stay unchanged. Translation errors can confuse action state and privacy warnings; tests forbid key collisions but do not replace human review. RTL/GTK narrow-card and PT-PT/Traditional Chinese semantics still require acceptance. Roll back this one executable source commit independently. Subsequent GTK rows/reveal/tray i18n remain in #17.
 
 Status before executable code: NOT IMPLEMENTED.
+
+## 2026-10-27 implementation checkpoint
+
+Executable `723e7c033f87082b8e070d2feaf57832eaeba68a` adds `native_desktop/src/i18n/settings_residual.rs` (15 distinct static English keys × 19 non-English draft rows = **285 translations**), registered in `src/i18n.rs` with cross-catalog collision/Start-vs-Restart invariants and two direct locale/semantic tests. `panel/settings.rs` now routes **18 direct display sites** through `i18n::label`, including a two-line GPL license text, default Downloads label (two sites), on/off/unknown/pending login messages, Start sharing vs Restart sharing, help on user-input name, Settings Save/Reload/Folder Picker. Initial unavailable Settings caption reuses the existing SettingsView catalog, without creating a duplicate source key. The product name and GPL legal designation are unchanged.
+
+A source-structural pass independently checked 19×15 translated rows, canonical 20 locale registration, key routing and visible Start/Restart captions. Unmodified critical code: `status(SettingsView)`, `failure(ControllerError)`, `login_failure`, `confirmation_applied`, user `device_name`, `gio::File` capability, input/port/visibility and explicit actions. This is source-only evidence; no native-speaker approval claimed.
+
+Source-exact **Native GTK `40571862841`** and **Preflight `40571863031`** were in progress at checkpoint, not PASS by inference. No final Mode B, physical KDE/Pixel, Windows, master/tag/R2/install actions. #17 remains OPEN until transfer rows, reveal, notifications/tray/a11y/packaging and RTL language review are complete.
