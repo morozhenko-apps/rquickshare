@@ -269,7 +269,13 @@ mod tests {
             }
         }
         assert_eq!(files_for("en", 2), "2 files · prepared · choose a device");
-        assert_eq!(content_for("en", false, 3), "Text · 3 B · prepared · choose a device");
-        assert_eq!(content_for("en", true, 0), "Link · 0 B · prepared · choose a device");
+        assert_eq!(
+            content_for("en", false, 3),
+            "Text · 3 B · prepared · choose a device"
+        );
+        assert_eq!(
+            content_for("en", true, 0),
+            "Link · 0 B · prepared · choose a device"
+        );
     }
 }

@@ -1178,7 +1178,8 @@ impl Panel {
         self.button("discard").set_sensitive(ready && selected);
         self.button("files").set_visible(selected && can_add);
         self.button("folder").set_visible(false);
-        self.button("files").set_label(crate::i18n::label("Add files…"));
+        self.button("files")
+            .set_label(crate::i18n::label("Add files…"));
         self.button("discard").set_visible(selected);
         for (name, enabled) in [
             ("files", ready && can_add),
