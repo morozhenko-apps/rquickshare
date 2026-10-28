@@ -231,7 +231,7 @@ pub(super) fn transfer_row(
     heading.set_widget_name("transfer-heading");
     heading.append(&device_icon(
         kind,
-        phase_text(phase),
+        crate::i18n::transfer_phase(phase_text(phase)),
         Badge::Transfer(phase),
     ));
     let title = if sender.is_empty() {
@@ -262,7 +262,7 @@ pub(super) fn transfer_row(
     progress.set_valign(gtk::Align::Center);
     progress.set_visible(matches!(phase, Phase::Sending | Phase::Receiving));
     heading.append(&progress);
-    let status = label(phase_text(phase));
+    let status = label(crate::i18n::transfer_phase(phase_text(phase)));
     status.set_selectable(false);
     status.set_widget_name("row-status");
     status.set_visible(phase.is_terminal());
@@ -572,7 +572,8 @@ impl Panel {
                 transfer.details.transferred_bytes,
                 transfer.details.total_bytes,
             ));
-            progress.set_tooltip_text(Some(phase_text(transfer.phase)));
+            let phase_label = crate::i18n::transfer_phase(phase_text(transfer.phase));
+            progress.set_tooltip_text(Some(phase_label));
         }
         root
     }
@@ -734,7 +735,8 @@ impl Panel {
                         transfer.details.transferred_bytes,
                         transfer.details.total_bytes,
                     ));
-                    progress.set_tooltip_text(Some(phase_text(transfer.phase)));
+                    let phase_label = crate::i18n::transfer_phase(phase_text(transfer.phase));
+                    progress.set_tooltip_text(Some(phase_label));
                 }
             }
             if let Some(code) = named(root.upcast_ref(), "device-code").and_downcast::<gtk::Label>()
@@ -961,6 +963,37 @@ pub(super) fn verify_keyed_layout() {
     }
     assert_eq!(clicks.get(), 5);
     assert_eq!(details.observe_children().n_items(), 1);
+    for phase in [
+        Phase::Queued,
+        Phase::Active,
+        Phase::AwaitingConsent,
+        Phase::Receiving,
+        Phase::Sending,
+        Phase::CancelRequested,
+        Phase::Finished,
+        Phase::Rejected,
+        Phase::Cancelled,
+        Phase::Failed,
+        Phase::Disconnected,
+    ] {
+        let expected = crate::i18n::transfer_phase(phase_text(phase));
+        let card = transfer_row(
+            "Example peer",
+            rqs_lib::service::client::state::DeviceKind::Phone,
+            phase,
+            &gtk::Box::new(gtk::Orientation::Horizontal, 0),
+        );
+        let status = named(card.upcast_ref(), "row-status")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        assert_eq!(status.text(), expected, "{phase:?}");
+        let icon = named(card.upcast_ref(), "row-icon").unwrap();
+        assert_eq!(icon.tooltip_text().as_deref(), Some(expected), "{phase:?}");
+    }
+    assert_ne!(
+        crate::i18n::transfer_phase(phase_text(Phase::CancelRequested)),
+        crate::i18n::transfer_phase(phase_text(Phase::Cancelled))
+    );
 
     let live = ["ep-1", "ep-2"].into_iter().collect::<BTreeSet<_>>();
     assert_eq!(

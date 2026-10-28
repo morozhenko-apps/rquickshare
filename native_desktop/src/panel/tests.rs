@@ -350,16 +350,14 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert_eq!(invalid_pin.pin, "01\u{202e}23");
     assert_eq!(details.pin, "0123");
     let row = details_card(&details);
-    assert!(labels(&row)
-        .iter()
-        .any(|label| {
-            label.text()
-                == format!(
-                    "{} · {}",
-                    crate::i18n::isolate_untrusted(&details.sender),
-                    crate::i18n::label("advertised device")
-                )
-        }));
+    assert!(labels(&row).iter().any(|label| {
+        label.text()
+            == format!(
+                "{} · {}",
+                crate::i18n::isolate_untrusted(&details.sender),
+                crate::i18n::label("advertised device")
+            )
+    }));
     assert!(labels(&row).iter().all(|label| !label.uses_markup()));
     assert!(labels(&row)
         .iter()
