@@ -112,7 +112,10 @@ pub(super) fn translated(locale: &str, source: &str) -> Option<&'static str> {
 
 /// Exact source counts; the LRI/PDI guards the fraction in RTL UI.
 pub(super) fn saved_files_for(locale: &str, saved: usize, total: usize) -> String {
-    format!("{}: \u{2066}{saved}/{total}\u{2069}", super::translated(locale, "Saved files"))
+    format!(
+        "{}: \u{2066}{saved}/{total}\u{2069}",
+        super::translated(locale, "Saved files")
+    )
 }
 
 #[cfg(test)]
@@ -162,8 +165,17 @@ mod tests {
                 assert!(caption.starts_with(super::super::translated(locale, "Saved files")));
             }
         }
-        assert_eq!(saved_files_for("en", 1, 2), "Saved files: \u{2066}1/2\u{2069}");
-        assert_eq!(saved_files_for("pt-BR", 0, 2), "Saved files: \u{2066}0/2\u{2069}");
-        assert_eq!(saved_files_for("ar", 1, 2), "ملفات محفوظة: \u{2066}1/2\u{2069}");
+        assert_eq!(
+            saved_files_for("en", 1, 2),
+            "Saved files: \u{2066}1/2\u{2069}"
+        );
+        assert_eq!(
+            saved_files_for("pt-BR", 0, 2),
+            "Saved files: \u{2066}0/2\u{2069}"
+        );
+        assert_eq!(
+            saved_files_for("ar", 1, 2),
+            "ملفات محفوظة: \u{2066}1/2\u{2069}"
+        );
     }
 }
