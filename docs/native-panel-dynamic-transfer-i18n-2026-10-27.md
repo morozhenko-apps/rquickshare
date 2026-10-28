@@ -65,3 +65,7 @@ MODE A implementation boundary:
 4. Perform one source-exact Native GTK + Preflight verification after code commit, no CI polling, and leave KDE/Wayland/RTL/native-speaker accessibility acceptance separate.
 
 Risk/rollback: revert only the `rows.rs` translated text projections, the formatter-only test layout and the affected test assertions. No changes to protocol, persisted settings, device ownership, consent or network I/O are allowed. This checkpoint is not a completion or release signoff.
+
+## Transfer-row phase source checkpoint
+
+Source commit `61027d860b4bef5411d76914adaeb0f09adfe0f4` resolves the exact previously reported nightly assertion-layout diff and wires the existing eleven-phase `transfer_phase` catalog to the native transfer-row status, accessible icon tooltip and both progress tooltip locations. Existing GTK keyed-layout smoke now compares actual label/tooltip projections against the canonical phase resolver for all eleven `Phase` values; requested and final cancellation remain distinct. No protocol or action control changes; presentation-only rollback paths remain `panel/rows.rs` and the formatting-only adjustment in `panel/tests.rs`. Validation for this source SHA is pending; source completeness is not installed GTK or locale/RTL acceptance.
