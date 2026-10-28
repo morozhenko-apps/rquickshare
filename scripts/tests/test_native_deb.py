@@ -155,6 +155,15 @@ class NativeDebTests(unittest.TestCase):
         def override_dolphin_exec(app, service):
             service["Desktop Action Send"]["Exec"] = "rquickshare send -- %F"
 
+        def override_dolphin_type(app, service):
+            service["Desktop Entry"]["Type"] = "Application"
+
+        def override_dolphin_mimetypes(app, service):
+            service["Desktop Entry"]["MimeType"] = "text/plain;"
+
+        def override_dolphin_actions(app, service):
+            service["Desktop Entry"]["Actions"] = "Other;"
+
         def hide_localized_action(app, service):
             service["Desktop Action Send"].pop("Name[fil]")
 
@@ -176,6 +185,9 @@ class NativeDebTests(unittest.TestCase):
             ("Simplified Chinese", simplified_chinese),
             ("application command", override_app_exec),
             ("Dolphin command", override_dolphin_exec),
+            ("Dolphin type", override_dolphin_type),
+            ("Dolphin MIME types", override_dolphin_mimetypes),
+            ("Dolphin action list", override_dolphin_actions),
             ("missing Filipino", hide_localized_action),
             ("dialog marker", remove_action_ellipsis),
             ("direction override", inject_direction_override),
@@ -196,6 +208,32 @@ class NativeDebTests(unittest.TestCase):
             )
             with self.assertRaises(configparser.DuplicateOptionError):
                 package.read_desktop_entry(corrupted)
+
+    def test_given_package_workflow_when_desktop_assets_are_checked_then_use_correct_contract_for_each_type(self):
+        # Freedesktop validates application launchers; KDE service menus have
+        # their own Type=Service + MimeType/Actions schema and strict project check.
+        workflow = (Path(__file__).parents[2] / ".github/workflows/native-package-smoke.yml").read_text(
+            encoding="utf-8"
+        )
+        app_path = "native_desktop/packaging/share/applications/io.github.morozhenko_apps.RQuickShare.desktop"
+        service_path = "native_desktop/packaging/share/kio/servicemenus/io.github.morozhenko_apps.RQuickShare.Send.desktop"
+        validator_lines = [
+            line.strip() for line in workflow.splitlines()
+            if line.strip().startswith("desktop-file-validate ")
+        ]
+        self.assertEqual(validator_lines, [f"desktop-file-validate {app_path}"])
+        self.assertIn("native_deb.validate_assets()", workflow)
+        self.assertIn("import native_deb", workflow)
+        self.assertNotIn(f"desktop-file-validate {service_path}", workflow)
+        app = package.read_desktop_entry(package.ASSETS / "share/applications" / Path(app_path).name)
+        service = package.read_desktop_entry(
+            package.ASSETS / "share/kio/servicemenus" / Path(service_path).name
+        )
+        self.assertEqual(app["Desktop Entry"]["Type"], "Application")
+        self.assertEqual(service["Desktop Entry"]["Type"], "Service")
+        self.assertEqual(service["Desktop Entry"]["MimeType"], "application/octet-stream;inode/directory;")
+        self.assertEqual(service["Desktop Entry"]["Actions"], "Send;")
+        package.validate_localized_desktop_entries(app, service)
 
     def test_given_elf_header_when_truncated_wrong_type_endian_or_machine_then_reject_relabelled_binary(self):
         # Arrange / Act / Assert: actual ELF machine identity, independent of file names.
