@@ -93,3 +93,22 @@ Existing test methods: 2 in `source_preparation.rs`, 2 in `row_empty.rs`, 1 focu
 ## Stage 11/12 gates
 
 Implement the scoped tests, then rely on a **single final source-triggered** Preflight + Native GTK CI. These remain *source* gates and do not supply installed KDE/Android/Windows acceptance or refreshed instrumented line/branch coverage. A strict source-current repository-wide MODE B remains **NO** until the full branch map and per-file evidence are reconciled, release-only workflow gate is properly admitted and device acceptance is done. No `.deb` package smoke is dispatched by documentation changes. Stop after the initial verification of any source-triggered workflows; do not poll an in-progress CI.
+
+## Implemented testing checkpoint and honest completion evaluation
+
+Source-test commit: `91bf21d2b9727cfad501ff1d8237fa1aae348b5c`. Exactly three test files changed and **zero production files**. New test methods: **2** unit methods (`source_preparation.rs`: independent golden `files_for` and `content_for` grid; `row_empty.rs`: saved/total independent caption and direction-isolation grid). Existing real GTK builder smoke extended for **Closed→Open→Closed→Open** drawer tooltip decisions and stable `panel.discard` action wiring. No test harness, temporary sleeps, fixture services, authorizations or CI exclusion changed.
+
+| Positive/negative evidence | New independently authored assertions |
+| --- | --- |
+| Positive | 11 independent prepared-file goldens, 6 Text/Link goldens, 6 saved/total caption goldens and real GTK state transitions |
+| N1 / N6 | `pt-BR`, `zh-Hans` use explicit English fallback; existing catalogs retain invalid-key checks |
+| N2 | Zero, one, two, five and reversed saved/total; existing matrices already cover `u32::MAX`, `u64::MAX` and `usize::MAX` |
+| N4 / N5 / N9 | Device drawer repeated open/close updates current tooltip without changing discard action |
+| N8 | Arabic goldens, independently constructed LRI/PDI exact ratio and single-isolate-pair assertions |
+| N10 | Source summary remains typed count/status only (the existing source tests reject untrusted body/false file kind); not real PII leak measurement |
+
+Mutation review (source-inspection planning, not mutation-execution evidence): swapping URL/Text branch fails goldens; changing file count or byte format breaks independent golden strings; substituting Portuguese for `pt-BR` fails explicit fallback; swapping saved and total or omitting Unicode marks fails exact fraction; making drawer tooltip static fails transition assertions; renaming discard action fails widget assertions. **No mutants executed** in this session.
+
+D1: native test commands are those in the workflows, with no local Rust toolchain in ChatGPT. D2: two new named test methods, 23 independent positive golden cases plus 6 inverted-kind negative assertions and expanded GTK checks; per-category named method count is not additive because tests are table-driven. D3: three listed test-only paths; no production refactor or test double. D4: no architecture change required in this slice; testability gaps in hardware BLE/mDNS remain tracked independently in Issues. D5: the corrected-code Native GTK and Preflight CI evidence is **pending**. The legacy Oct 19 coverage values are historical, and no current SHA branch measurement, physical peer exchange, signed release or installable package evidence exists.
+
+Scoped Stage 1–10: implementation recorded, mutation review reasoned but not dynamically executed. Stage 11: **PENDING** until exact-source CI; Stage 12 for the **entire repository: NO** (full public-method/branch and physical-device acceptance incomplete). Stop on initial source-CI handoff. No documented or implied owner approval to tag/publish.
