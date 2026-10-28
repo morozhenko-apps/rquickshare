@@ -51,8 +51,8 @@ independently in tests, rather than copied from a production allowlist.
 5. Nonempty/trimmed translation vs empty, whitespace-only and left/right padding.
 6. Each C0 character U+0000..U+001F, DEL, U+202A..U+202E and U+2066..U+2069
    rejected in each translated field for every locale. Valid multilingual
-   Unicode and boundary U+0020/U+007E/U+0080/U+2029/U+202F/U+2065/U+206A
-   inside text remain accepted under the existing contract.
+   Unicode, internal ASCII space/tilde, nonbreaking space and narrow
+   nonbreaking space remain accepted under the existing contract.
 7. Percent or backslash anywhere in each translation rejected independently
    from the control-character and whitespace checks.
 8. Every localized service header must retain literal `rQuickShare` and have no
@@ -120,3 +120,78 @@ Rollback is removal of the single test file; production behavior and packaging
 identity remain stable. Scoped completion requires all planned assertions and
 stable checks. Repository-wide Mode B and installable-candidate acceptance remain
 open until their own evidence exists. No release or publication is authorized.
+
+## Implemented checkpoint and execution evidence
+
+All 10 planned methods are implemented in the single new test file. No
+production function, packaged asset, workflow, version or dependency changed.
+The original 9 Debian tests and the 10 new asset tests passed together:
+
+```text
+python3 -m unittest discover -s scripts/tests -p 'test_native_de*.py' -v
+Ran 19 tests in 3.154s
+OK
+exit status: 0
+```
+
+`bash scripts/ci-check-workflow-policy.sh` also exited 0. Local Git diff
+whitespace validation passed. This execution uses Python 3.12.14 and real
+Debian archive tooling for the existing package fixtures; it does not build or
+execute the application. Agent-owned terminal commands exited normally.
+
+The new methods enumerate 82 positive cases (80 locale/Unicode combinations,
+the unchanged shipped baseline, and literal case-sensitive parsing) and 4,114
+negative table cases. Counts below assign each negative to one primary category
+to avoid double-counting overlapping security/locale risks:
+
+| Primary category | New cases | Derivation |
+| --- | ---: | --- |
+| Positive | 82 | 20 locales x 4 Unicode texts, baseline, literal parser |
+| N1 validation | 1,242 | 88 fixed/extra-field, 11 group, 780 blank/padded, 360 escaped-field, 3 malformed-file cases |
+| N2 limits | 18 | Min/max URL adjacent, negative, overflow and noncanonical spellings |
+| N6 missing/ambiguous data | 172 | 60 missing locale fields, 30 unsupported aliases, 79 duplicate keys and 3 duplicate sections |
+| N7 authority/presentation contract | 160 | 20 locales x 3 invalid headers and 5 mismatched actions |
+| N8 Unicode | 2,521 | 20 locales x 3 fields x 42 forbidden code points, plus invalid UTF-8 |
+| N12 read failure | 1 | Missing file propagates `FileNotFoundError` |
+
+N3/N4/N5/N9/N10/N11 are not applicable to this scoped metadata checker; their
+runtime domains remain outside its completion claim. No known-flaky group is
+defined for these deterministic tests, and none was silently skipped or
+reclassified. Core race-sensitive tests were not executed here.
+
+A bounded inline Python mutation harness compiled one changed copy of
+`scripts/native_deb.py` at a time in memory, retained its actual source path for
+asset loading, and ran the relevant new method against that real modified
+module. Repository production bytes were never changed. **19/19 mutants were
+killed**, with no surviving mutant in this selected set:
+
+| Mutated guard | Mutants killed | Detecting new test area |
+| --- | ---: | --- |
+| Application and Dolphin group checks | 2 | Group layout matrix |
+| Required field/locale set and fixed launch values | 2 | Locale and fixed-field matrices |
+| Nonempty/trimmed translation | 1 | Blank/padded matrix |
+| C0 upper bound, DEL, both bidi and both isolate endpoints | 6 | Every forbidden character in every translated slot |
+| Percent and backslash filters | 2 | Escape position matrix |
+| Attribution, header ellipsis and action equality | 3 | Per-locale caption matrix |
+| Case-sensitive keys, strict duplicates, literal interpolation | 3 | Real parser fixtures |
+
+Some structural/parser mutants produce explicit test errors rather than
+assertion failures; both are reported as killed, not as baseline failures.
+This is a targeted mutation result, not a repository-wide mutation score or
+instrumented branch/line percentage. Coverage tooling was unavailable locally.
+
+Scoped inventory, branch, boundary and interaction implementation: complete.
+Local stable gate: PASS. Remote source CI: pending submission/verification.
+Repository-wide Stage 12 and physical/package acceptance: OPEN. The manual
+candidate build still needs an authenticated dispatch on the current `dev`:
+
+```sh
+gh workflow run native-package-smoke.yml --ref dev -R morozhenko-apps/rquickshare
+```
+
+Both historical task branches were checked with
+`git rev-list --left-right --count dev...origin/<branch>` at the starting tip:
+`agent/locale-reveal-notices-20261027` returned `85 0` and
+`feature/native-text-review-i18n-20261026` returned `160 0`. Neither has unique
+commits to merge. No branch deletion was performed; the owner requested its
+command. Master, release tags and publication were not touched.
