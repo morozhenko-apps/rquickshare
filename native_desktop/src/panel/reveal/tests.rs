@@ -153,13 +153,23 @@ pub(in crate::panel) fn verify_reveal_smoke() {
         .downcast::<gtk::Label>()
         .unwrap();
     assert!(!label.uses_markup());
-    assert_eq!(label.text(), "<b>untrusted</b>.txt · 8 bytes");
+    assert_eq!(
+        label.text(),
+        format!(
+            "{} · {}",
+            crate::i18n::isolate_untrusted("<b>untrusted</b>.txt"),
+            crate::i18n::byte_count(8)
+        )
+    );
     let button = first
         .last_child()
         .unwrap()
         .downcast::<gtk::Button>()
         .unwrap();
-    assert_eq!(button.label().as_deref(), Some("Show in folder"));
+    assert_eq!(
+        button.label().as_deref(),
+        Some(crate::i18n::label("Show in folder"))
+    );
     button.emit_clicked();
     let second = first
         .next_sibling()
@@ -186,7 +196,7 @@ pub(in crate::panel) fn verify_reveal_smoke() {
         }));
     });
     let completed: Arc<[FileDetail]> = vec![FileDetail {
-        name: "nested/empty".into(),
+        name: "nested/\u{202e}empty".into(),
         size: 0,
     }]
     .into();
@@ -198,7 +208,7 @@ pub(in crate::panel) fn verify_reveal_smoke() {
             .downcast::<gtk::Label>()
             .unwrap()
             .text(),
-        "Saved 1 of 2 files"
+        crate::i18n::saved_files_tally(1, 2)
     );
     let expander = saved
         .last_child()
@@ -217,8 +227,19 @@ pub(in crate::panel) fn verify_reveal_smoke() {
             .downcast::<gtk::Label>()
             .unwrap()
             .text(),
-        "nested/empty · 0 bytes"
+        format!(
+            "{} · {}",
+            crate::i18n::isolate_untrusted("nested/\u{202e}empty"),
+            crate::i18n::byte_count(0)
+        )
     );
+    assert_eq!(completed[0].name, "nested/\u{202e}empty");
+    assert!(!file
+        .first_child()
+        .unwrap()
+        .downcast::<gtk::Label>()
+        .unwrap()
+        .uses_markup());
     file.last_child()
         .unwrap()
         .downcast::<gtk::Button>()
@@ -236,6 +257,6 @@ pub(in crate::panel) fn verify_reveal_smoke() {
             .downcast::<gtk::Label>()
             .unwrap()
             .text(),
-        "Saved 0 of 2 files"
+        crate::i18n::saved_files_tally(0, 2)
     );
 }

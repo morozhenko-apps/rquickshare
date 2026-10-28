@@ -13,6 +13,7 @@ mod panel_cards;
 mod panel_details;
 mod panel_status;
 mod reveal_notices;
+mod row_empty;
 mod settings;
 mod settings_errors;
 mod settings_residual;
@@ -168,6 +169,11 @@ pub(crate) fn transfer_progress(transferred: u64, total: u64, kind: ProgressKind
 
 pub(crate) fn transfer_phase(source: &'static str) -> &'static str {
     transfer_dynamic::phase_for(active(), source)
+}
+
+/// Exact saved/completed-file count, never an inferred delivery result.
+pub(crate) fn saved_files_tally(saved: usize, total: usize) -> String {
+    row_empty::saved_files_for(active(), saved, total)
 }
 
 pub(crate) fn label(source: &'static str) -> &'static str {
@@ -670,6 +676,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
         return value;
     }
     if let Some(value) = panel_details::translated(locale, source) {
+        return value;
+    }
+    if let Some(value) = row_empty::translated(locale, source) {
         return value;
     }
     if let Some(value) = tray_chrome::translated(locale, source) {
@@ -1356,6 +1365,42 @@ mod tests {
                 assert_eq!(
                     translated(locale, source),
                     panel_details::translated(locale, source).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn empty_row_catalog_does_not_shadow_any_other_localized_native_text() {
+        for source in row_empty::KEYS {
+            assert!(!MENU_KEYS.contains(&source));
+            assert!(!REVIEW_KEYS.contains(&source));
+            assert!(!COMPOSE_KEYS.contains(&source));
+            for other in [
+                &history::KEYS[..],
+                &image::KEYS[..],
+                &settings::KEYS[..],
+                &settings_state::KEYS[..],
+                &settings_errors::KEYS[..],
+                &settings_warning::KEYS[..],
+                &settings_residual::KEYS[..],
+                &transfer_rows::KEYS[..],
+                &reveal_notices::KEYS[..],
+                &visibility::KEYS[..],
+                &menu_extra::KEYS[..],
+                &operation_notices::KEYS[..],
+                &panel_status::KEYS[..],
+                &client_errors::KEYS[..],
+                &panel_cards::KEYS[..],
+                &panel_details::KEYS[..],
+                &tray_chrome::KEYS[..],
+            ] {
+                assert!(!other.contains(&source), "{source}");
+            }
+            for locale in LOCALES {
+                assert_eq!(
+                    translated(locale, source),
+                    row_empty::translated(locale, source).unwrap()
                 );
             }
         }

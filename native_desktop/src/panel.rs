@@ -306,15 +306,19 @@ fn saved_files_card(
     action: Option<Rc<FileAction>>,
 ) -> gtk::Box {
     let row = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    row.append(&label(&format!("Saved {} of {} files", files.len(), total)));
+    row.append(&label(&crate::i18n::saved_files_tally(files.len(), total)));
     if full && !files.is_empty() {
-        let saved = gtk::Expander::new(Some("Saved files"));
+        let saved = gtk::Expander::new(Some(crate::i18n::label("Saved files")));
         saved.connect_expanded_notify(move |saved| {
             if saved.is_expanded() {
                 let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
                 for (index, file) in files.iter().enumerate() {
                     let item = gtk::Box::new(gtk::Orientation::Vertical, 4);
-                    item.append(&label(&format!("{} · {} bytes", file.name, file.size)));
+                    item.append(&label(&format!(
+                        "{} · {}",
+                        crate::i18n::isolate_untrusted(&file.name),
+                        crate::i18n::byte_count(file.size)
+                    )));
                     if let Some(action) = &action {
                         action(&item, index as u32);
                     }

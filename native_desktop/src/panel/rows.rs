@@ -800,7 +800,7 @@ impl Panel {
                 let entry = rows.entries.entry(key.clone()).or_insert_with(|| {
                     let root = card();
                     if !title.is_empty() {
-                        let text = label(title);
+                        let text = label(crate::i18n::label(title));
                         text.set_selectable(false);
                         root.append(&text);
                     }
