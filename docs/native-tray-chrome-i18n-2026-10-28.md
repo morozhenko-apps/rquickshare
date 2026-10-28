@@ -19,3 +19,7 @@ Date: 2026-10-28. MODE A. Direct `dev`, independent documentation and code commi
 5. Pure locale matrix tests: 20/20 key coverage, no duplicate keys, absent/unknown fallback, context-distinct labels, count boundaries and both kinds; existing private-broker DBusMenu and SNI tests continue to assert exact menu property and action policy. Run source-exact Native GTK (nightly format, strict lint, GTK widget tests) + Preflight **once** at end. Source green is not KDE physical, RTL, native-speaker, or installed-menu acceptance.
 
 Rollback: drop the new tray catalog and formatter calls, revert the three bounded presentation callsites; preserve all action IDs, enabled guards and daemon notice lifecycle. Do not modify master, releases, signed packages or installed assets. The native desktop launcher/servicemenu translation and semantic review remain separately scoped.
+
+## Implementation checkpoint
+
+Production `f34b24f57cbb2ba27ab4d43f5c39866ffd667882` contains `i18n/tray_chrome.rs` (ten caption keys × 19 translated rows, English fallback), typed projection count display, translated SNI tooltip and DBusMenu dynamic menu labels, plus catalog and existing broker/GTK-facing test updates. Includes only the two literal formatting corrections required by the previous exact Native GTK run. No change to D-Bus identity, enabled action flags, process activation or transfer state. Source-exact workflows were triggered by the source commit; their results are not yet accepted. Installed Plasma menu, Arabic RTL and editorial review remain distinct gates.
