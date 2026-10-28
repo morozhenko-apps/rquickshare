@@ -192,6 +192,10 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     );
     // Act / Assert
     assert_eq!(panel.model.borrow().drawer, Drawer::Closed);
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Show devices and transfers"))
+    );
     assert!(panel.box_widget("compact").get_visible());
     assert!(!panel.pages.get_visible());
     assert!(!panel.box_widget("source").get_visible());
@@ -281,8 +285,24 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     panel.button("quick-devices").emit_clicked();
     assert_eq!(panel.drawer(), Drawer::Closed);
     assert!(!panel.box_widget("device-drawer").get_visible());
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Show devices and transfers"))
+    );
+    assert_eq!(
+        panel.curtain.action_name().as_deref(),
+        Some("panel.discard")
+    );
     panel.button("quick-devices").emit_clicked();
     assert_eq!(panel.drawer(), Drawer::Open);
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Hide devices and transfers"))
+    );
+    assert_eq!(
+        panel.curtain.action_name().as_deref(),
+        Some("panel.discard")
+    );
     panel.show_sending();
     assert_eq!(panel.pages.visible_child_name().as_deref(), Some("nearby"));
     assert_eq!(panel.drawer(), Drawer::Open);

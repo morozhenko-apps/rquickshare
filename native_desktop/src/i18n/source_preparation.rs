@@ -278,4 +278,46 @@ mod tests {
             "Link · 0 B · prepared · choose a device"
         );
     }
+
+    #[test]
+    fn given_locale_and_kind_when_prepared_then_exact_words_and_counts_are_stable() {
+        // Golden values are independent of the formatter under test.
+        let file_cases = [
+            ("en", 0, "0 files · prepared · choose a device"),
+            ("ru", 1, "1 файл · подготовлено · выберите устройство"),
+            ("ru", 2, "2 файла · подготовлено · выберите устройство"),
+            ("ru", 5, "5 файлов · подготовлено · выберите устройство"),
+            ("pt", 0, "0 ficheiros · preparado · escolha um dispositivo"),
+            ("pt", 1, "1 ficheiro · preparado · escolha um dispositivo"),
+            ("pt", 2, "2 ficheiros · preparado · escolha um dispositivo"),
+            ("ar", 2, "2 ملفان · تم الإعداد · اختر جهازًا"),
+            ("zh-Hant", 2, "2 個檔案 · 已準備 · 選擇裝置"),
+            ("pt-BR", 1, "1 file · prepared · choose a device"),
+            ("zh-Hans", 1, "1 file · prepared · choose a device"),
+        ];
+        for (locale, count, expected) in file_cases {
+            assert_eq!(files_for(locale, count), expected, "{locale}: {count}");
+        }
+
+        let content_cases = [
+            ("ru", false, 12, "Текст · 12 B · подготовлено · выберите устройство"),
+            ("ru", true, 7, "Ссылка · 7 B · подготовлено · выберите устройство"),
+            ("pt", false, 12, "Texto · 12 B · preparado · escolha um dispositivo"),
+            ("pt", true, 7, "Ligação · 7 B · preparado · escolha um dispositivo"),
+            ("ar", true, 0, "رابط · 0 B · تم الإعداد · اختر جهازًا"),
+            ("zh-Hans", false, 0, "Text · 0 B · prepared · choose a device"),
+        ];
+        for (locale, link, bytes, expected) in content_cases {
+            assert_eq!(
+                content_for(locale, link, bytes),
+                expected,
+                "{locale}: {link} / {bytes}"
+            );
+            assert_ne!(
+                content_for(locale, !link, bytes),
+                expected,
+                "{locale}: kind must not alias"
+            );
+        }
+    }
 }

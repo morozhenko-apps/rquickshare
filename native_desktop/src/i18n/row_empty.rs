@@ -178,4 +178,29 @@ mod tests {
             "ملفات محفوظة: \u{2066}1/2\u{2069}"
         );
     }
+
+    #[test]
+    fn given_partial_and_unexpected_counts_when_saved_then_no_count_is_invented() {
+        let lri = char::from_u32(0x2066).unwrap();
+        let pdi = char::from_u32(0x2069).unwrap();
+        let cases = [
+            ("en", 0usize, 2usize, "Saved files"),
+            ("pt", 1, 2, "Ficheiros guardados"),
+            ("ru", 3, 2, "Сохранённые файлы"),
+            ("ar", 2, 2, "ملفات محفوظة"),
+            ("pt-BR", 1, 2, "Saved files"),
+            ("zh-Hans", 1, 2, "Saved files"),
+        ];
+        for (locale, saved, total, expected_label) in cases {
+            let actual = saved_files_for(locale, saved, total);
+            let expected = format!("{expected_label}: {lri}{saved}/{total}{pdi}");
+            assert_eq!(actual, expected, "{locale}: {saved}/{total}");
+            assert_eq!(actual.matches(lri).count(), 1);
+            assert_eq!(actual.matches(pdi).count(), 1);
+        }
+        assert_eq!(
+            saved_files_for("ar", usize::MAX, 0),
+            format!("ملفات محفوظة: {lri}{}/0{pdi}", usize::MAX)
+        );
+    }
 }
