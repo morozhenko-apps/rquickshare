@@ -19,6 +19,7 @@ mod settings_state;
 mod settings_warning;
 mod transfer_dynamic;
 mod transfer_rows;
+mod tray_chrome;
 mod visibility;
 
 const MENU_KEYS: [&str; 17] = [
@@ -148,6 +149,12 @@ pub(crate) fn visibility_remaining(seconds: u64) -> String {
 }
 
 pub(crate) use transfer_dynamic::ProgressKind;
+pub(crate) use tray_chrome::TrayCountKind;
+
+/// Display-only count captions for the native DBusMenu projection.
+pub(crate) fn tray_count(kind: TrayCountKind, count: u16) -> String {
+    tray_chrome::count_for(active(), kind, count)
+}
 
 /// Presentation only: the actual recipient and transfer counts remain untouched.
 pub(crate) fn transfer_recipient(recipient: &str) -> String {
@@ -659,6 +666,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
         return value;
     }
     if let Some(value) = panel_cards::translated(locale, source) {
+        return value;
+    }
+    if let Some(value) = tray_chrome::translated(locale, source) {
         return value;
     }
     if let Some(index) = COMPOSE_KEYS.iter().position(|key| *key == source) {
@@ -1275,6 +1285,40 @@ mod tests {
                 settings::translated(locale, "Restart sharing"),
                 "{locale}: Start versus Restart"
             );
+        }
+    }
+
+    #[test]
+    fn tray_chrome_catalog_does_not_shadow_any_other_native_i18n_keys() {
+        for source in tray_chrome::KEYS {
+            assert!(!MENU_KEYS.contains(&source));
+            assert!(!REVIEW_KEYS.contains(&source));
+            assert!(!COMPOSE_KEYS.contains(&source));
+            for other in [
+                &history::KEYS[..],
+                &image::KEYS[..],
+                &settings::KEYS[..],
+                &settings_state::KEYS[..],
+                &settings_errors::KEYS[..],
+                &settings_warning::KEYS[..],
+                &settings_residual::KEYS[..],
+                &transfer_rows::KEYS[..],
+                &reveal_notices::KEYS[..],
+                &visibility::KEYS[..],
+                &menu_extra::KEYS[..],
+                &operation_notices::KEYS[..],
+                &panel_status::KEYS[..],
+                &client_errors::KEYS[..],
+                &panel_cards::KEYS[..],
+            ] {
+                assert!(!other.contains(&source), "{source}");
+            }
+            for locale in LOCALES {
+                assert_eq!(
+                    translated(locale, source),
+                    tray_chrome::translated(locale, source).unwrap()
+                );
+            }
         }
     }
 

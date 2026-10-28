@@ -54,15 +54,19 @@ fn given_fixed_projection_when_layout_depth_properties_and_events_are_checked_th
         current.projection.active = 1;
         assert_eq!(
             String::try_from(properties(1, current, &[]).remove("label").unwrap()).unwrap(),
-            if visible { "Hide card" } else { "Open card" }
+            if visible {
+                Action::Hide.label()
+            } else {
+                Action::Open.label()
+            }
         );
         assert_eq!(
             String::try_from(properties(4, current, &[]).remove("label").unwrap()).unwrap(),
-            "Incoming requests (2)"
+            crate::i18n::tray_count(crate::i18n::TrayCountKind::Incoming, 2)
         );
         assert_eq!(
             String::try_from(properties(5, current, &[]).remove("label").unwrap()).unwrap(),
-            "History (3)"
+            crate::i18n::tray_count(crate::i18n::TrayCountKind::History, 3)
         );
     }
     for mode in [None, Some(0), Some(1), Some(2)] {
@@ -173,9 +177,9 @@ async fn given_real_menu_when_reads_clicks_groups_or_fd_abuse_arrive_then_order_
         assert_eq!(
             String::try_from(label).unwrap(),
             match id {
-                4 => "Incoming requests (0)",
-                5 => "History (0)",
-                _ => Action::from_id(id).unwrap().label(),
+                4 => crate::i18n::tray_count(crate::i18n::TrayCountKind::Incoming, 0),
+                5 => crate::i18n::tray_count(crate::i18n::TrayCountKind::History, 0),
+                _ => Action::from_id(id).unwrap().label().to_string(),
             }
         );
     }

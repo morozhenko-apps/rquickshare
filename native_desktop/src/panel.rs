@@ -1723,11 +1723,7 @@ impl Panel {
             let row = card();
             row.append(&label(&crate::i18n::transfer_recipient(recipient)));
             let status = if let Some((transferred, total)) = progress {
-                crate::i18n::transfer_progress(
-                    transferred,
-                    total,
-                    crate::i18n::ProgressKind::Sent,
-                )
+                crate::i18n::transfer_progress(transferred, total, crate::i18n::ProgressKind::Sent)
             } else {
                 crate::i18n::transfer_phase("Queued").to_string()
             };

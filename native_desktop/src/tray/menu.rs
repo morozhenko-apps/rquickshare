@@ -192,11 +192,14 @@ fn properties(id: i32, state: State, names: &[String]) -> HashMap<String, OwnedV
         put("children-display", OwnedValue::from(Str::from("submenu")));
     } else if let Some(action) = Action::from_id(id) {
         let label = match action {
-            Action::Open if state.projection.card_visible => "Hide card".to_owned(),
-            Action::Incoming => format!("Incoming requests ({})", state.projection.incoming),
-            Action::Transfers => format!(
-                "History ({})",
-                state.projection.active + state.projection.incoming
+            Action::Open if state.projection.card_visible => Action::Hide.label().to_owned(),
+            Action::Incoming => crate::i18n::tray_count(
+                crate::i18n::TrayCountKind::Incoming,
+                state.projection.incoming,
+            ),
+            Action::Transfers => crate::i18n::tray_count(
+                crate::i18n::TrayCountKind::History,
+                state.projection.active + state.projection.incoming,
             ),
             _ => action.label().to_owned(),
         };

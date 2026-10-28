@@ -407,7 +407,12 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
         }
         if widget.widget_name() == "row-summary" {
             assert_eq!(
-                widget.clone().downcast::<gtk::Label>().unwrap().text().to_string(),
+                widget
+                    .clone()
+                    .downcast::<gtk::Label>()
+                    .unwrap()
+                    .text()
+                    .to_string(),
                 format!("PDF · {}", crate::i18n::pin_code("4821"))
             );
             assert!(widget.tooltip_text().unwrap().contains("Example.pdf"));
