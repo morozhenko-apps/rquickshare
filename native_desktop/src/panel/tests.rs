@@ -394,7 +394,8 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
         .map(|label| label.text().to_string())
         .collect::<Vec<_>>()
         .join(" ");
-    assert!(reviewed.contains("Code: 4821") && reviewed.contains("Example.pdf"));
+    assert!(reviewed.contains(&crate::i18n::pin_code("4821")));
+    assert!(reviewed.contains("Example.pdf"));
     assert!(!compact_text.contains("Example.pdf"));
     // The actual card row has direct consent, no Receive indirection or lower body.
     fn consent_controls(widget: &gtk::Widget, found: &mut Vec<String>) {
@@ -406,8 +407,8 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
         }
         if widget.widget_name() == "row-summary" {
             assert_eq!(
-                widget.clone().downcast::<gtk::Label>().unwrap().text(),
-                "PDF · Code: 4821"
+                widget.clone().downcast::<gtk::Label>().unwrap().text().to_string(),
+                format!("PDF · {}", crate::i18n::pin_code("4821"))
             );
             assert!(widget.tooltip_text().unwrap().contains("Example.pdf"));
         }
@@ -420,6 +421,18 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     let mut direct = Vec::new();
     consent_controls(panel.box_widget("nearby").upcast_ref(), &mut direct);
     assert_eq!(direct, ["decline", "accept"]);
+    let transfer_captions = labels(&panel.box_widget("transfers"))
+        .iter()
+        .map(|label| label.text().to_string())
+        .collect::<Vec<_>>();
+    assert!(transfer_captions.contains(&crate::i18n::transfer_recipient("Example phone")));
+    assert!(transfer_captions.contains(&crate::i18n::transfer_recipient("Example laptop")));
+    assert!(transfer_captions.contains(&crate::i18n::transfer_progress(
+        2048,
+        12345,
+        crate::i18n::ProgressKind::Sent,
+    )));
+    assert!(transfer_captions.contains(&crate::i18n::transfer_phase("Queued").to_string()));
 
     panel.set_drawer(Drawer::Open);
     let open_width = panel.window.measure(gtk::Orientation::Horizontal, -1);

@@ -1671,7 +1671,7 @@ impl Panel {
         }
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         for title in ["Decline", "Accept"] {
-            let button = gtk::Button::with_label(title);
+            let button = gtk::Button::with_label(crate::i18n::label(title));
             button.set_sensitive(false);
             actions.append(&button);
         }
@@ -1682,7 +1682,7 @@ impl Panel {
             clear(&nearby);
             let review = gtk::Box::new(gtk::Orientation::Horizontal, 8);
             for (name, title) in [("decline", "Decline"), ("accept", "Accept")] {
-                let button = gtk::Button::with_label(title);
+                let button = gtk::Button::with_label(crate::i18n::label(title));
                 button.set_widget_name(name);
                 button.set_sensitive(false);
                 review.append(&button);
@@ -1699,8 +1699,15 @@ impl Panel {
                     next = child.next_sibling();
                     if child.widget_name() == "row-summary" {
                         let summary = child.downcast::<gtk::Label>().unwrap();
-                        summary.set_text("PDF · Code: 4821");
-                        summary.set_tooltip_text(Some("Check this code on the sending device before accepting.\nExample.pdf · 12345 bytes"));
+                        summary.set_text(&format!("PDF · {}", crate::i18n::pin_code("4821")));
+                        summary.set_tooltip_text(Some(&format!(
+                            "{}\n{} · {}",
+                            crate::i18n::label(
+                                "Check this code on the sending device before accepting."
+                            ),
+                            crate::i18n::isolate_untrusted("Example.pdf"),
+                            crate::i18n::byte_count(12345),
+                        )));
                     }
                 }
             }
@@ -1709,14 +1716,23 @@ impl Panel {
 
         let transfers = self.box_widget("transfers");
         clear(&transfers);
-        for (recipient, status) in [
-            ("Example phone", "2048 / 12345 bytes locally sent"),
-            ("Example laptop", "Queued"),
+        for (recipient, progress) in [
+            ("Example phone", Some((2048, 12345))),
+            ("Example laptop", None),
         ] {
             let row = card();
-            row.append(&label(&format!("Recipient: {recipient}")));
-            row.append(&label(status));
-            let cancel = gtk::Button::with_label("Cancel");
+            row.append(&label(&crate::i18n::transfer_recipient(recipient)));
+            let status = if let Some((transferred, total)) = progress {
+                crate::i18n::transfer_progress(
+                    transferred,
+                    total,
+                    crate::i18n::ProgressKind::Sent,
+                )
+            } else {
+                crate::i18n::transfer_phase("Queued").to_string()
+            };
+            row.append(&label(&status));
+            let cancel = gtk::Button::with_label(crate::i18n::label("Cancel"));
             cancel.set_sensitive(false);
             row.append(&cancel);
             transfers.append(&row);

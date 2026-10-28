@@ -59,7 +59,11 @@ pub(super) fn progress_for(
     kind: ProgressKind,
 ) -> String {
     let descriptions: &[&str; 3] = match locale {
-        "ru" => &["байт записано локально", "байт получено локально", "байт отправлено локально"],
+        "ru" => &[
+            "байт записано локально",
+            "байт получено локально",
+            "байт отправлено локально",
+        ],
         "es" => &[
             "bytes escritos localmente",
             "bytes recibidos localmente",
@@ -70,7 +74,11 @@ pub(super) fn progress_for(
             "bytes recebidos localmente",
             "bytes enviados localmente",
         ],
-        "de" => &["Bytes lokal geschrieben", "Bytes lokal empfangen", "Bytes lokal gesendet"],
+        "de" => &[
+            "Bytes lokal geschrieben",
+            "Bytes lokal empfangen",
+            "Bytes lokal gesendet",
+        ],
         "fr" => &[
             "octets écrits localement",
             "octets reçus localement",
@@ -91,10 +99,26 @@ pub(super) fn progress_for(
             "बाइट स्थानीय रूप से प्राप्त हुए",
             "बाइट स्थानीय रूप से भेजे गए",
         ],
-        "zh-Hant" => &["位元組已寫入本機", "位元組已在本機接收", "位元組已在本機送出"],
-        "ja" => &["バイトをローカルに書き込み", "バイトをローカルで受信", "バイトをローカルから送信"],
-        "nl" => &["bytes lokaal geschreven", "bytes lokaal ontvangen", "bytes lokaal verzonden"],
-        "sv" => &["byte skrivna lokalt", "byte mottagna lokalt", "byte skickade lokalt"],
+        "zh-Hant" => &[
+            "位元組已寫入本機",
+            "位元組已在本機接收",
+            "位元組已在本機送出",
+        ],
+        "ja" => &[
+            "バイトをローカルに書き込み",
+            "バイトをローカルで受信",
+            "バイトをローカルから送信",
+        ],
+        "nl" => &[
+            "bytes lokaal geschreven",
+            "bytes lokaal ontvangen",
+            "bytes lokaal verzonden",
+        ],
+        "sv" => &[
+            "byte skrivna lokalt",
+            "byte mottagna lokalt",
+            "byte skickade lokalt",
+        ],
         "tr" => &[
             "bayt yerel olarak yazıldı",
             "bayt yerel olarak alındı",
@@ -118,7 +142,11 @@ pub(super) fn progress_for(
             "byte na ipinadala nang lokal",
         ],
         "ar" => &["بايت كُتبت محليًا", "بايت استُلمت محليًا", "بايت أُرسلت محليًا"],
-        _ => &["bytes locally written", "bytes locally received", "bytes locally sent"],
+        _ => &[
+            "bytes locally written",
+            "bytes locally received",
+            "bytes locally sent",
+        ],
     };
     let description = descriptions[match kind {
         ProgressKind::Written => 0,
@@ -400,7 +428,10 @@ mod tests {
                 .map(|phase| phase_for(locale, phase))
                 .collect();
             assert_eq!(values.len(), 11);
-            assert!(values.iter().all(|value| !value.trim().is_empty()), "{locale}");
+            assert!(
+                values.iter().all(|value| !value.trim().is_empty()),
+                "{locale}"
+            );
             for (index, value) in values.iter().enumerate() {
                 assert!(!values[..index].contains(value), "{locale}: {index}");
             }
@@ -408,8 +439,14 @@ mod tests {
             assert_ne!(values[6], values[9], "{locale}");
             assert_ne!(values[7], values[10], "{locale}");
         }
-        assert_eq!(phase_for("en", "Cancellation requested"), "Cancellation requested");
-        assert_eq!(phase_for("ru", "Cancellation requested"), "Отмена запрошена");
+        assert_eq!(
+            phase_for("en", "Cancellation requested"),
+            "Cancellation requested"
+        );
+        assert_eq!(
+            phase_for("ru", "Cancellation requested"),
+            "Отмена запрошена"
+        );
         assert_eq!(phase_for("pt", "Cancelled"), "Cancelado");
         assert_eq!(phase_for("ar", "Disconnected"), "انقطع الاتصال");
         assert_eq!(phase_for("pt-BR", "Completed"), "Completed");
@@ -421,7 +458,11 @@ mod tests {
     fn exact_progress_never_rounds_or_reports_finished_content() {
         for locale in LOCALES {
             for (done, total) in [(0, 0), (0, 1), (1, 1), (2048, 12345), (u64::MAX, u64::MAX)] {
-                for kind in [ProgressKind::Written, ProgressKind::Received, ProgressKind::Sent] {
+                for kind in [
+                    ProgressKind::Written,
+                    ProgressKind::Received,
+                    ProgressKind::Sent,
+                ] {
                     let value = progress_for(locale, done, total, kind);
                     assert!(
                         value.starts_with(&format!("\u{2066}{done} / {total}\u{2069} ")),
@@ -430,7 +471,11 @@ mod tests {
                     assert!(!value.trim().is_empty(), "{locale}");
                 }
             }
-            for kind in [ProgressKind::Written, ProgressKind::Received, ProgressKind::Sent] {
+            for kind in [
+                ProgressKind::Written,
+                ProgressKind::Received,
+                ProgressKind::Sent,
+            ] {
                 let value = progress_for(locale, 1, 2, kind);
                 assert!(!value.contains("Completed"), "{locale}");
                 assert!(!value.contains('<'), "{locale}");
@@ -455,15 +500,27 @@ mod tests {
         let hostile = "PC\u{2069}\u{202e}<i>fake</i>\u{202c}.png";
         for locale in LOCALES {
             let value = recipient_for(locale, hostile);
-            assert!(value.contains("\u{2068}PC<i>fake</i>.png\u{2069}"), "{locale}");
+            assert!(
+                value.contains("\u{2068}PC<i>fake</i>.png\u{2069}"),
+                "{locale}"
+            );
             assert!(!value.contains('\u{202e}'), "{locale}");
             assert!(!value.contains('\u{202c}'), "{locale}");
-            assert!(recipient_for(locale, "").contains("\u{2068}\u{2069}"), "{locale}");
+            assert!(
+                recipient_for(locale, "").contains("\u{2068}\u{2069}"),
+                "{locale}"
+            );
         }
         assert!(hostile.contains('\u{202e}'));
         assert_eq!(recipient_for("ru", "PC"), "Получатель: \u{2068}PC\u{2069}");
-        assert_eq!(recipient_for("pt", "PC"), "Destinatário: \u{2068}PC\u{2069}");
+        assert_eq!(
+            recipient_for("pt", "PC"),
+            "Destinatário: \u{2068}PC\u{2069}"
+        );
         assert_eq!(recipient_for("ar", "PC"), "المستلم: \u{2068}PC\u{2069}");
-        assert_eq!(recipient_for("pt-BR", "PC"), "Recipient: \u{2068}PC\u{2069}");
+        assert_eq!(
+            recipient_for("pt-BR", "PC"),
+            "Recipient: \u{2068}PC\u{2069}"
+        );
     }
 }
