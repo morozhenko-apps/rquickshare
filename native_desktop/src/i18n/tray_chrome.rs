@@ -288,7 +288,10 @@ mod tests {
         }
         assert_eq!(translated("ru", KEYS[0]), Some("Открыть карточку"));
         assert_eq!(translated("pt", KEYS[5]), Some("Pedidos recebidos"));
-        assert_eq!(translated("ar", KEYS[9]), Some("إرسال الملفات واستلامها من الأجهزة القريبة"));
+        assert_eq!(
+            translated("ar", KEYS[9]),
+            Some("إرسال الملفات واستلامها من الأجهزة القريبة")
+        );
         assert_eq!(translated("fr", "not a key"), None);
     }
 

@@ -77,10 +77,85 @@ def validate_elf(header, architecture):
     require(int.from_bytes(header[18:20], "little") == {"amd64": 62, "arm64": 183}[architecture], "ELF architecture mismatch")
 
 
+
+# Desktop Entry locale names use POSIX encoding. pt is explicitly pt-PT;
+# Traditional Chinese is represented by the zh_TW and zh_HK regions.
+DESKTOP_LOCALES = frozenset(["ru", "es", "pt_PT", "de", "fr", "it", "pl", "hi", "zh_TW", "zh_HK", "ja", "nl", "sv", "tr", "ko", "bn", "th", "id", "fil", "ar"])
+
+
+def read_desktop_entry(path):
+    entry = configparser.ConfigParser(interpolation=None, strict=True)
+    entry.optionxform = str
+    with path.open(encoding="utf-8") as source:
+        entry.read_file(source)
+    return entry
+
+
+def validate_localized_desktop_entries(application, service):
+    """Reject locale drift and changes to packaged launch/consent boundaries."""
+    app_base = {
+        "Type": "Application",
+        "Name": "rQuickShare",
+        "Comment": "Share files and text with nearby devices",
+        "Exec": "/usr/bin/rquickshare",
+        "Icon": "rquickshare",
+        "Terminal": "false",
+        "Categories": "Network;FileTransfer;",
+        "StartupNotify": "false",
+    }
+    menu_base = {
+        "Type": "Service",
+        "Name": "Send with rQuickShare",
+        "MimeType": "application/octet-stream;inode/directory;",
+        "Actions": "Send;",
+        "X-KDE-Protocols": "file",
+        "X-KDE-MinNumberOfUrls": "1",
+        "X-KDE-MaxNumberOfUrls": "256",
+        "X-KDE-Priority": "TopLevel",
+    }
+    action_base = {
+        "Name": "Send with rQuickShare…",
+        "Icon": "document-send",
+        "Exec": "rquickshare send -- %U",
+    }
+    require(application.sections() == ["Desktop Entry"], "Invalid application desktop groups")
+    require(service.sections() == ["Desktop Entry", "Desktop Action Send"], "Invalid Dolphin desktop groups")
+    for entry, section, base, translated in [
+        (application, "Desktop Entry", app_base, "Comment"),
+        (service, "Desktop Entry", menu_base, "Name"),
+        (service, "Desktop Action Send", action_base, "Name"),
+    ]:
+        values = entry[section]
+        required = set(base) | {f"{translated}[{locale}]" for locale in DESKTOP_LOCALES}
+        require(set(values) == required, f"Unexpected {section} desktop fields or locales")
+        require(all(values[key] == value for key, value in base.items()), f"Modified {section} launch contract")
+        for locale in DESKTOP_LOCALES:
+            value = values[f"{translated}[{locale}]"]
+            require(value and value == value.strip(), f"Empty or padded desktop translation: {locale}")
+            require(
+                not any(
+                    ord(char) < 32
+                    or ord(char) == 127
+                    or 0x202A <= ord(char) <= 0x202E
+                    or 0x2066 <= ord(char) <= 0x2069
+                    for char in value
+                ),
+                f"Unsafe desktop translation: {locale}",
+            )
+            require(
+                "%" not in value and chr(92) not in value,
+                f"Escaped desktop translation: {locale}",
+            )
+    for locale in DESKTOP_LOCALES:
+        header = service["Desktop Entry"][f"Name[{locale}]"]
+        action = service["Desktop Action Send"][f"Name[{locale}]"]
+        require("rQuickShare" in header and not header.endswith("…"), f"Incorrect Dolphin caption: {locale}")
+        require(action == header + "…", f"Incorrect Dolphin actionable caption: {locale}")
+
 def validate_assets():
-    application = configparser.ConfigParser(interpolation=None)
-    application.read(ASSETS / "share/applications/io.github.morozhenko_apps.RQuickShare.desktop")
-    require(application["Desktop Entry"].get("Icon") == "rquickshare", "Unexpected application icon")
+    application = read_desktop_entry(ASSETS / "share/applications/io.github.morozhenko_apps.RQuickShare.desktop")
+    service = read_desktop_entry(ASSETS / "share/kio/servicemenus/io.github.morozhenko_apps.RQuickShare.Send.desktop")
+    validate_localized_desktop_entries(application, service)
     unit = configparser.ConfigParser(interpolation=None)
     unit.read(ASSETS / "lib/systemd/user/rquickshare-daemon.service")
     require(set(unit.sections()) == {"Unit", "Service"}, "Unexpected unit enablement")
