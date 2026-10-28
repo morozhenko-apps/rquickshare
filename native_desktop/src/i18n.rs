@@ -17,6 +17,7 @@ mod settings_errors;
 mod settings_residual;
 mod settings_state;
 mod settings_warning;
+mod transfer_dynamic;
 mod transfer_rows;
 mod visibility;
 
@@ -144,6 +145,21 @@ pub(crate) fn resolved_name(value: &str) -> String {
 
 pub(crate) fn visibility_remaining(seconds: u64) -> String {
     visibility::countdown_for(active(), seconds)
+}
+
+pub(crate) use transfer_dynamic::ProgressKind;
+
+/// Presentation only: the actual recipient and transfer counts remain untouched.
+pub(crate) fn transfer_recipient(recipient: &str) -> String {
+    transfer_dynamic::recipient_for(active(), recipient)
+}
+
+pub(crate) fn transfer_progress(transferred: u64, total: u64, kind: ProgressKind) -> String {
+    transfer_dynamic::progress_for(active(), transferred, total, kind)
+}
+
+pub(crate) fn transfer_phase(source: &'static str) -> &'static str {
+    transfer_dynamic::phase_for(active(), source)
 }
 
 pub(crate) fn label(source: &'static str) -> &'static str {

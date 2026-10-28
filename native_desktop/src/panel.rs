@@ -1437,25 +1437,25 @@ impl Panel {
             row.append(&label(crate::i18n::label(saved_notice)));
         }
         if let Some(recipient) = &transfer.recipient {
-            row.prepend(&label(&format!("Recipient: {recipient}")));
+            row.prepend(&label(&crate::i18n::transfer_recipient(recipient)));
         }
-        let phase = label(phase_text(transfer.phase));
+        let phase = label(crate::i18n::transfer_phase(phase_text(transfer.phase)));
         phase.set_widget_name("phase");
         row.append(&phase);
         if transfer.details.status == DetailsStatus::Ready {
-            let progress = label(&format!(
-                "{} / {} bytes locally {}",
+            let kind = if transfer.direction == Direction::Inbound {
+                if transfer.details.kind == rqs_lib::sessions::details::PayloadKind::Files {
+                    crate::i18n::ProgressKind::Written
+                } else {
+                    crate::i18n::ProgressKind::Received
+                }
+            } else {
+                crate::i18n::ProgressKind::Sent
+            };
+            let progress = label(&crate::i18n::transfer_progress(
                 transfer.details.transferred_bytes,
                 transfer.details.total_bytes,
-                if transfer.direction == Direction::Inbound {
-                    if transfer.details.kind == rqs_lib::sessions::details::PayloadKind::Files {
-                        "written"
-                    } else {
-                        "received"
-                    }
-                } else {
-                    "sent"
-                }
+                kind,
             ));
             progress.set_widget_name("progress");
             row.append(&progress);
