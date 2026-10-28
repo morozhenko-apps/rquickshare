@@ -328,35 +328,64 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
                 .join(" ");
             assert!(
                 texts.contains(if kind == rqs_lib::sessions::details::PayloadKind::Url {
-                    "Link · 3 bytes"
+                    "Link · 3 B"
                 } else {
-                    "Text · 3 bytes"
+                    "Text · 3 B"
                 })
             );
-            assert!(texts.contains("Code: 0123"));
-            assert!(!texts.contains("files") && !texts.contains("Review all files"));
+            assert!(texts.contains(&crate::i18n::pin_code("0123")));
+            assert!(!texts.contains(&crate::i18n::file_count(1)));
+            assert!(!texts.contains(crate::i18n::label("Review all files")));
             assert!(labels(&row).iter().all(|label| !label.uses_markup()));
         }
     }
+    let invalid_pin = TransferDetails {
+        pin: "01\u{202e}23".into(),
+        ..details.clone()
+    };
+    let invalid = details_card(&invalid_pin);
+    assert!(!labels(&invalid)
+        .iter()
+        .any(|label| label.widget_name() == "detail-code"));
+    assert_eq!(invalid_pin.pin, "01\u{202e}23");
+    assert_eq!(details.pin, "0123");
     let row = details_card(&details);
     assert!(labels(&row)
         .iter()
-        .any(|label| label.text() == format!("{} · advertised device", details.sender)));
+        .any(|label| {
+            label.text()
+                == format!(
+                    "{} · {}",
+                    crate::i18n::isolate_untrusted(&details.sender),
+                    crate::i18n::label("advertised device")
+                )
+        }));
     assert!(labels(&row).iter().all(|label| !label.uses_markup()));
     assert!(labels(&row)
         .iter()
-        .any(|label| label.text() == "Code: 0123"));
+        .any(|label| label.text() == crate::i18n::pin_code("0123")));
     let expander = row
         .last_child()
         .unwrap()
         .downcast::<gtk::Expander>()
         .unwrap();
+    assert_eq!(
+        expander.label().as_deref(),
+        Some(crate::i18n::label("Review all files"))
+    );
     assert!(expander.child().is_none());
     expander.set_expanded(true);
     let file_labels = labels(&expander.child().unwrap());
     assert_eq!(file_labels.len(), 256);
     for (index, label) in file_labels.iter().enumerate() {
-        assert_eq!(label.text(), format!("<file-{index}>.txt · 1 bytes"));
+        assert_eq!(
+            label.text(),
+            format!(
+                "{} · {}",
+                crate::i18n::isolate_untrusted(&format!("<file-{index}>.txt")),
+                crate::i18n::byte_count(1)
+            )
+        );
         assert!(!label.uses_markup());
     }
     expander.set_expanded(false);
@@ -387,7 +416,7 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     for action in ["Receive", "Send", "Hide", "Devices"] {
         assert!(compact_text.contains(action));
     }
-    assert!(!compact_text.contains("Code: 4821"));
+    assert!(!compact_text.contains(&crate::i18n::pin_code("4821")));
     expand_details(&panel.box_widget("incoming"));
     let reviewed = labels(&panel.box_widget("incoming"))
         .iter()
@@ -498,7 +527,7 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     settings::verify_editor_smoke(panel.settings_owner.borrow().as_ref().unwrap());
     assert!(labels(&panel.box_widget("incoming"))
         .iter()
-        .any(|label| label.text() == "Code: 4821"));
+        .any(|label| label.text() == crate::i18n::pin_code("4821")));
     assert_eq!(
         panel
             .actions

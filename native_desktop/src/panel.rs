@@ -200,12 +200,18 @@ fn details_card_mode_with_files(
 ) -> gtk::Box {
     let row = card();
     match details.status {
-        DetailsStatus::Unavailable => row.append(&label("Waiting for sender and payload details")),
-        DetailsStatus::Unsupported => row.append(&label(
+        DetailsStatus::Unavailable => row.append(&label(crate::i18n::label(
+            "Waiting for sender and payload details",
+        ))),
+        DetailsStatus::Unsupported => row.append(&label(crate::i18n::label(
             "This payload cannot be reviewed safely. Decline or cancel it.",
-        )),
+        ))),
         DetailsStatus::Ready => {
-            let sender = label(&format!("{} · advertised device", details.sender));
+            let sender = label(&format!(
+                "{} · {}",
+                crate::i18n::isolate_untrusted(&details.sender),
+                crate::i18n::label("advertised device")
+            ));
             if !full {
                 sender.set_wrap(false);
                 sender.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -213,45 +219,42 @@ fn details_card_mode_with_files(
             }
             sender.set_widget_name("detail-peer");
             row.append(&sender);
-            if !details.pin.is_empty() {
-                let pin = label(&format!("Code: {}", details.pin));
+            let code = crate::i18n::pin_code(&details.pin);
+            if !code.is_empty() {
+                let pin = label(&code);
                 pin.set_widget_name("detail-code");
                 pin.add_css_class("verification-code");
                 row.append(&pin);
-                row.append(&label(
+                row.append(&label(crate::i18n::label(
                     "Check this code on the sending device before accepting.",
-                ));
+                )));
             }
             if details.kind != rqs_lib::sessions::details::PayloadKind::Files {
+                let kind = if details.kind == rqs_lib::sessions::details::PayloadKind::Url {
+                    "Link"
+                } else {
+                    "Text"
+                };
                 let summary = label(&format!(
-                    "{} · {} bytes",
-                    if details.kind == rqs_lib::sessions::details::PayloadKind::Url {
-                        "Link"
-                    } else {
-                        "Text"
-                    },
-                    details.total_bytes
+                    "{} · {}",
+                    crate::i18n::label(kind),
+                    crate::i18n::byte_count(details.total_bytes)
                 ));
                 summary.set_widget_name("detail-summary");
                 row.append(&summary);
                 return row;
             }
             let summary = label(&format!(
-                "{} {} · {} bytes",
-                details.files.len(),
-                if details.files.len() == 1 {
-                    "file"
-                } else {
-                    "files"
-                },
-                details.total_bytes
+                "{} · {}",
+                crate::i18n::file_count(details.files.len()),
+                crate::i18n::byte_count(details.total_bytes)
             ));
             summary.set_widget_name("detail-summary");
             row.append(&summary);
             if !full {
                 return row;
             }
-            let expander = gtk::Expander::new(Some("Review all files"));
+            let expander = gtk::Expander::new(Some(crate::i18n::label("Review all files")));
             expander.set_widget_name("detail-manifest");
             let files = details.files.clone();
             // File widgets are materialized only while expanded, bounded by the manifest limit.
@@ -260,7 +263,11 @@ fn details_card_mode_with_files(
                     let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
                     for (index, file) in files.iter().enumerate() {
                         let row = gtk::Box::new(gtk::Orientation::Vertical, 4);
-                        row.append(&label(&format!("{} · {} bytes", file.name, file.size)));
+                        row.append(&label(&format!(
+                            "{} · {}",
+                            crate::i18n::isolate_untrusted(&file.name),
+                            crate::i18n::byte_count(file.size)
+                        )));
                         if let Some(action) = &action {
                             action(&row, index as u32);
                         }

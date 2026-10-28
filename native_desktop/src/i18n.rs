@@ -10,6 +10,7 @@ mod image;
 mod menu_extra;
 mod operation_notices;
 mod panel_cards;
+mod panel_details;
 mod panel_status;
 mod reveal_notices;
 mod settings;
@@ -668,6 +669,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
     if let Some(value) = panel_cards::translated(locale, source) {
         return value;
     }
+    if let Some(value) = panel_details::translated(locale, source) {
+        return value;
+    }
     if let Some(value) = tray_chrome::translated(locale, source) {
         return value;
     }
@@ -1317,6 +1321,41 @@ mod tests {
                 assert_eq!(
                     translated(locale, source),
                     tray_chrome::translated(locale, source).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn detail_card_keys_do_not_shadow_existing_ui_and_have_total_locale_rows() {
+        for source in panel_details::KEYS {
+            assert!(!MENU_KEYS.contains(&source));
+            assert!(!REVIEW_KEYS.contains(&source));
+            assert!(!COMPOSE_KEYS.contains(&source));
+            for other in [
+                &history::KEYS[..],
+                &image::KEYS[..],
+                &settings::KEYS[..],
+                &settings_state::KEYS[..],
+                &settings_errors::KEYS[..],
+                &settings_warning::KEYS[..],
+                &settings_residual::KEYS[..],
+                &transfer_rows::KEYS[..],
+                &reveal_notices::KEYS[..],
+                &visibility::KEYS[..],
+                &menu_extra::KEYS[..],
+                &operation_notices::KEYS[..],
+                &panel_status::KEYS[..],
+                &client_errors::KEYS[..],
+                &panel_cards::KEYS[..],
+                &tray_chrome::KEYS[..],
+            ] {
+                assert!(!other.contains(&source), "{source}");
+            }
+            for locale in LOCALES {
+                assert_eq!(
+                    translated(locale, source),
+                    panel_details::translated(locale, source).unwrap()
                 );
             }
         }
