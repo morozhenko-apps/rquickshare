@@ -300,12 +300,37 @@ mod tests {
         }
 
         let content_cases = [
-            ("ru", false, 12, "Текст · 12 B · подготовлено · выберите устройство"),
-            ("ru", true, 7, "Ссылка · 7 B · подготовлено · выберите устройство"),
-            ("pt", false, 12, "Texto · 12 B · preparado · escolha um dispositivo"),
-            ("pt", true, 7, "Ligação · 7 B · preparado · escolha um dispositivo"),
+            (
+                "ru",
+                false,
+                12,
+                "Текст · 12 B · подготовлено · выберите устройство",
+            ),
+            (
+                "ru",
+                true,
+                7,
+                "Ссылка · 7 B · подготовлено · выберите устройство",
+            ),
+            (
+                "pt",
+                false,
+                12,
+                "Texto · 12 B · preparado · escolha um dispositivo",
+            ),
+            (
+                "pt",
+                true,
+                7,
+                "Ligação · 7 B · preparado · escolha um dispositivo",
+            ),
             ("ar", true, 0, "رابط · 0 B · تم الإعداد · اختر جهازًا"),
-            ("zh-Hans", false, 0, "Text · 0 B · prepared · choose a device"),
+            (
+                "zh-Hans",
+                false,
+                0,
+                "Text · 0 B · prepared · choose a device",
+            ),
         ];
         for (locale, link, bytes, expected) in content_cases {
             assert_eq!(
