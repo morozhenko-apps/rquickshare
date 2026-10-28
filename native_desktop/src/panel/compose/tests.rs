@@ -140,18 +140,35 @@ pub(in crate::panel) fn verify_composer_smoke(panel: &Rc<Panel>, application: &g
 #[test]
 fn given_prepared_source_metadata_when_summarized_then_text_is_never_mislabeled_as_files_or_exposes_body(
 ) {
-    // Arrange / Act / Assert
+    // The visible summary describes local preparation, never a sent payload.
     use rqs_lib::sessions::details::PayloadKind;
-    assert_eq!(
-        source_summary(PayloadKind::Text, 0, 12),
-        "Text prepared · 12 bytes · choose a device"
-    );
-    assert_eq!(
-        source_summary(PayloadKind::Url, 0, 7),
-        "Link prepared · 7 bytes · choose a device"
-    );
-    assert_eq!(
-        source_summary(PayloadKind::Files, 3, 7),
-        "3 files prepared · choose a device"
-    );
+    let text = source_summary(PayloadKind::Text, u32::MAX, 12);
+    let link = source_summary(PayloadKind::Url, u32::MAX, 7);
+    let files = source_summary(PayloadKind::Files, 3, u64::MAX);
+    assert_eq!(text, crate::i18n::prepared_content(false, 12));
+    assert_eq!(link, crate::i18n::prepared_content(true, 7));
+    assert_eq!(files, crate::i18n::prepared_files(3));
+    assert!(text.starts_with(crate::i18n::label("Text")));
+    assert!(link.starts_with(crate::i18n::label("Link")));
+    assert!(files.starts_with(&crate::i18n::file_count(3)));
+    assert!(text.contains(&crate::i18n::byte_count(12)));
+    assert!(link.contains(&crate::i18n::byte_count(7)));
+    assert!(!text.contains(&crate::i18n::file_count(u32::MAX as usize)));
+    assert_ne!(text, link);
+    for count in [0, 1, 2, u32::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Files, count, 0),
+            crate::i18n::prepared_files(count)
+        );
+    }
+    for bytes in [0, 1, 1024, u64::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Text, 0, bytes),
+            crate::i18n::prepared_content(false, bytes)
+        );
+        assert_eq!(
+            source_summary(PayloadKind::Url, 0, bytes),
+            crate::i18n::prepared_content(true, bytes)
+        );
+    }
 }
