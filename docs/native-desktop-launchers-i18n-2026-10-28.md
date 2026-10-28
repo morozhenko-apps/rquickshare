@@ -20,3 +20,9 @@ Security-sensitive and protocol keys must remain byte-for-byte unchanged: entry 
 - Keep docs and source in separate commits, fix the observed rustfmt assertion in same source integration, and run source-exact Native GTK + Preflight once at end. The package candidate workflow requires a separate explicit dispatch, not implied by green source CI. Installed KDE launcher/Dolphin UI, localized font fallback, RTL and editorial 20/20 semantic accuracy are manual acceptance boundaries.
 
 Rollback: revert only localized desktop entry keys and their offline tests; preserve execution keys, packaging identity, source code runtime, package version/revision, signatures and immutable artifacts.
+
+## Implemented source and current evidence
+
+Source `87808038781d3552b7224d276c231bbb100eafe0` adds localized `Comment` in the application entry and both `Name` captions in the KIO service menu, 20 POSIX translation variants per surface. The native Debian packager now validates all three translation sets alongside protected base fields and explicit forbidden control characters; two offline Python tests cover source completeness, binary/command preservation, and negative tampering/missing-locale scenarios. The candidate-only native package smoke workflow now invokes `desktop-file-validate` for **both** assets. Also corrected the exact prior Native GTK nightly formatting finding in `i18n/tray_chrome.rs` without changing labels.
+
+The follow-up documentation commit contains no production changes. The source-exact native GTK and Preflight runs triggered by the source commit must complete before the source gate is credited; the manually dispatched package-candidate gate is intentionally not part of the automatic push validation. Neither automated i18n inventory nor uninstalled package validation proves installed KDE/Dolphin behavior or native-speaker context acceptance.
