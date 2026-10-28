@@ -88,3 +88,28 @@ Commit `99cb0df77cf0076ed3f7ffe1eddde259b81582c0` changes **only** `.github/work
 No native executable, GTK behavior, KDE service file, package revision, product SemVer, consent or signing/release source changed. Positive and N1/N6/N7 negative rows have actual test implementations, but **not** a completed current-source execution until the new CI gate finishes. The package workflow must be manually re-dispatched on `dev` after ordinary CI is green, because it intentionally has no push trigger. Its failed first run cannot be rerun on the old SHA as if it tested this fix. The initial 902-case Core pass is unchanged historical evidence, not a claim of `0.9.0-2` artifact creation.
 
 Scope-local per-file map: `native-package-smoke.yml` owns tool selection and failure propagation; `test_native_deb.py` asserts workflow selection and rejects Type/MIME/Actions mutations; `native_deb.py` keeps exact asset/command validation unchanged. Static mutation review predicts each wrong Type/MIME/Actions change fails the exact-key base validator, while reintroducing the generic Dolphin validator fails the new workflow-selection test. No mutator or real Dolphin GUI executed. Overall Mode B Stage 12 and physical package/Android acceptance remain **OPEN**.
+
+## Native 0.9.0-2 package smoke: VERIFIED, manual installation OPEN
+
+[Manual Native Linux package smoke run 40785201691](https://github.com/morozhenko-apps/rquickshare/actions/runs/40785201691), first attempt, source SHA `698752cb53495b50343adedc415ce21bb3ae7435`, completed **SUCCESS** on Ubuntu 26.04 at 2026-10-28. All named job stages passed: real unprivileged Bubblewrap support, nightly rustfmt, Core Rust and Clippy, native Python package/signature contracts, correct freedesktop launcher and KDE menu validation, 154 isolated GTK tests, native Clippy, built release Debian package verification and unsigned APT staging.
+
+The runner reports an actual `rquickshare-native_0.9.0-2_amd64.deb` created with `dpkg-deb` and verified by `scripts/native_deb.py` twice. This is the **actual built package**, unlike historic synthetic Python test fixtures labeled 1.0.0. The workflow uploaded:
+- `rquickshare-native-ubuntu-26.04`, artifact ID `12859392744`: real `.deb` plus adjacent `.deb.sha256`.
+- `UNSIGNED-rquickshare-native-ubuntu26.04`, artifact ID `12859786780`: unsigned, development-only APT metadata. This is **not a published/signed channel**.
+
+On the target Ubuntu 26.04 amd64 KDE host, download the **first** artifact from the linked Actions run and extract to a new, disposable directory. Before installation run, in that directory:
+
+```bash
+sha256sum -c rquickshare-native_0.9.0-2_amd64.deb.sha256
+dpkg-deb -f rquickshare-native_0.9.0-2_amd64.deb Package Version Architecture
+dpkg-query -W -f='${Package} ${Version}\n' rquickshare-native || true
+```
+
+Expected artifact fields: `rquickshare-native`, `0.9.0-2`, `amd64`. If the SHA256 or architecture mismatch, **do not install**. Verify that active transfers are finished and preserve current settings first. Optional operator-initiated upgrade, never automated by the CI:
+
+```bash
+sudo apt install ./rquickshare-native_0.9.0-2_amd64.deb
+dpkg-query -W -f='${Package} ${Version}\n' rquickshare-native
+```
+
+After upgrade validate the real KDE tray/card, Dolphin service menu, opt-in login settings, and Pixel↔Linux file/text sending with explicit consent/decline and SHA256 of disposable test files. Follow `docs/native-essential-acceptance.md`; mark cases PASS/FAIL/UNTESTED and keep paths, device identities, PINs and personal data out of public evidence. Successful build/isolated tests do **not** yet prove installed service activation, package upgrade lifecycle, real peer authentication, transfer interruption, long-list focus, identity equivalence, or native 1.0.0 acceptance. The release remains UNAUTHORIZED; no tag, `master` promotion, signing or R2 publication is implied.
