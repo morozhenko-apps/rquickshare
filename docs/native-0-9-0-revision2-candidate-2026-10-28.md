@@ -53,3 +53,30 @@ GitHub UI equivalent: Actions -> Native Linux package smoke -> Run workflow -> b
 Version policy clarification: 0.9.0-2 is Debian *revision two* of the selected 0.9.0 product release, not product SemVer 0.9.2. Issue #17 still describes comprehensive 20-locale/native 1.0.0 context/RTL acceptance as a future final feature, after remaining product and interoperability work. Issue #13 still requires installed long-list request focus/scroll validation. Raising product version to 1.0.0 now would misrepresent unresolved release acceptance; an explicit product version decision must be separate from a disposable, source-green package candidate.
 
 Static review of native_desktop/src/panel/rows.rs on this branch confirms that focus_transfer already schedules a one-shot frame callback, computes a keyed row's bounds and adjusts scrolling; focus_scroll_tests covers the interval solver. This addresses the earlier source-level omission, but the physically observed long-list issue is still OPEN pending actual KDE/Pixel validation. No duplicate speculative scroll implementation was added.
+
+## Native package smoke 40772104257: Dolphin validation adapter mismatch
+
+### Executed evidence and root cause
+
+The first manually dispatched `native-package-smoke.yml` run [40772104257](https://github.com/morozhenko-apps/rquickshare/actions/runs/40772104257) completed **FAILURE** at **Core and package quality gate** on source/docs SHA `813dd71decf2ba99ddd3f1409d468566086af6ee`. Its log reports Core **902/902 unit tests passed** and completed native Python package/signature tests, then two `desktop-file-validate` errors on `share/kio/servicemenus/io.github.morozhenko_apps.RQuickShare.Send.desktop`: for `Type=Service`, the freedesktop validator rejects `MimeType` and `Actions` as Application-only keys. Subsequent GTK compilation, release `.deb` build, unsigned APT staging and artifact uploads were all **SKIPPED**. Therefore no new installable `0.9.0-2` artifact exists from that run. A test fixture log mentioning `1.0.0-1` is a synthetic Python test artifact, not the actual candidate identity.
+
+KDE's own service-menu documentation (https://develop.kde.org/docs/apps/dolphin/service-menus/) explicitly requires `[Desktop Entry]`, `Type=Service`, `MimeType`, `Actions`, and `[Desktop Action ...]` for a Dolphin `kio/servicemenus/` definition. Our file correctly implements that KDE-specific format; the generic freedesktop validator is the wrong contract for this file. The ordinary application launcher `share/applications/*.desktop` **is** freedesktop `Type=Application` and must retain `desktop-file-validate`.
+
+### Scoped MODE B inventory and decision before implementation
+
+**Files:** `.github/workflows/native-package-smoke.yml` (CI adapter only), `scripts/tests/test_native_deb.py` (test matrix). Existing production checker `scripts/native_deb.py::validate_localized_desktop_entries` uses strict `ConfigParser`, exact two Dolphin section names and exact expected `Type=Service`, `MimeType=application/octet-stream;inode/directory;`, `Actions=Send;`, `X-KDE-Protocols=file`, URL bounds, `X-KDE-Priority=TopLevel`, `[Desktop Action Send]` and `Exec=rquickshare send -- %U`, 20 locale cases, direction/escape and duplicate-key rejection. The existing Python package suite executes that checker, but the workflow must explicitly select it rather than accidentally applying the generic freedesktop validator again.
+
+**Solution:** retain the generic validator only for the real application launcher; invoke existing `native_deb.validate_assets()` as a separate fail-closed check of KDE service menu, launcher and session assets from the workflow. Do not rewrite the service type/fields; do not delete validation, relax the Python checker, use `|| true`, or skip test cases. Add test-only assertions for the dual-validator workflow routing and independent negative mutations for service type, MIME, action ID/command. One atomic workflow/test source commit follows this docs-only plan.
+
+| Branch/mutation | Positive expected | Negative rejection |
+| --- | --- | --- |
+| Application launcher `Type=Application` | Generic `desktop-file-validate` PASS | Removing generic validator from workflow is a test failure |
+| KDE service `Type=Service` | Strict `native_deb.validate_assets` PASS | `Type=Application`, changed `MimeType` or `Actions` fail closed |
+| Dolphin click action | `[Desktop Action Send]`, exact `Exec ... -- %U` | `%F`, shell substitution, missing action/translation fail existing checks |
+| Workflow tool selection | Exactly one freedesktop validator invocation, for `share/applications` only | Reintroduction of `desktop-file-validate` for `kio/servicemenus` rejected by test |
+
+N1 malformed service fields, N2 URL bounds, N6 missing locale, N7 command/consent authority, N8 bidi/escapes and N10 path/body disclosure are meaningful existing negative areas. N3 physical network, N4 UI repeat, N5 lifecycle, N9 live races, N11 payments and N12 real disk faults are **not proven by this static metadata test** and remain in their owner suites. Successful content metadata validation cannot establish Dolphin runtime registration or the user's real KDE file-menu behavior.
+
+**Mutation review:** changing `Type=Service` to `Application`, `Actions=Send;` or MIME selection must fail dedicated Python negative assertions. Replacing the correct CI checker with a generic freedesktop call must fail the workflow routing test. No mutation runner is locally available. Rollback only this workflow/test source commit if subsequent validation contradicts the plan; keep the KDE service file stable and do not authorize package publication.
+
+**Gate:** normal Preflight on the changed `.github/workflows`/Python tests, then the manually dispatched Native Linux package smoke on `dev`. This environment's GitHub connector does not expose `workflow_dispatch`; a manual Actions launch is still required after source CI passes. Do not poll an active run, and do not claim package success before artifact verification. Master, tags, signing, production assets and installed services remain unchanged.
