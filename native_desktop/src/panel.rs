@@ -341,16 +341,9 @@ fn source_summary(
 ) -> String {
     use rqs_lib::sessions::details::PayloadKind;
     match kind {
-        PayloadKind::Files => format!("{} files prepared · choose a device", file_count),
-        PayloadKind::Text | PayloadKind::Url => format!(
-            "{} prepared · {} bytes · choose a device",
-            if kind == PayloadKind::Url {
-                "Link"
-            } else {
-                "Text"
-            },
-            byte_count
-        ),
+        PayloadKind::Files => crate::i18n::prepared_files(file_count),
+        PayloadKind::Text => crate::i18n::prepared_content(false, byte_count),
+        PayloadKind::Url => crate::i18n::prepared_content(true, byte_count),
     }
 }
 
@@ -437,7 +430,7 @@ impl Panel {
             &provider,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
-        let reconnect_button = gtk::Button::with_label("Retry connection");
+        let reconnect_button = gtk::Button::with_label(crate::i18n::label("Retry connection"));
         reconnect_button.set_action_name(Some("panel.reconnect"));
         builder
             .object::<gtk::Box>("recovery")
@@ -454,7 +447,15 @@ impl Panel {
         overlay.set_widget_name("controls-overlay");
         let backdrop = backdrop::Backdrop::new(&compact);
         overlay.set_child(Some(&backdrop));
-        let curtain = gtk::Button::with_label("Choose target devices\nClear prepared files");
+        let curtain = gtk::Button::with_label(&format!(
+            "{}\n{}",
+            crate::i18n::label("Choose target devices"),
+            crate::i18n::label("Clear prepared files")
+        ));
+        curtain.update_property(&[
+            gtk::accessible::Property::Label(crate::i18n::label("Clear prepared files")),
+            gtk::accessible::Property::Description(crate::i18n::label("Choose target devices")),
+        ]);
         curtain.set_widget_name("selection-curtain");
         curtain.set_action_name(Some("panel.discard"));
         curtain.add_css_class("selection-curtain");
@@ -1037,11 +1038,11 @@ impl Panel {
         self.pages.set_visible(full);
         self.box_widget("compact").set_visible(true);
         let devices = self.button("quick-devices");
-        devices.set_tooltip_text(Some(if full {
+        devices.set_tooltip_text(Some(crate::i18n::label(if full {
             "Hide devices and transfers"
         } else {
             "Show devices and transfers"
-        }));
+        })));
         let attention = !preview && !full && model.attention.has_unreviewed();
         if attention {
             devices.add_css_class("devices-attention");
@@ -1085,6 +1086,7 @@ impl Panel {
         } else {
             "Review an incoming request or become visible for one minute"
         };
+        let description = crate::i18n::label(description);
         receive.set_tooltip_text(Some(description));
         receive.update_property(&[gtk::accessible::Property::Description(description)]);
         let visibility_action = self
@@ -1176,7 +1178,7 @@ impl Panel {
         self.button("discard").set_sensitive(ready && selected);
         self.button("files").set_visible(selected && can_add);
         self.button("folder").set_visible(false);
-        self.button("files").set_label("Add files…");
+        self.button("files").set_label(crate::i18n::label("Add files…"));
         self.button("discard").set_visible(selected);
         for (name, enabled) in [
             ("files", ready && can_add),

@@ -19,6 +19,7 @@ mod settings_errors;
 mod settings_residual;
 mod settings_state;
 mod settings_warning;
+mod source_preparation;
 mod transfer_dynamic;
 mod transfer_rows;
 mod tray_chrome;
@@ -169,6 +170,15 @@ pub(crate) fn transfer_progress(transferred: u64, total: u64, kind: ProgressKind
 
 pub(crate) fn transfer_phase(source: &'static str) -> &'static str {
     transfer_dynamic::phase_for(active(), source)
+}
+
+/// Prepared local selection only; never implies a sent or completed transfer.
+pub(crate) fn prepared_files(file_count: u32) -> String {
+    source_preparation::files_for(active(), file_count)
+}
+
+pub(crate) fn prepared_content(is_link: bool, byte_count: u64) -> String {
+    source_preparation::content_for(active(), is_link, byte_count)
 }
 
 /// Exact saved/completed-file count, never an inferred delivery result.
@@ -679,6 +689,9 @@ fn translated(locale: &str, source: &'static str) -> &'static str {
         return value;
     }
     if let Some(value) = row_empty::translated(locale, source) {
+        return value;
+    }
+    if let Some(value) = source_preparation::translated(locale, source) {
         return value;
     }
     if let Some(value) = tray_chrome::translated(locale, source) {
@@ -1401,6 +1414,43 @@ mod tests {
                 assert_eq!(
                     translated(locale, source),
                     row_empty::translated(locale, source).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn prepared_source_keys_do_not_shadow_existing_native_ui_labels() {
+        for source in source_preparation::KEYS {
+            assert!(!MENU_KEYS.contains(&source));
+            assert!(!REVIEW_KEYS.contains(&source));
+            assert!(!COMPOSE_KEYS.contains(&source));
+            for other in [
+                &history::KEYS[..],
+                &image::KEYS[..],
+                &settings::KEYS[..],
+                &settings_state::KEYS[..],
+                &settings_errors::KEYS[..],
+                &settings_warning::KEYS[..],
+                &settings_residual::KEYS[..],
+                &transfer_rows::KEYS[..],
+                &reveal_notices::KEYS[..],
+                &visibility::KEYS[..],
+                &menu_extra::KEYS[..],
+                &operation_notices::KEYS[..],
+                &panel_status::KEYS[..],
+                &client_errors::KEYS[..],
+                &panel_cards::KEYS[..],
+                &panel_details::KEYS[..],
+                &row_empty::KEYS[..],
+                &tray_chrome::KEYS[..],
+            ] {
+                assert!(!other.contains(&source), "{source}");
+            }
+            for locale in LOCALES {
+                assert_eq!(
+                    translated(locale, source),
+                    source_preparation::translated(locale, source).unwrap()
                 );
             }
         }

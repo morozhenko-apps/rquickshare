@@ -5,6 +5,27 @@ use rqs_lib::service::{
 };
 
 #[test]
+fn prepared_source_summary_uses_exact_localized_counts_without_mutating_source_kind() {
+    use rqs_lib::sessions::details::PayloadKind;
+    for count in [0, 1, 2, u32::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Files, count, u64::MAX),
+            crate::i18n::prepared_files(count)
+        );
+    }
+    for bytes in [0, 1, 1024, u64::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Text, u32::MAX, bytes),
+            crate::i18n::prepared_content(false, bytes)
+        );
+        assert_eq!(
+            source_summary(PayloadKind::Url, u32::MAX, bytes),
+            crate::i18n::prepared_content(true, bytes)
+        );
+    }
+}
+
+#[test]
 fn given_complete_view_and_busy_flags_when_controls_are_projected_then_only_synchronized_live_idle_state_is_mutable(
 ) {
     // Arrange
@@ -207,6 +228,29 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert_eq!(
         panel.curtain.action_name().as_deref(),
         Some("panel.discard")
+    );
+    assert_eq!(
+        panel.reconnect_button.label().as_deref(),
+        Some(crate::i18n::label("Retry connection"))
+    );
+    let expected_curtain = format!(
+        "{}\n{}",
+        crate::i18n::label("Choose target devices"),
+        crate::i18n::label("Clear prepared files")
+    );
+    assert_eq!(
+        panel.curtain.label().as_deref(),
+        Some(expected_curtain.as_str())
+    );
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Hide devices and transfers"))
+    );
+    assert_eq!(
+        panel.button("quick-receive").tooltip_text().as_deref(),
+        Some(crate::i18n::label(
+            "Review an incoming request or become visible for one minute"
+        ))
     );
     assert!(!panel.box_widget("source").get_visible());
     for removed in ["header", "mode", "settings-button", "close", "send-entry"] {
