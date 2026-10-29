@@ -142,17 +142,10 @@ impl Editor {
             .transient_for(&panel.window)
             .application(&panel.window.application().unwrap())
             .default_width(760)
-            .resizable(true)
+            .resizable(false)
             .build();
+        window.set_icon_name(Some(crate::tray::ICON_NAME));
         let content = gtk::Box::new(gtk::Orientation::Vertical, 10);
-        let about = gtk::Button::with_label(crate::i18n::label("About rQuickShare"));
-        about.set_halign(gtk::Align::Start);
-        let weak = Rc::downgrade(panel);
-        about.connect_clicked(move |_| {
-            if let Some(panel) = weak.upgrade() {
-                panel.show_about();
-            }
-        });
         content.set_margin_top(20);
         content.set_margin_bottom(20);
         content.set_margin_start(20);
@@ -222,15 +215,6 @@ impl Editor {
             .directory
             .set_ellipsize(gtk::pango::EllipsizeMode::Middle);
         editor.directory.set_max_width_chars(44);
-        let brand = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        let logo = gtk::Image::from_icon_name(crate::tray::ICON_NAME);
-        logo.set_pixel_size(32);
-        brand.append(&logo);
-        let title = label("rQuickShare");
-        title.add_css_class("title-2");
-        brand.append(&title);
-        content.append(&brand);
-        content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
         let navigation = gtk::StackSidebar::new();
         navigation.set_stack(&pages);
         navigation.set_size_request(160, -1);
@@ -306,18 +290,6 @@ impl Editor {
         advanced.append(&editor.restart);
         advanced.append(&editor.login_reload);
         pages.add_titled(&advanced, Some("advanced"), crate::i18n::label("Advanced"));
-        let information = section();
-        information.append(&label(&format!(
-            "rQuickShare {}",
-            env!("CARGO_PKG_VERSION")
-        )));
-        information.append(&label(crate::i18n::label(
-            "Send and receive nearby files and text.
-GNU General Public License v3.0.",
-        )));
-        information.append(&about);
-        pages.add_titled(&information, Some("about"), crate::i18n::label("About"));
-        content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
         content.append(&editor.status);
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         actions.set_halign(gtk::Align::End);
@@ -585,13 +557,19 @@ GNU General Public License v3.0.",
         self.file.borrow_mut().take();
         self.recover.set_active(false);
         self.dirty.set(false);
-        self.status.set_text(crate::i18n::label(status(&view)));
+        let message = status(&view);
+        self.status.set_text(if message == "Saved and applied." {
+            ""
+        } else {
+            crate::i18n::label(message)
+        });
         self.base.replace(Some(view));
         self.loading.set(false);
         self.refresh();
     }
     pub fn refresh(&self) {
         self.refresh_login();
+        self.status.set_visible(!self.status.text().is_empty());
         let Some(panel) = self.panel.upgrade() else {
             return;
         };
@@ -981,7 +959,7 @@ pub(super) fn verify_editor_smoke(editor: &Editor) {
         assert!(output.is_absolute());
         let panel = editor.panel.upgrade().unwrap();
         let window = panel.settings.borrow().as_ref().unwrap().clone();
-        for page in ["general", "receiving", "advanced", "about"] {
+        for page in ["general", "receiving", "advanced"] {
             editor.sections.set_visible_child_name(page);
             window.queue_draw();
             let captured = Rc::new(Cell::new(false));
@@ -1031,7 +1009,7 @@ pub(super) fn verify_editor_smoke(editor: &Editor) {
         assert_eq!(editor.name.text(), staged);
         assert_eq!(panel.drawer(), before);
     }
-    assert_eq!(editor.sections.pages().n_items(), 4);
+    assert_eq!(editor.sections.pages().n_items(), 3);
     assert!(!editor.save.is_sensitive()); // No daemon cannot acknowledge this edit.
     editor.busy.set(true);
     editor.cancel_draft();
