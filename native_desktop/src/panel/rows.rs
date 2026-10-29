@@ -16,6 +16,14 @@ impl Rows {
         self.entries.clear();
     }
 }
+
+/// Empty-page entries are keyed by stable source IDs, not by rendered language.
+/// Update the owned GtkLabel on every render even when the entry is reused.
+fn refresh_empty_caption(entry: &Entry, source: &'static str) {
+    if let Some(text) = entry.root.first_child().and_downcast::<gtk::Label>() {
+        text.set_label(crate::i18n::label(source));
+    }
+}
 // Return the smallest valid scroll movement that fully reveals a keyed row.
 // An oversized row is aligned to its start; any already visible row is unchanged.
 fn reveal_vertical_interval(
@@ -810,6 +818,7 @@ impl Panel {
                         endpoint: None,
                     }
                 });
+                refresh_empty_caption(entry, title);
                 pages.get_mut(page).unwrap().push(entry.root.clone());
                 used.insert(key);
             }
@@ -884,6 +893,29 @@ mod metadata_label_tests {
 
 #[cfg(test)]
 pub(super) fn verify_keyed_layout() {
+    // The cached empty card must repaint from the canonical source key.
+    // Reusing the same row after a language switch must never preserve stale text.
+    for source in [
+        "No nearby devices. Make the receiving device visible.",
+        "No incoming requests",
+        "No transfers",
+    ] {
+        let root = card();
+        let caption = label("Stale English label");
+        root.append(&caption);
+        let entry = Entry {
+            root,
+            transfer: None,
+            endpoint: None,
+        };
+        refresh_empty_caption(&entry, source);
+        assert_eq!(caption.text(), crate::i18n::label(source));
+        assert!(!caption.is_selectable());
+        caption.set_label("Stale English label");
+        refresh_empty_caption(&entry, source);
+        assert_eq!(caption.text(), crate::i18n::label(source));
+        assert_eq!(entry.root.first_child(), Some(caption.upcast()));
+    }
     // Arrange
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let first = card();

@@ -3,6 +3,7 @@
 //! semantics, the daemon protocol, or the user's persisted settings.
 //! This is the first menu slice of #17, NOT completion of 20-locale GTK coverage.
 
+mod about;
 mod client_errors;
 mod dynamic;
 mod history;
@@ -191,6 +192,11 @@ pub(crate) fn saved_files_tally(saved: usize, total: usize) -> String {
 
 pub(crate) fn label(source: &'static str) -> &'static str {
     translated(active(), source)
+}
+
+/// Static, locale-specific About attribution; never sourced from peer metadata.
+pub(crate) fn about_description() -> &'static str {
+    about::description(active())
 }
 
 fn translated_review(locale: &str) -> &'static [&'static str; 8] {

@@ -44,8 +44,8 @@ class NativeDebTests(unittest.TestCase):
         for left, right in [(1, 2), (2, 10), (10, 2147483647)]:
             subprocess.run(["dpkg", "--compare-versions", package.native_version("1.0.0", left), "lt", package.native_version("1.0.0", right)], check=True)
 
-    def test_given_revision3_0_9_0_candidate_when_versioned_then_ordering_preserves_installed_upgrade(self):
-        # This development candidate must upgrade installed 0.9.0-2 without reusing its identity.
+    def test_given_revision4_0_9_0_candidate_when_versioned_then_ordering_preserves_installed_upgrade(self):
+        # This development candidate must upgrade installed 0.9.0-3 without reusing its identity.
         import tomllib
         root = Path(__file__).parents[2]
         cargo = tomllib.loads((root / "native_desktop/Cargo.toml").read_text())
@@ -53,21 +53,21 @@ class NativeDebTests(unittest.TestCase):
         revision = tomllib.loads((root / "native_desktop/packaging/release.toml").read_text())["revision"]
         version = cargo["package"]["version"]
         self.assertEqual(version, "0.9.0")
-        self.assertEqual(revision, 3)
+        self.assertEqual(revision, 4)
         self.assertEqual(
             [entry["version"] for entry in locked["package"] if entry["name"] == "rquickshare-desktop"],
             [version],
         )
         release = package.native_version(version, revision)
-        self.assertEqual(release, "0.9.0-3")
+        self.assertEqual(release, "0.9.0-4")
         package.validate_metadata(fields() | {"Version": release})
         # Real dpkg ordering: the installed public build and its former debug
         # variant sort lower than this candidate, not equal to it.
-        for older in ["0.9.0-1", "0.9.0-1.debug", "0.9.0-2", "0.9.0-2.debug"]:
+        for older in ["0.9.0-1", "0.9.0-1.debug", "0.9.0-2", "0.9.0-2.debug", "0.9.0-3", "0.9.0-3.debug"]:
             subprocess.run(["dpkg", "--compare-versions", older, "lt", release], check=True)
         # Candidate never shadows a later revision, a debug identity, or a
         # higher product SemVer. Historical 1.0.0 diagnostic builds stay higher.
-        for newer in ["0.9.0-3.debug", "0.9.0-4", "0.9.1-1", "1.0.0-1.debug", "1.0.0-2.debug", "1.0.0-2"]:
+        for newer in ["0.9.0-4.debug", "0.9.0-5", "0.9.1-1", "1.0.0-1.debug", "1.0.0-2.debug", "1.0.0-2"]:
             subprocess.run(["dpkg", "--compare-versions", release, "lt", newer], check=True)
 
     def test_given_selected_assets_when_validated_then_process_ownership_supports_only_opt_in_login_without_direct_fallback(self):
@@ -91,7 +91,7 @@ class NativeDebTests(unittest.TestCase):
         )
         package.validate_localized_desktop_entries(app, service)
         self.assertEqual(len(package.DESKTOP_LOCALES), 20)
-        self.assertEqual(app["Desktop Entry"]["Name"], "rQuickShare")
+        self.assertEqual(app["Desktop Entry"]["Name"], "rQuickShare Native")
         self.assertEqual(
             app["Desktop Entry"]["Exec"], "/usr/bin/rquickshare"
         )

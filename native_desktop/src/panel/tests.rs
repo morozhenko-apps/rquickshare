@@ -570,12 +570,16 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     panel.actions.activate_action("about", None);
     let about = panel.about.borrow().as_ref().unwrap().clone();
     assert!(about.is_visible());
-    assert_eq!(about.program_name().as_deref(), Some("rQuickShare"));
+    assert_eq!(about.program_name().as_deref(), Some("rQuickShare Native"));
     assert_eq!(about.version().as_deref(), Some(env!("CARGO_PKG_VERSION")));
     assert_eq!(
         about.comments().as_deref(),
-        Some("rQuickShare Native is the native Linux edition of this independent fork. Based on Martichou/rquickshare. Maintained by morozhenko apps.")
+        Some(crate::i18n::about_description())
     );
+    // The author and upstream attribution live in the main About description.
+    // GTK must not create a separate Credits page from the authors property.
+    assert!(about.authors().is_empty());
+    assert!(!about.comments().unwrap().contains("Linux"));
     assert_eq!(
         about.logo_icon_name().as_deref(),
         Some(crate::tray::ICON_NAME)

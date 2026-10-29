@@ -1045,6 +1045,7 @@ impl Panel {
             image.retranslate();
         }
         if let Some(about) = self.about.borrow().as_ref() {
+            about.set_comments(Some(crate::i18n::about_description()));
             about.set_website_label("morozhenko.com");
         }
         if let Some(handle) = self.tray_menu.borrow().as_ref() {

@@ -368,12 +368,9 @@ impl Panel {
         let about = gtk::AboutDialog::builder()
             .transient_for(&self.window)
             .application(&self.window.application().unwrap())
-            .program_name("rQuickShare")
+            .program_name("rQuickShare Native")
             .version(env!("CARGO_PKG_VERSION"))
-            .comments(
-                "rQuickShare Native is the native Linux edition of this independent fork. Based on Martichou/rquickshare. Maintained by morozhenko apps.",
-            )
-            .authors(["morozhenko apps"])
+            .comments(crate::i18n::about_description())
             .logo_icon_name(crate::tray::ICON_NAME)
             .license_type(gtk::License::Gpl30Only)
             .website("https://morozhenko.com")
