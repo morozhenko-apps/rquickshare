@@ -63,7 +63,11 @@ impl Panel {
                 .borrow()
                 .as_ref()
                 .is_some_and(|w| w.is_visible())
-            && !self.about.borrow().as_ref().is_some_and(|w| w.window.is_visible())
+            && !self
+                .about
+                .borrow()
+                .as_ref()
+                .is_some_and(|w| w.window.is_visible())
             && !self
                 .text_review
                 .borrow()

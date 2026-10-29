@@ -573,7 +573,11 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert_eq!(about.name.text(), "rQuickShare Native");
     assert_eq!(
         about.version.text(),
-        format!("{} {}", crate::i18n::about_label("Version"), env!("CARGO_PKG_VERSION"))
+        format!(
+            "{} {}",
+            crate::i18n::about_label("Version"),
+            env!("CARGO_PKG_VERSION")
+        )
     );
     assert!(about.author.text().contains("(morozhenko)"));
     assert!(about.author.text().contains(
@@ -583,7 +587,10 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert_eq!(about.website.uri(), "https://morozhenko.com");
     assert_eq!(about.website.label().as_deref(), Some("morozhenko.com ↗"));
     assert!(about.license.text().contains("GNU GPLv3"));
-    assert_eq!(about.icon.icon_name().as_deref(), Some(crate::tray::ICON_NAME));
+    assert_eq!(
+        about.icon.icon_name().as_deref(),
+        Some(crate::tray::ICON_NAME)
+    );
     assert!(!about.window.is_resizable());
     assert!(about.window.title().unwrap().contains("Native"));
     assert!(!about.window.child().unwrap().is::<gtk::Stack>());
@@ -664,16 +671,12 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     stale.set_text("stale language from cached render");
     let epoch = panel.model.borrow().state.view.as_ref().unwrap().epoch;
     panel.retranslate();
-    assert!(
-        !labels(&panel.box_widget("incoming"))
-            .iter()
-            .any(|item| item.text() == "stale language from cached render")
-    );
-    assert!(
-        labels(&panel.box_widget("incoming"))
-            .iter()
-            .any(|item| item.text() == crate::i18n::label(empty_source))
-    );
+    assert!(!labels(&panel.box_widget("incoming"))
+        .iter()
+        .any(|item| item.text() == "stale language from cached render"));
+    assert!(labels(&panel.box_widget("incoming"))
+        .iter()
+        .any(|item| item.text() == crate::i18n::label(empty_source)));
     assert_eq!(
         panel.model.borrow().state.view.as_ref().unwrap().epoch,
         epoch
