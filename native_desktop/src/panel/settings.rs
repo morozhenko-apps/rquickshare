@@ -495,20 +495,28 @@ GNU General Public License v3.0.",
             }
             self.login_action(true);
         } else {
-            if self.language_changed() {
-                if crate::ui_language::save(self.language.selected() as u8).is_err() {
-                    self.confirming.set(false);
-                    self.status.set_text(crate::i18n::label(
-                        "Cannot save interface language. Check configuration permissions.",
-                    ));
-                    self.refresh();
-                    return;
-                }
+            let changed = self.language_changed();
+            if changed && crate::ui_language::save(self.language.selected() as u8).is_err() {
+                self.confirming.set(false);
+                self.status.set_text(crate::i18n::label(
+                    "Cannot save interface language. Check configuration permissions.",
+                ));
+                self.refresh();
+                return;
             }
             self.confirming.set(false);
             self.window.set_visible(false);
             if let Some(panel) = self.panel.upgrade() {
-                panel.retranslate();
+                if changed {
+                    panel.retranslate();
+                    // Only the closed secondary editor is reconstructed on next open.
+                    // The panel, daemon, prepared sources and transfer owners are retained.
+                    self.closed.set(true);
+                    panel.settings_owner.borrow_mut().take();
+                    if let Some(window) = panel.settings.borrow_mut().take() {
+                        window.destroy();
+                    }
+                }
                 panel.apply_presentation();
             }
         }
