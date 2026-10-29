@@ -1649,6 +1649,26 @@ mod tests {
     }
 
     #[test]
+    fn given_all_locales_when_security_and_transfer_actions_are_compared_then_distinct_outcomes_remain_distinct() {
+        for locale in LOCALES {
+            for (left, right) in [
+                ("Receive", "Send"),
+                ("Visible", "Hidden"),
+                ("Accept", "Decline"),
+                ("Completed", "Failed"),
+                ("Start at sign-in", "Apply login start"),
+                ("Saved and applied.", "Save outcome is uncertain. Retry the same save before making another edit."),
+            ] {
+                assert_ne!(
+                    translated(locale, left),
+                    translated(locale, right),
+                    "{locale}: distinct actions/states collapsed: {left} vs {right}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn russian_and_portuguese_menu_labels_preserve_operation_meanings() {
         assert_eq!(translated("ru", "Receive files"), "Получить файлы");
         assert_eq!(translated("ru", "Send files…"), "Отправить файлы…");
