@@ -649,6 +649,31 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     );
     panel.sending.popdown();
     panel.render();
+    // Regression: the localized empty card is keyed by its English source.
+    // Repaint must replace a stale GTK label without altering the Core view.
+    let empty_source = "No nearby devices. Make the receiving device visible.";
+    let nearby = panel.box_widget("nearby");
+    let stale = labels(&nearby)
+        .into_iter()
+        .find(|item| item.text() == crate::i18n::label(empty_source))
+        .expect("empty nearby card");
+    stale.set_text("stale language from cached render");
+    let epoch = panel.model.borrow().state.view.as_ref().unwrap().epoch;
+    panel.retranslate();
+    assert!(
+        !labels(&panel.box_widget("nearby"))
+            .iter()
+            .any(|item| item.text() == "stale language from cached render")
+    );
+    assert!(
+        labels(&panel.box_widget("nearby"))
+            .iter()
+            .any(|item| item.text() == crate::i18n::label(empty_source))
+    );
+    assert_eq!(
+        panel.model.borrow().state.view.as_ref().unwrap().epoch,
+        epoch
+    );
     fn assert_no_choices(widget: &gtk::Widget) {
         assert!(!widget.is::<gtk::CheckButton>());
         let mut child = widget.first_child();
