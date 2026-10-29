@@ -359,3 +359,27 @@ async fn given_real_menu_when_reads_clicks_groups_or_fd_abuse_arrive_then_order_
     client.close().await.unwrap();
     server.close().await.unwrap();
 }
+
+#[test]
+fn given_language_refresh_when_projection_is_unchanged_then_tray_revision_advances_once() {
+    let (sender, receiver) = tokio::sync::watch::channel(State::default());
+    let handle = Handle { state: sender };
+    let previous = *receiver.borrow();
+    handle.refresh_labels();
+    let updated = *receiver.borrow();
+    assert_eq!(updated.projection, previous.projection);
+    assert_eq!(updated.revision, previous.revision + 1);
+    handle.publish(previous.projection);
+    assert_eq!(receiver.borrow().revision, updated.revision);
+}
+
+#[test]
+fn given_revision_limit_when_language_changes_then_menu_fails_closed_without_wrapping() {
+    let mut initial = State::default();
+    initial.revision = u32::MAX;
+    let (sender, receiver) = tokio::sync::watch::channel(initial);
+    let handle = Handle { state: sender };
+    handle.refresh_labels();
+    assert_eq!(receiver.borrow().revision, u32::MAX);
+    assert!(receiver.borrow().exhausted);
+}
