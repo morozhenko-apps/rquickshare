@@ -40,7 +40,11 @@ jobs:
         run: |
           set -euo pipefail
           version="$(python3 scripts/native_release_tag.py version "$GITHUB_REF_NAME")"
-          test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag
+          # checkout@v5 may replace its local tag ref with a commit checkout.
+          # Fetch the remote annotated tag object into an independent validation ref.
+          git fetch --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/release-validation/native-tag"
+          test "$(git cat-file -t refs/release-validation/native-tag)" = tag
+          [[ "$(git rev-parse refs/release-validation/native-tag^{commit})" == "$GITHUB_SHA" ]] || exit 1
           git fetch --no-tags origin master
           [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/master^{commit})" ]] || exit 1
           test "$(python3 scripts/native_release_tag.py tag "$version")" = "$GITHUB_REF_NAME"
