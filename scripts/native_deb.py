@@ -95,7 +95,7 @@ def validate_localized_desktop_entries(application, service):
     """Reject locale drift and changes to packaged launch/consent boundaries."""
     app_base = {
         "Type": "Application",
-        "Name": "rQuickShare",
+        "Name": "rQuickShare Native",
         "Comment": "Share files and text with nearby devices",
         "Exec": "/usr/bin/rquickshare",
         "Icon": "rquickshare",

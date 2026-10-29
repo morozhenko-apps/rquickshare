@@ -26,7 +26,7 @@ ASSET_PATHS = {
 SECTIONS = (
     ("application", "Desktop Entry", "Comment", {
         "Type": "Application",
-        "Name": "rQuickShare",
+        "Name": "rQuickShare Native",
         "Comment": "Share files and text with nearby devices",
         "Exec": "/usr/bin/rquickshare",
         "Icon": "rquickshare",
