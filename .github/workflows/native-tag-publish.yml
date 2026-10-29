@@ -61,7 +61,7 @@ jobs:
         run: node --test scripts/tests/*.test.mjs
 
   mode-b:
-    name: Full Mode B (10x) on release tag
+    name: Mode B stable 1x and race-sensitive 10x on release tag
     needs: admission
     uses: ./.github/workflows/mode-b.yml
     permissions:
