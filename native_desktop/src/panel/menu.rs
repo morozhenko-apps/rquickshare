@@ -310,9 +310,9 @@ impl Panel {
         let secondary = gio::Menu::new();
         for (name, title) in [
             ("settings", "Settings…"),
-            ("about", "About rQuickShare"),
+            ("about", "About"),
             ("hide", "Hide card"),
-            ("quit", "Quit panel"),
+            ("quit", "Quit"),
         ] {
             secondary.append(
                 Some(crate::i18n::label(title)),

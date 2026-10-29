@@ -27,6 +27,7 @@ impl About {
             .resizable(false)
             .build();
         window.set_icon_name(Some(crate::tray::ICON_NAME));
+        super::chrome::close_only_titlebar(&window);
         window.set_hide_on_close(true);
 
         let body = gtk::Box::new(gtk::Orientation::Vertical, 7);

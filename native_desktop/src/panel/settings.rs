@@ -145,6 +145,7 @@ impl Editor {
             .resizable(false)
             .build();
         window.set_icon_name(Some(crate::tray::ICON_NAME));
+        super::chrome::close_only_titlebar(&window);
         let content = gtk::Box::new(gtk::Orientation::Vertical, 10);
         content.set_margin_top(20);
         content.set_margin_bottom(20);

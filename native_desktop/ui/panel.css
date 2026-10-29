@@ -77,7 +77,7 @@ button.selection-curtain {
 
 /* Single-page native About, with RepoTicker-like centered hierarchy. */
 .rqs-about-name { font-size: 19px; font-weight: 600; margin-top: 2px; }
-.rqs-about-muted { font-size: 12px; color: alpha(@theme_fg_color, 0.56); }
+.rqs-about-muted { font-size: 13px; color: @theme_fg_color; }
 button.rqs-about-website {
   font-size: 13px;
   color: @theme_fg_color;

@@ -23,6 +23,7 @@ use tokio::runtime::Handle;
 
 mod about;
 mod backdrop;
+mod chrome;
 mod compose;
 mod countdown;
 mod idle;
