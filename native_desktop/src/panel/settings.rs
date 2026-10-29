@@ -12,6 +12,7 @@ pub(super) struct Editor {
     panel: Weak<Panel>,
     base: RefCell<Option<SettingsView>>,
     visibility: gtk::DropDown,
+    language: gtk::DropDown,
     name: gtk::Entry,
     name_hint: gtk::Label,
     port: gtk::Entry,
@@ -164,6 +165,7 @@ impl Editor {
         let editor = Rc::new(Self {
             panel: Rc::downgrade(panel),
             base: RefCell::new(None),
+            language: gtk::DropDown::from_strings(&crate::ui_language::CHOICES),
             visibility: gtk::DropDown::from_strings(&[
                 crate::i18n::label("Select visibility…"),
                 crate::i18n::label("Visible"),
@@ -213,6 +215,7 @@ impl Editor {
             login_task: RefCell::new(None),
         });
         editor.visibility.set_selected(0);
+        editor.language.set_selected(u32::from(crate::ui_language::selection()));
         editor.name_hint.set_selectable(false);
         editor.directory.set_wrap(false);
         editor
@@ -252,6 +255,11 @@ impl Editor {
             column.append(&row);
         };
         let general = section();
+        field(
+            &general,
+            crate::i18n::label("Language"),
+            editor.language.upcast_ref(),
+        );
         field(
             &general,
             crate::i18n::label("Device name"),
@@ -391,6 +399,12 @@ GNU General Public License v3.0.",
             }
         });
         let weak = Rc::downgrade(&editor);
+        editor.language.connect_selected_notify(move |_| {
+            if let Some(editor) = weak.upgrade() {
+                editor.refresh();
+            }
+        });
+        let weak = Rc::downgrade(&editor);
         editor.choose.connect_clicked(move |_| {
             if let Some(editor) = weak.upgrade() {
                 editor.choose_folder();
@@ -440,6 +454,10 @@ GNU General Public License v3.0.",
             self.act(Operation::Reload);
         }
     }
+    fn language_changed(&self) -> bool {
+        self.language.selected() != u32::from(crate::ui_language::selection())
+    }
+
     fn needs_native_save(&self) -> bool {
         self.dirty.get()
             || self.base.borrow().as_ref().is_some_and(|view| {
@@ -456,7 +474,9 @@ GNU General Public License v3.0.",
             return;
         }
         self.confirming.set(true);
-        if self.needs_native_save() {
+        if self.needs_native_save()
+            && !(self.language_changed() && !self.dirty.get() && !self.login_dirty.get())
+        {
             self.act(Operation::Save);
         } else {
             self.finish_confirmation();
@@ -475,9 +495,20 @@ GNU General Public License v3.0.",
             }
             self.login_action(true);
         } else {
+            if self.language_changed() {
+                if crate::ui_language::save(self.language.selected() as u8).is_err() {
+                    self.confirming.set(false);
+                    self.status.set_text(crate::i18n::label(
+                        "Cannot save interface language. Check configuration permissions.",
+                    ));
+                    self.refresh();
+                    return;
+                }
+            }
             self.confirming.set(false);
             self.window.set_visible(false);
             if let Some(panel) = self.panel.upgrade() {
+                panel.retranslate();
                 panel.apply_presentation();
             }
         }
@@ -488,6 +519,7 @@ GNU General Public License v3.0.",
         }
         self.confirming.set(false);
         self.login_dirty.set(false);
+        self.language.set_selected(u32::from(crate::ui_language::selection()));
         if let Some(panel) = self.panel.upgrade() {
             let saved = panel.model.borrow().state.settings.clone();
             if let Some(view) = saved {
@@ -599,12 +631,14 @@ GNU General Public License v3.0.",
             && parse_port(self.port.text().as_str()).is_ok()
             && !model.state.settings_pending
             && (!damaged || self.recover.is_active());
+        let language_only = self.language_changed() && !self.dirty.get() && !self.login_dirty.get();
         self.save.set_sensitive(
             !self.confirming.get()
                 && !self.busy.get()
                 && !self.login_busy.get()
-                && (!self.needs_native_save() || native_ready)
-                && (!self.login_dirty.get() || self.login_apply.is_sensitive()),
+                && (language_only
+                    || ((!self.needs_native_save() || native_ready)
+                        && (!self.login_dirty.get() || self.login_apply.is_sensitive()))),
         );
         self.cancel
             .set_sensitive(!self.busy.get() && !self.login_busy.get());
