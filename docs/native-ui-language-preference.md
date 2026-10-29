@@ -52,3 +52,11 @@ Plan before code:
 4. At final gate, nightly Rust formatting, strict Clippy and native GTK widget suite, Python native release tests, and one stable Preflight. If any test fails, use the failure log to diagnose and fix root cause without masking it. Build 0.9.0-3 only after green source gate.
 
 No changes to public API, daemon persistence, IPC, authentication or transport. Rollback: revert secondary-window methods and call sites independently from the previously authorized client-only preference store. No master/tag/R2 signing or publication.
+
+## Implementation checkpoint: in-place secondary UI (2026-10-29)
+
+On dev, native client UI now sends a post-OK locale refresh to History, Received Text, Send Text and Send Image windows in addition to the card, GTK popovers and DBusMenu. No window is recreated, pending clipboard/selection state is retained. History stores its Refresh button and invalidates the rendered rows. Received Text and Send Text keep stable source keys for the current status; Send Image stores either the original source key or captured dimensions/byte count separately and rebuilds the localized explanation without re-reading the clipboard.
+
+Changes were implemented in separate executable commits (transfers.rs c9272e9a, text.rs 7028f886, compose.rs 199cb021, image.rs 959a721d, panel.rs a58bcbbf), plus test/format followups 9f95b088, 5c1b1aea, bf82c291, 9ecc6e3a and 47a60cda. This checkpoint records source changes only, not a completed CI result. Do not claim a live KDE verified language switch, full bidirectional controls in Arabic, or human-reviewed translations without installed evidence.
+
+The separate Python source inventory (scripts/tests/test_native_i18n_catalog.py) checks 19 static table modules x 19 translated locales and maps literal i18n calls to canonical keys. Rust semantic test compares distinct consent/actions and statuses across all 20 locales. This is agent-led automated review, not native-speaker certification. The next completion condition is exact-source Preflight and GTK/packaging gate plus one representative installed KDE/Pixel UI test. The previous 0.9.0-2 physical 13/14 PASS must not be reused as proof of these new UI changes.
