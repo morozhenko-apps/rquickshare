@@ -5,6 +5,14 @@ pub(super) const KEYS: [&str; 6] = [
     "Files…",
     "Text or link…",
     "Project website",
+    "Tray About",
+    "Tray Quit",
+];
+const ENGLISH: [&str; 6] = [
+    "Hide card",
+    "Files…",
+    "Text or link…",
+    "Project website",
     "About",
     "Quit",
 ];
@@ -164,7 +172,7 @@ pub(super) fn translated(locale: &str, source: &str) -> Option<&'static str> {
             "حول",
             "خروج",
         ],
-        _ => &KEYS,
+        _ => &ENGLISH,
     };
     Some(row[index])
 }
@@ -195,12 +203,14 @@ mod tests {
         assert_eq!(translated("pt", KEYS[2]), Some("Texto ou ligação…"));
         assert_eq!(translated("ar", KEYS[3]), Some("موقع المشروع"));
         assert_eq!(translated("en", KEYS[1]), Some("Files…"));
-        assert_eq!(translated("ru", "About"), Some("О программе"));
-        assert_eq!(translated("ru", "Quit"), Some("Выход"));
-        assert_eq!(translated("pt", "About"), Some("Sobre"));
-        assert_eq!(translated("en", "Quit"), Some("Quit"));
+        assert_eq!(translated("ru", "Tray About"), Some("О программе"));
+        assert_eq!(translated("ru", "Tray Quit"), Some("Выход"));
+        assert_eq!(translated("pt", "Tray About"), Some("Sobre"));
+        assert_eq!(translated("en", "Tray Quit"), Some("Quit"));
+        assert_eq!(translated("en", "Tray About"), Some("About"));
+        assert_eq!(translated("pt-BR", "Tray About"), Some("About"));
         for locale in LOCALES {
-            assert_ne!(translated(locale, "About"), translated(locale, "Quit"));
+            assert_ne!(translated(locale, "Tray About"), translated(locale, "Tray Quit"));
         }
         assert_eq!(translated("pt-BR", KEYS[0]), Some(KEYS[0]));
         assert_eq!(translated("zh-Hans", KEYS[3]), Some(KEYS[3]));

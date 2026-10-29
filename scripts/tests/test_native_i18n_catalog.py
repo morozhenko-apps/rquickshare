@@ -66,7 +66,7 @@ class NativeI18nCatalogTests(unittest.TestCase):
     def test_given_about_theme_when_metadata_is_drawn_then_contrast_uses_full_foreground(self):
         # A themed solid foreground remains readable in both light and dark KDE.
         css = (ROOT / "native_desktop" / "ui" / "panel.css").read_text(encoding="utf-8")
-        block = re.search(r"\\.rqs-about-muted\\s*\\{([^}]+)\\}", css)
+        block = re.search(r"\.rqs-about-muted\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block, "About metadata CSS selector is required")
         rules = dict(
             item.strip().split(":", 1)

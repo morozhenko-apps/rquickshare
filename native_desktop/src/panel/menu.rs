@@ -310,9 +310,9 @@ impl Panel {
         let secondary = gio::Menu::new();
         for (name, title) in [
             ("settings", "Settings…"),
-            ("about", "About"),
+            ("about", "Tray About"),
             ("hide", "Hide card"),
-            ("quit", "Quit"),
+            ("quit", "Tray Quit"),
         ] {
             secondary.append(
                 Some(crate::i18n::label(title)),
