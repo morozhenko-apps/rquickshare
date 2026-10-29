@@ -67,3 +67,14 @@ Terminal CI failures inspected at 19:35:25 and 19:36:05 Lisbon (UTC+0):
 - GTK #40941463331 at 0419fd8f: 171/172 passed; the i18n catalog invariant found "About" duplicated between Settings and menu_extra.
 - Preflight #40941562152 at 5c511078: 90/91 Python methods passed; a newly authored CSS selector test erroneously used double-escaped regex.
 Root fixes in executable commit 1e0825c6: unique menu source identifiers "Tray About"/"Tray Quit", separate English user-visible fallback "About"/"Quit" (20-language localized entries and panel.about/panel.quit actions unchanged); correct CSS regex without weakening the required solid theme-foreground check. No changes to Core, identity, BWU or #8/#16. New terminal CI is **not yet established**, and no protected release has been published.
+
+## Final source-gate timestamp and public-release handoff
+
+Source SHA `a941e468d407f2037239299c36f977afbca1df73` has two automatically triggered exact-source checks:
+- [Native GTK #40943358536](https://github.com/morozhenko-apps/rquickshare/actions/runs/40943358536): **2026-10-29 19:48:18 Europe/Lisbon (UTC+0)**; IN PROGRESS at the one-time status check.
+- [Preflight #40943358595](https://github.com/morozhenko-apps/rquickshare/actions/runs/40943358595): **2026-10-29 19:48:18 Europe/Lisbon (UTC+0)**; PENDING at the same check.
+Both statuses are unverified until terminal. Previous GTK #40942701187 was terminal failure on a single nightly rustfmt assertion line, fixed in `a941e468`; earlier Preflight #40941562152 failed one new Python CSS regex and earlier GTK failed duplicate menu key, both root-fixed in `1e0825c6`.
+
+Owner's 1.0.0-with-known-issues approval is recorded in product-release-strategy.md and issue #14. Workflow native-tag-publish.yml explicitly lists #8 and #16 as unresolved limitations in native/v1.0.0 public notes; source regression test enforces disclosure. The observed diff from accepted 0.9.0-4 package source to this 1.0.0 candidate changes only native GTK UI, i18n, packaging, release workflow/test code and docs, **not core_lib, BWU route admission or peer identity**.
+
+Release readiness at this checkpoint: native GTK and Preflight terminal results PENDING; 1.0.0-1 exact-source package smoke has NOT run; protected master is active and release tag ruleset covers native/v*, but the apt-release signing environment's required secret/reviewer presence has not been independently verified. No protected promotion, annotated release tag, signing or R2 upload has occurred. Do NOT block the product release on open #8/#16; do not bypass actual failed tests or signing/integrity gates.
