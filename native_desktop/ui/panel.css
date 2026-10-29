@@ -74,3 +74,19 @@ button.selection-curtain {
   padding: 4px 6px;
   border-right: 1px solid alpha(currentColor, 0.22);
 }
+
+/* Single-page native About, with RepoTicker-like centered hierarchy. */
+.rqs-about-name { font-size: 19px; font-weight: 600; margin-top: 2px; }
+.rqs-about-muted { font-size: 12px; color: alpha(@theme_fg_color, 0.56); }
+button.rqs-about-website {
+  font-size: 13px;
+  color: @theme_fg_color;
+  background-image: none;
+  background-color: alpha(@theme_selected_bg_color, 0.13);
+  border: 1px solid alpha(@theme_fg_color, 0.17);
+  border-radius: 7px;
+  padding: 6px 11px;
+  margin: 4px 0 1px;
+  text-decoration: none;
+}
+button.rqs-about-website:hover { background-color: alpha(@theme_selected_bg_color, 0.22); }

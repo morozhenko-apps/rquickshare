@@ -21,6 +21,7 @@ use std::{
 };
 use tokio::runtime::Handle;
 
+mod about;
 mod backdrop;
 mod compose;
 mod countdown;
@@ -137,7 +138,7 @@ pub struct Panel {
     actions: gio::SimpleActionGroup,
     context: gtk::PopoverMenu,
     settings: RefCell<Option<gtk::Window>>,
-    about: RefCell<Option<gtk::AboutDialog>>,
+    about: RefCell<Option<Rc<about::About>>>,
     settings_owner: RefCell<Option<Rc<settings::Editor>>>,
     text_review: RefCell<Option<Rc<text::Review>>>,
     transfers: RefCell<Option<Rc<transfers::Window>>>,
@@ -828,7 +829,7 @@ impl Panel {
             settings.destroy();
         }
         if let Some(about) = self.about.borrow_mut().take() {
-            about.destroy();
+            about.window.destroy();
         }
         if let Some(window) = self.transfers.borrow_mut().take() {
             window.close();
@@ -1045,8 +1046,7 @@ impl Panel {
             image.retranslate();
         }
         if let Some(about) = self.about.borrow().as_ref() {
-            about.set_comments(Some(crate::i18n::about_description()));
-            about.set_website_label("morozhenko.com");
+            about.retranslate();
         }
         if let Some(handle) = self.tray_menu.borrow().as_ref() {
             handle.refresh_labels();

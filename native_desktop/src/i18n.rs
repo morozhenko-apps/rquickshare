@@ -194,9 +194,9 @@ pub(crate) fn label(source: &'static str) -> &'static str {
     translated(active(), source)
 }
 
-/// Static, locale-specific About attribution; never sourced from peer metadata.
-pub(crate) fn about_description() -> &'static str {
-    about::description(active())
+/// Trusted compact About labels; author, website and fork are fixed separately.
+pub(crate) fn about_label(source: &'static str) -> &'static str {
+    about::translated(active(), source)
 }
 
 fn translated_review(locale: &str) -> &'static [&'static str; 8] {

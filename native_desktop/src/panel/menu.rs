@@ -362,26 +362,14 @@ impl Panel {
         }
         self.mark_manual();
         if let Some(about) = self.about.borrow().as_ref() {
-            about.present();
+            about.retranslate();
+            about.window.present();
             return;
         }
-        let about = gtk::AboutDialog::builder()
-            .transient_for(&self.window)
-            .application(&self.window.application().unwrap())
-            .program_name("rQuickShare Native")
-            .version(env!("CARGO_PKG_VERSION"))
-            .comments(crate::i18n::about_description())
-            .logo_icon_name(crate::tray::ICON_NAME)
-            .license_type(gtk::License::Gpl30Only)
-            .website("https://morozhenko.com")
-            .website_label("morozhenko.com")
-            .build();
-        about.set_icon_name(Some(crate::tray::ICON_NAME));
-        about.set_resizable(false);
-        about.set_hide_on_close(true);
-        self.watch_idle_widget(&about);
+        let about = Rc::new(super::about::About::new(&self.window));
+        self.watch_idle_widget(&about.window);
         self.about.replace(Some(about.clone()));
-        about.present();
+        about.window.present();
     }
 }
 

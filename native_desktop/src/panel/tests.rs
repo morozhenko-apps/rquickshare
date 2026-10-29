@@ -569,28 +569,32 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert!(settings.is_visible());
     panel.actions.activate_action("about", None);
     let about = panel.about.borrow().as_ref().unwrap().clone();
-    assert!(about.is_visible());
-    assert_eq!(about.program_name().as_deref(), Some("rQuickShare Native"));
-    assert_eq!(about.version().as_deref(), Some(env!("CARGO_PKG_VERSION")));
+    assert!(about.window.is_visible());
+    assert_eq!(about.name.text(), "rQuickShare Native");
     assert_eq!(
-        about.comments().as_deref(),
-        Some(crate::i18n::about_description())
+        about.version.text(),
+        format!("{} {}", crate::i18n::about_label("Version"), env!("CARGO_PKG_VERSION"))
     );
-    // The author and upstream attribution live in the main About description.
-    // GTK must not create a separate Credits page from the authors property.
-    assert!(about.authors().is_empty());
-    assert!(!about.comments().unwrap().contains("Linux"));
-    assert_eq!(
-        about.logo_icon_name().as_deref(),
-        Some(crate::tray::ICON_NAME)
-    );
-    assert_eq!(about.website().as_deref(), Some("https://morozhenko.com"));
-    assert!(!about.is_resizable());
-    about.close();
-    assert!(!about.is_visible());
+    assert!(about.author.text().contains("(morozhenko)"));
+    assert!(about.author.text().contains(
+        if crate::i18n::active() == "ru" { "Станислав Мосейко" } else { "Stanislav Moseyko" }
+    ));
+    assert!(about.upstream.text().contains("Martichou/rquickshare"));
+    assert_eq!(about.website.uri(), "https://morozhenko.com");
+    assert_eq!(about.website.label().as_deref(), Some("morozhenko.com ↗"));
+    assert!(about.license.text().contains("GNU GPLv3"));
+    assert_eq!(about.icon.icon_name().as_deref(), Some(crate::tray::ICON_NAME));
+    assert!(!about.window.is_resizable());
+    assert!(about.window.title().unwrap().contains("Native"));
+    assert!(!about.window.child().unwrap().is::<gtk::Stack>());
+    let previous = about.window.child().unwrap();
+    about.retranslate();
+    assert_eq!(about.window.child(), Some(previous));
+    about.window.close();
+    assert!(!about.window.is_visible());
     panel.actions.activate_action("about", None);
-    assert_eq!(*panel.about.borrow().as_ref().unwrap(), about);
-    assert!(about.is_visible());
+    assert!(Rc::ptr_eq(panel.about.borrow().as_ref().unwrap(), &about));
+    assert!(about.window.is_visible());
     assert_eq!(panel.drawer(), Drawer::Closed);
     settings::verify_editor_smoke(panel.settings_owner.borrow().as_ref().unwrap());
     assert!(labels(&panel.box_widget("incoming"))
@@ -767,7 +771,7 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert!(panel.model.borrow().closing);
     assert!(panel.settings.borrow().is_none());
     assert!(panel.about.borrow().is_none());
-    assert!(!about.is_visible());
+    assert!(!about.window.is_visible());
     assert!(panel.settings_owner.borrow().is_none());
     assert!(panel.context.parent().is_none());
     assert!(!settings.is_visible());

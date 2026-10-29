@@ -7,7 +7,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "native_desktop" / "src"
 MODULES = (
-    "client_errors", "history", "image", "menu_extra", "operation_notices",
+    "about", "client_errors", "history", "image", "menu_extra", "operation_notices",
     "panel_cards", "panel_details", "panel_status", "reveal_notices",
     "row_empty", "settings", "settings_errors", "settings_residual",
     "settings_state", "settings_warning", "source_preparation",
