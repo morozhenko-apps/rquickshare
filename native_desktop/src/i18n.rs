@@ -110,6 +110,9 @@ fn resolve(value: &str) -> Option<&'static str> {
 
 /// System locale only, no new preferences or DBus/settings schema.
 pub(crate) fn active() -> &'static str {
+    if let Some(selected) = crate::ui_language::explicit_locale() {
+        return selected;
+    }
     for variable in ["LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"] {
         if let Ok(value) = std::env::var(variable) {
             if value.trim().is_empty() {
