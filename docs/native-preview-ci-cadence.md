@@ -40,3 +40,9 @@ Mutation review: dropping a selected method, filtering to zero tests, restoring 
 4. Separately, only after CI is green, protected master promotion and owner-directed version/tag/release recovery; do not move `native/v1.0.0` from this task. Do not touch current signed archive, secrets or R2.
 
 Rollback: revert scoped code/test commit to restore prior classification and workflows; documentation records previous release failure and this decision. The one-off native tag recovery procedure remains separate. Device-to-device validation and Mode B Stage 12 physical acceptance are still outstanding.
+
+## Implementation checkpoint
+
+The scoped correction, early-stdin-close regression, native GTK exact inventory selector, selected Core/GTK stress jobs, source policy assertions and Node contract regression were implemented on `fix/native-preview-stress-20261029`. The six selected native GTK test names were cross-checked against actual test names recorded in the failed release's earlier passing attempts. Source-level consistency checks passed; no compiled test, source CI, dedicated GTK CI, coverage measurement or new package publication is claimed by this checkpoint.
+
+Next required gate: feature PR against `dev` on the final code SHA; the PR automatically invokes Preflight and native GTK verification. Stop after triggering those jobs; on a completed red job, inspect exact logs and fix the root cause before another full gate. Promotion to protected `master`, tag replacement, signature import and R2 publication remain outside this change.
