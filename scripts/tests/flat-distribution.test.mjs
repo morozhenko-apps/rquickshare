@@ -15,7 +15,10 @@ const read=file=>readFileSync(new URL("../../"+file,import.meta.url),"utf8").rep
 test("Given_a_flat_release_When_workflow_is_inspected_Then_tag_signing_readback_and_cleanup_gates_remain",()=>{
   const workflow=read(".github/workflows/native-tag-publish.yml");
   assert.match(workflow,/tags: \["native\/v\*"\]/);
-  assert.match(workflow,/test "\$\(git cat-file -t "refs\/tags\/\$GITHUB_REF_NAME"\)" = tag/);
+  assert.ok(workflow.includes('git fetch --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/release-validation/native-tag"'));
+  assert.ok(workflow.includes('test "$(git cat-file -t refs/release-validation/native-tag)" = tag'));
+  assert.ok(workflow.includes('"$(git rev-parse refs/release-validation/native-tag^{commit})" == "$GITHUB_SHA"'));
+  assert.ok(workflow.includes('"$(git rev-parse HEAD)" == "$(git rev-parse origin/master^{commit})"'));
   assert.match(workflow,/git rev-parse origin\/master\^\{commit\}/);
   assert.match(workflow,/environment: apt-release/);
   assert.match(workflow,/uses: \.\/\.github\/workflows\/mode-b.yml/);
