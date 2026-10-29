@@ -80,7 +80,7 @@ impl About {
 
     pub(super) fn retranslate(&self) {
         self.window
-            .set_title(Some(&format!("{} Native", crate::i18n::label("About rQuickShare"))));
+            .set_title(Some(crate::i18n::about_label("About rQuickShare Native")));
         self.icon.set_pixel_size(72);
         self.name.set_text(PRODUCT);
         self.website.set_tooltip_text(Some(WEBSITE));
