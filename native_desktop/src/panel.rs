@@ -1051,6 +1051,9 @@ impl Panel {
         if let Some(handle) = self.tray_menu.borrow().as_ref() {
             handle.refresh_labels();
         }
+        // GTK row controls and tooltips are localized when first constructed.
+        // Rebuild only their presentation cache; Core transfers and consent remain owned.
+        self.rows.borrow_mut().clear();
         self.render();
     }
 
