@@ -147,64 +147,10 @@ impl Panel {
                 }
             });
         });
-        let menu = gio::Menu::new();
-        let visibility = gio::Menu::new();
-        for (title, target) in [
-            ("Visible", "visible"),
-            ("Hidden", "hidden"),
-            ("Visible for one minute", "temporary"),
-        ] {
-            visibility.append(
-                Some(crate::i18n::label(title)),
-                Some(&format!("panel.visibility::{target}")),
-            );
-        }
-        let navigation = gio::Menu::new();
-        for (name, title) in [
-            ("receive", "Receive files"),
-            ("send", "Send files…"),
-            ("transfers", "History"),
-        ] {
-            navigation.append(
-                Some(crate::i18n::label(title)),
-                Some(&format!("panel.{name}")),
-            );
-        }
-        menu.append_section(None, &navigation);
-        menu.append_section(
-            Some(crate::i18n::label("Discovery visibility")),
-            &visibility,
-        );
-        let secondary = gio::Menu::new();
-        for (name, title) in [
-            ("settings", "Settings…"),
-            ("about", "About rQuickShare"),
-            ("hide", "Hide card"),
-            ("quit", "Quit panel"),
-        ] {
-            secondary.append(
-                Some(crate::i18n::label(title)),
-                Some(&format!("panel.{name}")),
-            );
-        }
-        menu.append_section(None, &secondary);
-        let sending = gio::Menu::new();
-        for (name, title) in [
-            ("files", "Files…"),
-            ("folder", "Folder…"),
-            ("send-text", "Text or link…"),
-            ("send-clipboard", "Clipboard"),
-        ] {
-            sending.append(
-                Some(crate::i18n::label(title)),
-                Some(&format!("panel.{name}")),
-            );
-        }
-        self.sending.set_menu_model(Some(&sending));
+        self.refresh_localized_menus();
         self.sending.set_parent(&self.button("quick-send"));
         self.sending.set_position(gtk::PositionType::Top);
         self.configure_movement();
-        self.context.set_menu_model(Some(&menu));
         self.context.set_parent(&self.box_widget("root"));
         let gesture = gtk::GestureClick::new();
         gesture.set_button(3);
@@ -332,6 +278,64 @@ impl Panel {
             .set_state(&(drawer == Drawer::Open).to_variant());
         self.render();
     }
+    pub(super) fn refresh_localized_menus(&self) {
+        let menu = gio::Menu::new();
+        let visibility = gio::Menu::new();
+        for (title, target) in [
+            ("Visible", "visible"),
+            ("Hidden", "hidden"),
+            ("Visible for one minute", "temporary"),
+        ] {
+            visibility.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.visibility::{target}")),
+            );
+        }
+        let navigation = gio::Menu::new();
+        for (name, title) in [
+            ("receive", "Receive files"),
+            ("send", "Send files…"),
+            ("transfers", "History"),
+        ] {
+            navigation.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
+        }
+        menu.append_section(None, &navigation);
+        menu.append_section(
+            Some(crate::i18n::label("Discovery visibility")),
+            &visibility,
+        );
+        let secondary = gio::Menu::new();
+        for (name, title) in [
+            ("settings", "Settings…"),
+            ("about", "About rQuickShare"),
+            ("hide", "Hide card"),
+            ("quit", "Quit panel"),
+        ] {
+            secondary.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
+        }
+        menu.append_section(None, &secondary);
+        let sending = gio::Menu::new();
+        for (name, title) in [
+            ("files", "Files…"),
+            ("folder", "Folder…"),
+            ("send-text", "Text or link…"),
+            ("send-clipboard", "Clipboard"),
+        ] {
+            sending.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
+        }
+        self.sending.set_menu_model(Some(&sending));
+        self.context.set_menu_model(Some(&menu));
+    }
+
     fn show_settings(self: &Rc<Self>) {
         {
             let model = self.model.borrow();
