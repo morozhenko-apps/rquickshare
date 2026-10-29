@@ -14,6 +14,60 @@ pub(super) const LOCALES: [&str; 20] = [
     "bn", "th", "id", "fil", "ar",
 ];
 
+/// Native names stay recognizable even while the surrounding UI language changes.
+pub(super) const CHOICES: [&str; 21] = [
+    "System default", "English", "Русский", "Español", "Português (Portugal)",
+    "Deutsch", "Français", "Italiano", "Polski", "हिन्दी", "繁體中文", "日本語",
+    "Nederlands", "Svenska", "Türkçe", "한국어", "বাংলা", "ไทย", "Bahasa Indonesia",
+    "Filipino", "العربية",
+];
+
+pub(super) fn translated(locale: &str, source: &str) -> Option<&'static str> {
+    Some(match (source, locale) {
+        ("Language", "ru") => "Язык",
+        ("System default", "ru") => "Язык системы",
+        ("Language", "es") => "Idioma",
+        ("System default", "es") => "Predeterminado del sistema",
+        ("Language", "pt") => "Idioma",
+        ("System default", "pt") => "Predefinição do sistema",
+        ("Language", "de") => "Sprache",
+        ("System default", "de") => "Systemstandard",
+        ("Language", "fr") => "Langue",
+        ("System default", "fr") => "Langue du système",
+        ("Language", "it") => "Lingua",
+        ("System default", "it") => "Predefinito di sistema",
+        ("Language", "pl") => "Język",
+        ("System default", "pl") => "Domyślny systemu",
+        ("Language", "hi") => "भाषा",
+        ("System default", "hi") => "सिस्टम डिफ़ॉल्ट",
+        ("Language", "zh-Hant") => "語言",
+        ("System default", "zh-Hant") => "系統預設",
+        ("Language", "ja") => "言語",
+        ("System default", "ja") => "システムの既定",
+        ("Language", "nl") => "Taal",
+        ("System default", "nl") => "Systeemstandaard",
+        ("Language", "sv") => "Språk",
+        ("System default", "sv") => "Systemstandard",
+        ("Language", "tr") => "Dil",
+        ("System default", "tr") => "Sistem varsayılanı",
+        ("Language", "ko") => "언어",
+        ("System default", "ko") => "시스템 기본값",
+        ("Language", "bn") => "ভাষা",
+        ("System default", "bn") => "সিস্টেম ডিফল্ট",
+        ("Language", "th") => "ภาษา",
+        ("System default", "th") => "ค่าเริ่มต้นของระบบ",
+        ("Language", "id") => "Bahasa",
+        ("System default", "id") => "Bawaan sistem",
+        ("Language", "fil") => "Wika",
+        ("System default", "fil") => "Default ng system",
+        ("Language", "ar") => "اللغة",
+        ("System default", "ar") => "اللغة الافتراضية للنظام",
+        ("Language", _) => "Language",
+        ("System default", _) => "System default",
+        _ => return None,
+    })
+}
+
 const APPLICATION_DIR: &str = "io.github.morozhenko_apps.RQuickShare";
 const PREFERENCE_FILE: &str = "ui-language";
 const MAX_LENGTH: u64 = 32;
@@ -165,6 +219,18 @@ pub(super) fn save(selected: u8) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn given_twenty_supported_languages_when_picking_then_catalog_keys_have_values() {
+        assert_eq!(CHOICES.len(), LOCALES.len() + 1);
+        for locale in LOCALES {
+            assert!(!translated(locale, "Language").unwrap().is_empty());
+            assert!(!translated(locale, "System default").unwrap().is_empty());
+        }
+        assert_eq!(translated("ru", "Language"), Some("Язык"));
+        assert_eq!(translated("pt", "System default"), Some("Predefinição do sistema"));
+        assert_eq!(translated("xx", "Language"), Some("Language"));
+    }
 
     #[test]
     fn given_all_locale_options_when_parsed_then_only_explicit_canonical_ids_are_valid() {
