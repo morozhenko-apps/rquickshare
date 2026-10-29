@@ -33,3 +33,16 @@ Source basis: dev contains native GTK 1.0.0-1 source after accepted installed 0.
 ## Required issue hygiene
 
 Keep original issue bodies/history; add issue-specific closure comment with code/test/owner evidence and explicit untested limits. Close issues individually with GitHub state_reason completed, duplicate or not_planned as appropriate. For remaining #23/#27/#14 add a *single concrete next-action/exit criterion* comment, not a duplicate open issue. Do not modify frozen #8/#16. Finalize counts and note that issue tracker hygiene does not replace the release's mandatory signing/immutable artifact gate.
+
+## Executed issue changes (terminal, not a proposal)
+
+All 12 individual closures have committed GitHub issue comments with source/test/owner evidence and explanatory limits:
+- **Completed:** #9, #11, #12, #13, #17, #19, #21, #22, #25, #26.
+- **Superseded/duplicate:** #18 → current reproducible post-discovery #23.
+- **Not planned without a measurable regression:** #24, historical debug progress animation; future concrete throughput measurements should create a fresh performance issue rather than retaining an unbounded claim.
+- **Open with specific exit criteria:** #14 (retitled to Native Linux 1.0.0 protected signed production release), #23 (first BLE Weave GATT/UKEY2 redacted stage trace and architectural fix), #27 (actual Windows native client, CI and physical Windows 11 acceptance).
+- **Frozen, unchanged and explicitly accepted for release:** #8, #16.
+
+Original issue descriptions/negative evidence were not deleted, and no transfer/network production code was changed. This MODE B issue audit is completed. No new test suite was invoked by documentation/issue administration; no public release tag, master update, signer/R2 mutation or artifact publication was performed. Closes do not silently assert 100% device interoperability, particularly the narrow committed BWU Cancel race.
+
+Final backlog count expected: **5 open (#8, #14, #16, #23, #27)** versus initial **17**. Refresh live issue state if subsequent independent activity changes this list. #14 is the only required Linux distribution action remaining among these; the first-connection issue #23 is a disclosed/diagnostic reliability risk, and #27 is explicitly outside the Linux binary's platform claims.
