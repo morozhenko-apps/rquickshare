@@ -651,8 +651,8 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     panel.render();
     // Regression: the localized empty card is keyed by its English source.
     // Repaint must replace a stale GTK label without altering the Core view.
-    let empty_source = "No nearby devices. Make the receiving device visible.";
-    let nearby = panel.box_widget("nearby");
+    let empty_source = "No incoming requests";
+    let nearby = panel.box_widget("incoming");
     let stale = labels(&nearby)
         .into_iter()
         .find(|item| item.text() == crate::i18n::label(empty_source))
@@ -661,12 +661,12 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     let epoch = panel.model.borrow().state.view.as_ref().unwrap().epoch;
     panel.retranslate();
     assert!(
-        !labels(&panel.box_widget("nearby"))
+        !labels(&panel.box_widget("incoming"))
             .iter()
             .any(|item| item.text() == "stale language from cached render")
     );
     assert!(
-        labels(&panel.box_widget("nearby"))
+        labels(&panel.box_widget("incoming"))
             .iter()
             .any(|item| item.text() == crate::i18n::label(empty_source))
     );
