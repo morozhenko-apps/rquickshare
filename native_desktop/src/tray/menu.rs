@@ -151,10 +151,7 @@ impl Handle {
             }
             match state.revision.checked_add(1) {
                 Some(revision) => state.revision = revision,
-                None => {
-                    state.exhausted = true;
-                    return false;
-                }
+                None => state.exhausted = true,
             }
             true
         });
