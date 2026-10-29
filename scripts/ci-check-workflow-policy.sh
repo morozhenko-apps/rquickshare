@@ -46,8 +46,14 @@ grep -Fq 'tags: ["native/v*"]' .github/workflows/native-tag-publish.yml ||
   fail 'Native release must trigger exclusively on its independent tag namespace'
 grep -Fq 'native_release_tag.py version "$GITHUB_REF_NAME"' .github/workflows/native-tag-publish.yml ||
   fail 'Native release admission lacks canonical tag parsing'
-grep -Fq 'test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag' .github/workflows/native-tag-publish.yml ||
-  fail 'Native release admission must require an annotated tag'
+grep -Fq 'git fetch --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/release-validation/native-tag"' .github/workflows/native-tag-publish.yml ||
+  fail 'Native release admission must fetch an independent remote tag object'
+grep -Fq 'test "$(git cat-file -t refs/release-validation/native-tag)" = tag' .github/workflows/native-tag-publish.yml ||
+  fail 'Native release admission must require a remote annotated tag'
+grep -Fq 'git rev-parse refs/release-validation/native-tag^{commit}' .github/workflows/native-tag-publish.yml ||
+  fail 'Native release admission must check the remote tag target commit'
+grep -Fq '== "$GITHUB_SHA"' .github/workflows/native-tag-publish.yml ||
+  fail 'Native release admission must match the triggering tag commit'
 grep -Fq 'native_release_tag.py version "$TAG"' .github/workflows/native-apt-refresh.yml ||
   fail 'APT refresh does not verify the Native tag namespace'
 grep -Fq 'release_tag.tag_from_version' scripts/native_ci_archive.py ||
