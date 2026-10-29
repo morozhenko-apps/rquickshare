@@ -87,9 +87,15 @@ def publication(snapshot, keyring, fingerprint, previous=None, now=None):
     return objects, active
 
 
+PUBLIC_VERIFY_USER_AGENT = "rQuickShare-ReleaseVerifier/1.0"
+
+
 def public_readback(item, opener=None):
     opener = urllib.request.urlopen if opener is None else opener
-    with opener(BASE + item.key, timeout=45) as response:
+    request = urllib.request.Request(
+        BASE + item.key, headers={"User-Agent": PUBLIC_VERIFY_USER_AGENT}
+    )
+    with opener(request, timeout=45) as response:
         apt.require(response.status == 200, "Public download returned non-200")
         digest = hashlib.sha256()
         length = 0
