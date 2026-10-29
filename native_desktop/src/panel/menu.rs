@@ -371,13 +371,16 @@ impl Panel {
             .program_name("rQuickShare")
             .version(env!("CARGO_PKG_VERSION"))
             .comments(
-                "Independent fork of Martichou/rquickshare. Send and receive nearby files and text",
+                "rQuickShare Native is the native Linux edition of this independent fork. Based on Martichou/rquickshare. Maintained by morozhenko apps.",
             )
+            .authors(["morozhenko apps"])
             .logo_icon_name(crate::tray::ICON_NAME)
             .license_type(gtk::License::Gpl30Only)
-            .website("https://github.com/morozhenko-apps/rquickshare")
-            .website_label(crate::i18n::label("Project website"))
+            .website("https://morozhenko.com")
+            .website_label("morozhenko.com")
             .build();
+        about.set_icon_name(Some(crate::tray::ICON_NAME));
+        about.set_resizable(false);
         about.set_hide_on_close(true);
         self.watch_idle_widget(&about);
         self.about.replace(Some(about.clone()));
