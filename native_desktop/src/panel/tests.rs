@@ -567,9 +567,11 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     panel.actions.activate_action("settings", None);
     let settings = panel.settings.borrow().as_ref().unwrap().clone();
     assert!(settings.is_visible());
+    chrome::assert_close_only_titlebar(&settings);
     panel.actions.activate_action("about", None);
     let about = panel.about.borrow().as_ref().unwrap().clone();
     assert!(about.window.is_visible());
+    chrome::assert_close_only_titlebar(&about.window);
     assert_eq!(about.name.text(), "rQuickShare Native");
     assert_eq!(
         about.version.text(),
