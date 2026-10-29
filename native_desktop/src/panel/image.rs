@@ -247,7 +247,9 @@ impl Image {
                 Ok(bytes) => bytes,
                 Err(()) => {
                     image.busy.set(false);
-                    image.set_notice(ImageNotice::Key("No supported PNG was captured. Use a static image up to 32 MiB and 64 million pixels."));
+                    image.set_notice(ImageNotice::Key(
+                        "No supported PNG was captured. Use a static image up to 32 MiB and 64 million pixels.",
+                    ));
                     image.refresh();
                     return;
                 }
@@ -274,7 +276,9 @@ impl Image {
                         image.permit.replace(Some(permit));
                         match result {
                             Ok(captured) => image.show_capture(captured),
-                            Err(_) => image.set_notice(ImageNotice::Key("Image capture failed validation or exceeded resource limits. The previous image is kept.")),
+                            Err(_) => image.set_notice(ImageNotice::Key(
+                                "Image capture failed validation or exceeded resource limits. The previous image is kept.",
+                            )),
                         }
                         image.busy.set(false);
                         image.refresh();
@@ -302,13 +306,17 @@ impl Image {
             .as_ref()
             .and_then(|source| source.try_clone().ok());
         let Some(source) = source else {
-            self.set_notice(ImageNotice::Key("Image source could not be prepared. Capture it again."));
+            self.set_notice(ImageNotice::Key(
+                "Image source could not be prepared. Capture it again.",
+            ));
             return;
         };
         let completion = match (self.submit)(source) {
             Ok(completion) => completion,
             Err(_) => {
-                self.set_notice(ImageNotice::Key("Preparation was not queued. Review the current source and connection."));
+                self.set_notice(ImageNotice::Key(
+                    "Preparation was not queued. Review the current source and connection.",
+                ));
                 return;
             }
         };

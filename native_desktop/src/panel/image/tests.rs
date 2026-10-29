@@ -56,7 +56,10 @@ pub(in crate::panel) fn verify_image_smoke(panel: &Rc<Panel>, application: &gtk:
     image.retranslate();
     assert_eq!(image.status.text(), notice_before);
     assert_eq!(image.window.title().as_deref(), Some(crate::i18n::label("Send image")));
-    assert_eq!(image.capture.label().as_deref(), Some(crate::i18n::label("Capture clipboard image")));
+    assert_eq!(
+        image.capture.label().as_deref(),
+        Some(crate::i18n::label("Capture clipboard image"))
+    );
     assert_eq!(image.source.borrow().as_ref().unwrap().total_bytes(), size);
     assert!(image.prepare.is_sensitive());
     assert_eq!(attempts.get(), 0);

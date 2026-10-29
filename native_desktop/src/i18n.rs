@@ -1649,7 +1649,8 @@ mod tests {
     }
 
     #[test]
-    fn given_all_locales_when_security_and_transfer_actions_are_compared_then_distinct_outcomes_remain_distinct() {
+    fn given_all_locales_when_security_and_transfer_actions_are_compared_then_distinct_outcomes_remain_distinct()
+    {
         for locale in LOCALES {
             for (left, right) in [
                 ("Receive", "Send"),
@@ -1657,7 +1658,10 @@ mod tests {
                 ("Accept", "Decline"),
                 ("Completed", "Failed"),
                 ("Start at sign-in", "Apply login start"),
-                ("Saved and applied.", "Save outcome is uncertain. Retry the same save before making another edit."),
+                (
+                    "Saved and applied.",
+                    "Save outcome is uncertain. Retry the same save before making another edit.",
+                ),
             ] {
                 assert_ne!(
                     translated(locale, left),
