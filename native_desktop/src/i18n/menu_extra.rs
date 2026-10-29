@@ -210,7 +210,10 @@ mod tests {
         assert_eq!(translated("en", "Tray About"), Some("About"));
         assert_eq!(translated("pt-BR", "Tray About"), Some("About"));
         for locale in LOCALES {
-            assert_ne!(translated(locale, "Tray About"), translated(locale, "Tray Quit"));
+            assert_ne!(
+                translated(locale, "Tray About"),
+                translated(locale, "Tray Quit")
+            );
         }
         assert_eq!(translated("pt-BR", KEYS[0]), Some(KEYS[0]));
         assert_eq!(translated("zh-Hans", KEYS[3]), Some(KEYS[3]));
