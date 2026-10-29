@@ -38,7 +38,11 @@ run_target() {
   local target="$1" mode="$2" selected_name="$3"
   local -n selected="$selected_name"
   local inventory count expected method occurrences output
-  inventory="$("${cargo_cmd[@]}" "--$target" -- --list)"
+  local -a target_args=(--lib)
+  if [[ "$target" == bin ]]; then
+    target_args=(--bin rquickshare)
+  fi
+  inventory="$("${cargo_cmd[@]}" "${target_args[@]}" -- --list)"
   count="$(printf '%s\n' "$inventory" | grep -cE ': test$' || true)"
   if (( count <= ${#selected[@]} )); then
     echo "Native GTK $target inventory too small: $count" >&2
@@ -59,7 +63,7 @@ run_target() {
     done
     expected=$((count - ${#selected[@]}))
     echo "Native GTK $target stable: $expected tests once; ${#selected[@]} exact stress methods excluded."
-    output="$("${cargo_cmd[@]}" "--$target" -- "${skips[@]}" 2>&1)" || {
+    output="$("${cargo_cmd[@]}" "${target_args[@]}" -- "${skips[@]}" 2>&1)" || {
       printf '%s\n' "$output"
       exit 1
     }
@@ -75,7 +79,7 @@ run_target() {
   for attempt in $(seq 1 10); do
     echo "Native GTK $target stress attempt $attempt/10"
     for method in "${selected[@]}"; do
-      output="$("${cargo_cmd[@]}" "--$target" "$method" -- --exact 2>&1)" || {
+      output="$("${cargo_cmd[@]}" "${target_args[@]}" "$method" -- --exact 2>&1)" || {
         printf '%s\n' "$output"
         echo "Native GTK $target stress failure on attempt $attempt: $method" >&2
         exit 1
