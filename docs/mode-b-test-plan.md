@@ -1,5 +1,11 @@
 # Mode B test plan and coverage map
 
+> Current owner-approved CI cadence (2026-10-29): stable suites run once, and only exact-name
+> race-sensitive tests run ten consecutive times; see [native preview and CI cadence](native-preview-ci-cadence.md).
+> Older full-suite-10x requirements and historical run notes below are superseded for new releases.
+> Full test inventory, coverage, actual Linux/Android device checks, signed release authorization
+> and Stage 12 completion remain separate mandatory requirements.
+
 _Last updated: 2026-10-12_
 
 ## Status
