@@ -29,3 +29,13 @@ Follow-up screenshot shows two explicit remaining native GTK defects: the KDE ti
 ## Status
 
 Initial MODE A analysis DONE; code IMPLEMENTATION PENDING; Mode B PENDING; final source CI PENDING; 1.0.0 package/release NOT PUBLISHED. Recording this is not claiming permission to bypass unverified security or tests.
+
+## Product version stage and operator risk boundary
+
+The owner requested direct preparation for `1.0.0` without an intermediate installed acceptance after the accepted `0.9.0-4`. The version source is `native_desktop/Cargo.toml` and its locked `rquickshare-desktop` package entry; Debian `packaging/release.toml` must start at revision **1** for new product SemVer. The corresponding native metadata/ordering contract must require `1.0.0-1` > the already accepted `0.9.0-4` and reject same-version mutation. No change to Core crate version 0.11.5 or legacy Tauri release identity.
+
+This prepares a source-level **1.0.0 candidate**, not a guaranteed public release. Issue #8 remains a documented pending route-consumption availability/DoS risk and #16 remains missing authenticated peer-route grouping. Both are explicitly frozen; do not change either source/issue, claim resolved, or silently waive them. Current product strategy says #16 is a 1.0.0 feature. Consequently a public 1.0.0 release must fail closed if the owner has not separately decided the source/product/security contract and the real signing/protected-ref gates do not pass. Existing Github connector cannot independently dispatch workflow or write protected annotated release tags.
+
+Windows #27 is a separate native Windows platform adapter and has no Windows build/physical evidence; do not advertise it in the Linux 1.0.0 package. The Linux-only artifact is scoped to Ubuntu 26.04 amd64. Previously passed ordinary Pixel transfer and Cancel tests do not establish committed BWU Cancel race, initial BLE-first success or bytes/sec benchmarks.
+
+This is a separate STOP FACTOR for public distribution, not for safe, isolated GTK and version-source preparations. All publication and secrets must remain untouched unless complete release prerequisites are demonstrated.
