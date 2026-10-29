@@ -8,6 +8,14 @@ import native_release_tag as release_tag
 
 
 class NativeReleaseTagTests(unittest.TestCase):
+    def test_given_native_1_0_0_publication_when_noted_then_accepted_limitations_are_disclosed(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/native-tag-publish.yml").read_text()
+        self.assertIn('if [[ "$TAG" == "native/v1.0.0" ]]', workflow)
+        self.assertIn("issues/8", workflow)
+        self.assertIn("issues/16", workflow)
+        self.assertIn("Neither issue is claimed fixed", workflow)
+        self.assertIn("explicit consent", workflow)
+
     def test_given_independent_product_semver_when_tagged_then_only_native_namespace_is_used(self):
         for version in ("0.0.0", "0.9.0", "1.0.0", "12.34.56", "123456.0.9876"):
             with self.subTest(version=version):

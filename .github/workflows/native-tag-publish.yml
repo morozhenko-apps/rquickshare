@@ -323,5 +323,8 @@ jobs:
           if [[ "$TAG" == "native/v0.9.0" ]]; then
             notes="$notes Early public Linux release with explicit device consent; BLE-to-TCP admission security review: https://github.com/morozhenko-apps/rquickshare/issues/8 ."
           fi
+          if [[ "$TAG" == "native/v1.0.0" ]]; then
+            notes="$notes Known limitations accepted for this release: BLE-to-TCP admission availability risk (https://github.com/morozhenko-apps/rquickshare/issues/8); authenticated grouping of unverified peer routes is not implemented (https://github.com/morozhenko-apps/rquickshare/issues/16). Neither issue is claimed fixed. Each incoming transfer still requires explicit consent."
+          fi
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
             --verify-tag --title "rQuickShare ${TAG#native/v}" --notes "$notes"
