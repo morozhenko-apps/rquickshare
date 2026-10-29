@@ -340,7 +340,10 @@ mod tests {
         assert_eq!(CHOICES[20], "العربية");
         for (index, locale) in LOCALES.iter().enumerate() {
             assert_eq!(parse(locale.as_bytes()), Some((index + 1) as u8));
-            assert_eq!(parse(format!("{locale}\n").as_bytes()), Some((index + 1) as u8));
+            assert_eq!(
+                parse(format!("{locale}\n").as_bytes()),
+                Some((index + 1) as u8)
+            );
         }
         for value in ["system", "system\n", "en", "ar\n"] {
             assert!(parse(value.as_bytes()).is_some());
@@ -365,12 +368,18 @@ mod tests {
             b"zh-Hans\n".to_vec(),
         ] {
             fs::write(&file, &bytes).unwrap();
-            assert_eq!(load_at(&file).unwrap_err().kind(), io::ErrorKind::InvalidData);
+            assert_eq!(
+                load_at(&file).unwrap_err().kind(),
+                io::ErrorKind::InvalidData
+            );
         }
         fs::remove_file(&file).unwrap();
         assert_eq!(load_at(&file).unwrap_err().kind(), io::ErrorKind::NotFound);
         fs::create_dir(&file).unwrap();
-        assert_eq!(load_at(&file).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            load_at(&file).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
     }
 
     #[test]
@@ -379,7 +388,10 @@ mod tests {
         let file = temporary.path().join("nested").join("ui-language");
         save_at(&file, 2).unwrap();
         assert_eq!(fs::read(&file).unwrap(), b"ru\n");
-        assert_eq!(save_at(&file, 21).unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(
+            save_at(&file, 21).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
         assert_eq!(fs::read(&file).unwrap(), b"ru\n");
         save_at(&file, 4).unwrap();
         assert_eq!(fs::read(&file).unwrap(), b"pt\n");
@@ -401,13 +413,22 @@ mod tests {
         let directory = temporary.path().join("config").join(APPLICATION_DIR);
         let file = directory.join(PREFERENCE_FILE);
         save_at(&file, 20).unwrap();
-        assert_eq!(fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
-        assert_eq!(fs::metadata(&directory).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
         let target = temporary.path().join("unrelated-target");
         fs::write(&target, b"keep me").unwrap();
         fs::remove_file(&file).unwrap();
         std::os::unix::fs::symlink(&target, &file).unwrap();
-        assert_eq!(save_at(&file, 1).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            save_at(&file, 1).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
         assert_eq!(fs::read(&target).unwrap(), b"keep me");
         assert_eq!(fs::read_link(&file).unwrap(), target);
     }
@@ -425,10 +446,15 @@ mod tests {
     }
 
     #[test]
-    fn given_multiple_explicit_replacements_when_reloaded_then_only_latest_complete_value_survives() {
+    fn given_multiple_explicit_replacements_when_reloaded_then_only_latest_complete_value_survives()
+    {
         let temporary = tempfile::tempdir().unwrap();
         let path = temporary.path().join("ui-language");
-        for (selected, bytes) in [(1, b"en\n".as_slice()), (20, b"ar\n".as_slice()), (0, b"system\n".as_slice())] {
+        for (selected, bytes) in [
+            (1, b"en\n".as_slice()),
+            (20, b"ar\n".as_slice()),
+            (0, b"system\n".as_slice()),
+        ] {
             save_at(&path, selected).unwrap();
             assert_eq!(fs::read(&path).unwrap(), bytes);
             assert_eq!(load_at(&path).unwrap(), selected);
