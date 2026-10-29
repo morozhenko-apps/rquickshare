@@ -24,3 +24,7 @@ Send `urllib.request.Request(BASE + item.key, headers={"User-Agent": "rQuickShar
 - Final gate: run `python3 -m unittest discover -s scripts/tests -p 'test_native_*.py' -v`, native package/preflight gates where applicable, report actual CI separately. No live R2 call or publish before explicit release approval.
 
 Rollback only this public-readback Request adapter and its tests. Keep `master`, release tags, signed APT snapshots and R2 objects untouched.
+
+## Implemented source checkpoint (unverified CI)
+
+`scripts/native_r2.py` now uses an explicit `urllib.request.Request` with `User-Agent: rQuickShare-ReleaseVerifier/1.0` and the original public BASE URL, timeout and strict SHA-256 / exact byte-count verification. `scripts/tests/test_native_r2.py` checks Request type, URL, UA, 45-second timeout, absence of Authorization and retains negative 206/301/403/404/429/500/503, truncated, extra and corrupted bytes. No actual download, upload, live 403 reproduction or CI test-suite run is asserted. Dev source checkpoint `a90ccb3a72518ba8f5589dad83b6ddf56ee55683`; signed-release publication remains unapproved.
