@@ -63,6 +63,20 @@ class NativeI18nCatalogTests(unittest.TestCase):
                             self.assertFalse(any(c in value for c in ("\u202a", "\u202b", "\u202d", "\u202e", "\u202c")))
         self.assertGreaterEqual(len(unique), 200)
 
+    def test_given_about_theme_when_metadata_is_drawn_then_contrast_uses_full_foreground(self):
+        # A themed solid foreground remains readable in both light and dark KDE.
+        css = (ROOT / "native_desktop" / "ui" / "panel.css").read_text(encoding="utf-8")
+        block = re.search(r"\\.rqs-about-muted\\s*\\{([^}]+)\\}", css)
+        self.assertIsNotNone(block, "About metadata CSS selector is required")
+        rules = dict(
+            item.strip().split(":", 1)
+            for item in block.group(1).split(";")
+            if ":" in item
+        )
+        self.assertEqual(rules.get("color", "").strip(), "@theme_fg_color")
+        self.assertNotIn("opacity", rules)
+        self.assertNotIn("alpha(", block.group(1))
+
     def test_given_static_ui_label_calls_when_a_source_key_is_used_then_it_has_a_catalog_entry(self):
         keys = set()
         for _, _, entries in catalog():
