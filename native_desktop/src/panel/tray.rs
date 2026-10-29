@@ -398,7 +398,7 @@ pub(super) fn verify_tray_projection(panel: &Rc<Panel>) {
     assert!(panel.settings.borrow().as_ref().unwrap().is_visible());
     assert_ne!(panel.tray_projection().enabled & Action::About.bit(), 0);
     panel.tray_action(Action::About);
-    assert!(panel.about.borrow().as_ref().unwrap().is_visible());
+    assert!(panel.about.borrow().as_ref().unwrap().window.is_visible());
     panel.safety_update(crate::desktop_guard::SafetyState {
         locked: Some(true),
         inhibited: Some(false),
@@ -410,9 +410,9 @@ pub(super) fn verify_tray_projection(panel: &Rc<Panel>) {
     assert_eq!(panel.drawer(), Drawer::Open);
     assert!(!panel.tray_context((1, 1)));
     assert!(!panel.settings.borrow().as_ref().unwrap().is_visible());
-    assert!(!panel.about.borrow().as_ref().unwrap().is_visible());
+    assert!(!panel.about.borrow().as_ref().unwrap().window.is_visible());
     panel.tray_action(Action::About);
-    assert!(!panel.about.borrow().as_ref().unwrap().is_visible());
+    assert!(!panel.about.borrow().as_ref().unwrap().window.is_visible());
     panel.safety_update(crate::desktop_guard::SafetyState {
         locked: Some(false),
         inhibited: Some(false),

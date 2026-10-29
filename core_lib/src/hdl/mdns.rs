@@ -448,6 +448,90 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn given_bursting_refresh_channel_when_lagged_then_resend_survives_until_sender_closes() {
+        // Arrange: the receiver has capacity for two of five actual broadcasts.
+        let (sender, mut receiver) = tokio::sync::broadcast::channel::<()>(2);
+        for _ in 0..5 {
+            sender.send(()).unwrap();
+        }
+
+        // Act / Assert: lagging is recoverable and neither queued event is lost.
+        let overrun = receiver.recv().await;
+        assert!(matches!(
+            overrun,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(3))
+        ));
+        assert_eq!(
+            receiver_refresh_action(overrun),
+            ReceiverRefreshAction::Resend
+        );
+        for _ in 0..2 {
+            assert_eq!(
+                receiver_refresh_action(receiver.recv().await),
+                ReceiverRefreshAction::Resend
+            );
+        }
+
+        // After the final sender closes, no retrying refresh is manufactured.
+        drop(sender);
+        for _ in 0..2 {
+            assert_eq!(
+                receiver_refresh_action(receiver.recv().await),
+                ReceiverRefreshAction::Disable
+            );
+        }
+    }
+
+    #[test]
+    fn given_overlong_unicode_mdns_renames_when_published_then_txt_never_splits_codepoints() {
+        // Arrange: use the actual service metadata builder, not only a TXT parser.
+        let endpoint = *b"TEST";
+        let original = MDnsServer::named_service(
+            endpoint,
+            2345,
+            DeviceType::Laptop,
+            "machine.local.",
+            "Original",
+        )
+        .unwrap();
+        let original_txt = original
+            .get_properties()
+            .get("n")
+            .unwrap()
+            .val_str()
+            .to_owned();
+        let cases = [
+            ("x".repeat(254), "x".repeat(254)),
+            ("x".repeat(255), "x".repeat(255)),
+            ("x".repeat(256), "x".repeat(255)),
+            ("é".repeat(127), "é".repeat(127)),
+            ("é".repeat(128), "é".repeat(127)),
+            ("🧩".repeat(63), "🧩".repeat(63)),
+            ("🧩".repeat(64), "🧩".repeat(63)),
+            (format!("{}éZ", "x".repeat(254)), "x".repeat(254)),
+        ];
+
+        for (input, expected) in cases {
+            // Act: each rebuilt record must carry an intact UTF-8 prefix.
+            let renamed = MDnsServer::renamed_service(&original, endpoint, &input).unwrap();
+            let encoded = renamed.get_properties().get("n").unwrap().val_str();
+            let (kind, decoded) = crate::utils::parse_mdns_endpoint_info(encoded).unwrap();
+
+            // Assert: no partial UTF-8, different peer or modified base record.
+            assert_eq!(kind, DeviceType::Laptop);
+            assert_eq!(decoded, expected, "input bytes={}", input.len());
+            assert!(decoded.len() <= 255);
+            assert_eq!(renamed.get_fullname(), original.get_fullname());
+            assert_eq!(renamed.get_hostname(), original.get_hostname());
+            assert_eq!(renamed.get_port(), original.get_port());
+            assert_eq!(
+                original.get_properties().get("n").unwrap().val_str(),
+                original_txt
+            );
+        }
+    }
+
     #[test]
     fn receiver_refresh_ok_and_lagged_request_resend() {
         assert_eq!(

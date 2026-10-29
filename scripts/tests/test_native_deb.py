@@ -1,4 +1,6 @@
+import configparser
 import contextlib
+import copy
 import importlib.util
 import io
 from pathlib import Path
@@ -42,6 +44,32 @@ class NativeDebTests(unittest.TestCase):
         for left, right in [(1, 2), (2, 10), (10, 2147483647)]:
             subprocess.run(["dpkg", "--compare-versions", package.native_version("1.0.0", left), "lt", package.native_version("1.0.0", right)], check=True)
 
+    def test_given_revision1_1_0_0_candidate_when_versioned_then_ordering_preserves_installed_upgrade(self):
+        # The new product SemVer must upgrade the accepted 0.9.0-4 without reusing its identity.
+        import tomllib
+        root = Path(__file__).parents[2]
+        cargo = tomllib.loads((root / "native_desktop/Cargo.toml").read_text())
+        locked = tomllib.loads((root / "native_desktop/Cargo.lock").read_text())
+        revision = tomllib.loads((root / "native_desktop/packaging/release.toml").read_text())["revision"]
+        version = cargo["package"]["version"]
+        self.assertEqual(version, "1.0.0")
+        self.assertEqual(revision, 1)
+        self.assertEqual(
+            [entry["version"] for entry in locked["package"] if entry["name"] == "rquickshare-desktop"],
+            [version],
+        )
+        release = package.native_version(version, revision)
+        self.assertEqual(release, "1.0.0-1")
+        package.validate_metadata(fields() | {"Version": release})
+        # Real dpkg ordering: the installed public build and its former debug
+        # variant sort lower than this candidate, not equal to it.
+        for older in ["0.9.0-1", "0.9.0-2", "0.9.0-3", "0.9.0-4", "0.9.0-4.debug", "0.9.1-1"]:
+            subprocess.run(["dpkg", "--compare-versions", older, "lt", release], check=True)
+        # Candidate never shadows the debug identity of the same release
+        # or a later revision / product SemVer.
+        for newer in ["1.0.0-1.debug", "1.0.0-2", "1.0.0-2.debug", "1.0.1-1", "1.1.0-1"]:
+            subprocess.run(["dpkg", "--compare-versions", release, "lt", newer], check=True)
+
     def test_given_selected_assets_when_validated_then_process_ownership_supports_only_opt_in_login_without_direct_fallback(self):
         # Arrange / Act / Assert: actual shipped service/activation assets.
         package.validate_assets()
@@ -52,6 +80,160 @@ class NativeDebTests(unittest.TestCase):
             for size in [32, 128, 256]
         })
         self.assertFalse(any("autostart" in name for name in package.FILES))
+
+    def test_given_localized_native_desktop_assets_when_verified_then_commands_and_twenty_locale_variants_are_preserved(self):
+        # Both files are installed byte-for-byte by the Debian staging contract.
+        app = package.read_desktop_entry(
+            package.ASSETS / "share/applications/io.github.morozhenko_apps.RQuickShare.desktop"
+        )
+        service = package.read_desktop_entry(
+            package.ASSETS / "share/kio/servicemenus/io.github.morozhenko_apps.RQuickShare.Send.desktop"
+        )
+        package.validate_localized_desktop_entries(app, service)
+        self.assertEqual(len(package.DESKTOP_LOCALES), 20)
+        self.assertEqual(app["Desktop Entry"]["Name"], "rQuickShare Native")
+        self.assertEqual(
+            app["Desktop Entry"]["Exec"], "/usr/bin/rquickshare"
+        )
+        self.assertEqual(
+            service["Desktop Action Send"]["Exec"], "rquickshare send -- %U"
+        )
+        self.assertEqual(
+            app["Desktop Entry"]["Comment[pt_PT]"],
+            "Partilhe ficheiros e texto com dispositivos próximos",
+        )
+        self.assertEqual(
+            service["Desktop Action Send"]["Name[pt_PT]"],
+            "Enviar com rQuickShare…",
+        )
+        self.assertEqual(
+            app["Desktop Entry"]["Comment[zh_TW]"],
+            app["Desktop Entry"]["Comment[zh_HK]"],
+        )
+        for section, key in [
+            (app["Desktop Entry"], "Comment"),
+            (service["Desktop Entry"], "Name"),
+            (service["Desktop Action Send"], "Name"),
+        ]:
+            self.assertEqual(
+                {item.removeprefix(key + "[").removesuffix("]")
+                 for item in section if item.startswith(key + "[")},
+                package.DESKTOP_LOCALES,
+            )
+            for unsupported in ["pt", "pt_BR", "zh", "zh_CN", "zh_Hans", "en"]:
+                self.assertNotIn(f"{key}[{unsupported}]", section)
+            self.assertTrue(section[key])  # English fallback.
+        for locale in package.DESKTOP_LOCALES:
+            self.assertIn(
+                "rQuickShare", service["Desktop Entry"][f"Name[{locale}]"]
+            )
+            self.assertEqual(
+                service["Desktop Action Send"][f"Name[{locale}]"],
+                service["Desktop Entry"][f"Name[{locale}]"] + "…",
+            )
+
+    def test_given_injected_desktop_metadata_when_verifying_then_reject_locale_or_launch_mutation(self):
+        original_app = package.read_desktop_entry(
+            package.ASSETS / "share/applications/io.github.morozhenko_apps.RQuickShare.desktop"
+        )
+        original_service = package.read_desktop_entry(
+            package.ASSETS / "share/kio/servicemenus/io.github.morozhenko_apps.RQuickShare.Send.desktop"
+        )
+
+        def drop_portuguese(app, service):
+            app["Desktop Entry"].pop("Comment[pt_PT]")
+
+        def generic_portuguese(app, service):
+            app["Desktop Entry"]["Comment[pt]"] = "Wrong regional fallback"
+
+        def simplified_chinese(app, service):
+            service["Desktop Entry"]["Name[zh_CN]"] = "Wrong script fallback"
+
+        def override_app_exec(app, service):
+            app["Desktop Entry"]["Exec"] = "/bin/sh -c echo"
+
+        def override_dolphin_exec(app, service):
+            service["Desktop Action Send"]["Exec"] = "rquickshare send -- %F"
+
+        def override_dolphin_type(app, service):
+            service["Desktop Entry"]["Type"] = "Application"
+
+        def override_dolphin_mimetypes(app, service):
+            service["Desktop Entry"]["MimeType"] = "text/plain;"
+
+        def override_dolphin_actions(app, service):
+            service["Desktop Entry"]["Actions"] = "Other;"
+
+        def hide_localized_action(app, service):
+            service["Desktop Action Send"].pop("Name[fil]")
+
+        def remove_action_ellipsis(app, service):
+            service["Desktop Action Send"]["Name[ru]"] = "Отправить через rQuickShare"
+
+        def inject_direction_override(app, service):
+            app["Desktop Entry"]["Comment[ar]"] += chr(0x202E)
+
+        def inject_field_escape(app, service):
+            service["Desktop Entry"]["Name[ru]"] += "%U"
+
+        def rebrand_binary(app, service):
+            service["Desktop Entry"]["Name[de]"] = "Ein anderes Produkt"
+
+        for label, mutation in [
+            ("missing Portuguese", drop_portuguese),
+            ("generic Portuguese", generic_portuguese),
+            ("Simplified Chinese", simplified_chinese),
+            ("application command", override_app_exec),
+            ("Dolphin command", override_dolphin_exec),
+            ("Dolphin type", override_dolphin_type),
+            ("Dolphin MIME types", override_dolphin_mimetypes),
+            ("Dolphin action list", override_dolphin_actions),
+            ("missing Filipino", hide_localized_action),
+            ("dialog marker", remove_action_ellipsis),
+            ("direction override", inject_direction_override),
+            ("unsafe field escape", inject_field_escape),
+            ("product attribution", rebrand_binary),
+        ]:
+            with self.subTest(case=label):
+                app, service = copy.deepcopy(original_app), copy.deepcopy(original_service)
+                mutation(app, service)
+                with self.assertRaises(ValueError):
+                    package.validate_localized_desktop_entries(app, service)
+        with tempfile.TemporaryDirectory() as temporary:
+            corrupted = Path(temporary) / "duplicate.desktop"
+            corrupted.write_text(
+                (package.ASSETS / "share/applications/io.github.morozhenko_apps.RQuickShare.desktop").read_text()
+                + "Comment[ru]=duplicate\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(configparser.DuplicateOptionError):
+                package.read_desktop_entry(corrupted)
+
+    def test_given_package_workflow_when_desktop_assets_are_checked_then_use_correct_contract_for_each_type(self):
+        # Freedesktop validates application launchers; KDE service menus have
+        # their own Type=Service + MimeType/Actions schema and strict project check.
+        workflow = (Path(__file__).parents[2] / ".github/workflows/native-package-smoke.yml").read_text(
+            encoding="utf-8"
+        )
+        app_path = "native_desktop/packaging/share/applications/io.github.morozhenko_apps.RQuickShare.desktop"
+        service_path = "native_desktop/packaging/share/kio/servicemenus/io.github.morozhenko_apps.RQuickShare.Send.desktop"
+        validator_lines = [
+            line.strip() for line in workflow.splitlines()
+            if line.strip().startswith("desktop-file-validate ")
+        ]
+        self.assertEqual(validator_lines, [f"desktop-file-validate {app_path}"])
+        self.assertIn("native_deb.validate_assets()", workflow)
+        self.assertIn("import native_deb", workflow)
+        self.assertNotIn(f"desktop-file-validate {service_path}", workflow)
+        app = package.read_desktop_entry(package.ASSETS / "share/applications" / Path(app_path).name)
+        service = package.read_desktop_entry(
+            package.ASSETS / "share/kio/servicemenus" / Path(service_path).name
+        )
+        self.assertEqual(app["Desktop Entry"]["Type"], "Application")
+        self.assertEqual(service["Desktop Entry"]["Type"], "Service")
+        self.assertEqual(service["Desktop Entry"]["MimeType"], "application/octet-stream;inode/directory;")
+        self.assertEqual(service["Desktop Entry"]["Actions"], "Send;")
+        package.validate_localized_desktop_entries(app, service)
 
     def test_given_elf_header_when_truncated_wrong_type_endian_or_machine_then_reject_relabelled_binary(self):
         # Arrange / Act / Assert: actual ELF machine identity, independent of file names.

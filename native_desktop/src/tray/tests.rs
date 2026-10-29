@@ -49,6 +49,13 @@ async fn given_private_kde_watcher_when_registered_activated_and_lost_then_lates
         item.get_property::<String>("Status").await.unwrap(),
         "Active"
     );
+    let description = Item {
+        updates: watch::channel(TrayState::default()).0,
+    };
+    assert_eq!(
+        description.tool_tip().3,
+        crate::i18n::label("Send and receive nearby files")
+    );
     assert!(!item.get_property::<bool>("ItemIsMenu").await.unwrap());
     assert_eq!(
         item.get_property::<String>("IconName").await.unwrap(),

@@ -380,6 +380,90 @@ pub(super) fn verify(panel: &Rc<Panel>) {
     panel.model.borrow_mut().state.pending = true;
     assert!(!panel.input_allowed(123, Some(&target), None));
     panel.model.borrow_mut().state = saved;
+    // The actual GTK panel must remain unable to initiate a new send if any
+    // independent controller or view precondition goes stale. This extends
+    // the existing real-widget smoke, not a pure duplicate of input_allowed.
+    let healthy = panel.model.borrow().state.clone();
+    for branch in 0..5 {
+        let mut altered = healthy.clone();
+        match branch {
+            0 => altered.busy = true,
+            1 => altered.pending = true,
+            2 => altered.text_pending = true,
+            3 => altered.settings_pending = true,
+            4 => altered.disconnected = true,
+            _ => unreachable!(),
+        }
+        panel.model.borrow_mut().state = altered;
+        assert!(
+            !panel.input_allowed(123, Some(&target), None),
+            "controller flag {branch} incorrectly allowed an outbound action"
+        );
+    }
+
+    for branch in 0..5 {
+        let mut altered = healthy.clone();
+        let view = Arc::make_mut(altered.view.as_mut().unwrap());
+        match branch {
+            0 => view.epoch = 124,
+            1 => view.synchronized = false,
+            2 => view.lifecycle = Lifecycle::Draining,
+            3 => view.lifecycle = Lifecycle::Stopped,
+            4 => view.endpoints.clear(),
+            _ => unreachable!(),
+        }
+        panel.model.borrow_mut().state = altered;
+        assert!(
+            !panel.input_allowed(123, Some(&target), None),
+            "stale view branch {branch} incorrectly permitted sending"
+        );
+    }
+    panel.model.borrow_mut().state = healthy;
+
+    let (original_closing, original_preview, original_safety) = {
+        let model = panel.model.borrow();
+        (model.closing, model.preview, model.safety)
+    };
+    panel.model.borrow_mut().closing = true;
+    assert!(!panel.input_allowed(123, Some(&target), None));
+    panel.model.borrow_mut().closing = original_closing;
+    panel.model.borrow_mut().preview = true;
+    assert!(!panel.input_allowed(123, Some(&target), None));
+    panel.model.borrow_mut().preview = original_preview;
+
+    panel.model.borrow_mut().safety_active = true;
+    for safety in [
+        crate::desktop_guard::SafetyState::default(),
+        crate::desktop_guard::SafetyState {
+            locked: Some(true),
+            ..Default::default()
+        },
+        crate::desktop_guard::SafetyState {
+            locked: Some(false),
+            closed: true,
+            ..Default::default()
+        },
+    ] {
+        panel.model.borrow_mut().safety = safety;
+        assert!(
+            !panel.input_allowed(123, Some(&target), None),
+            "unsafe desktop observation allowed outbound action: {safety:?}"
+        );
+    }
+    panel.model.borrow_mut().safety = crate::desktop_guard::SafetyState {
+        locked: Some(false),
+        inhibited: Some(true),
+        closed: false,
+    };
+    assert!(
+        panel.input_allowed(123, Some(&target), None),
+        "manual sending must remain available when unlocked but inhibited"
+    );
+    {
+        let mut model = panel.model.borrow_mut();
+        model.safety_active = saved_safety;
+        model.safety = original_safety;
+    }
     panel.set_drawer(Drawer::Open);
     panel.send_to("device");
     fn revealer(root: &gtk::Widget) -> Option<gtk::Revealer> {
@@ -402,11 +486,262 @@ pub(super) fn verify(panel: &Rc<Panel>) {
     assert!(!strip.reveals_child());
     assert!(!panel.sending.is_visible());
     panel.model.borrow_mut().safety_active = saved_safety;
+    tests::verify_real_gdk_clipboard_stream(panel);
+    tests::verify_pending_preparation_cancel_and_stale_reply(panel);
+    tests::given_clipboard_owner_loss_before_async_read_when_source_is_replaced_then_old_paths_never_reappear(panel);
+    tests::given_preparation_completion_queued_before_user_cancels_when_mainloop_runs_then_old_callback_never_changes_notice(panel);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    pub(super) fn verify_real_gdk_clipboard_stream(panel: &Rc<Panel>) {
+        // Arrange: the isolated GTK widget suite already owns this display.
+        // Only the external GDK MIME provider is synthesized; production
+        // clipboard_paths performs the real asynchronous read and close.
+        let clipboard = gtk::prelude::WidgetExt::display(&panel.window).clipboard();
+        for (mime, input, expected) in [
+            (
+                "text/uri-list",
+                b"file:///tmp/first%20file\r\nfile:///tmp/Caf%C3%A9\r\n".as_slice(),
+                Some(vec![
+                    PathBuf::from("/tmp/first file"),
+                    PathBuf::from("/tmp/Café"),
+                ]),
+            ),
+            (
+                "x-special/gnome-copied-files",
+                b"copy\nfile:///tmp/a\nfile:///tmp/b\n".as_slice(),
+                Some(vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")]),
+            ),
+            (
+                "x-special/gnome-copied-files",
+                b"cut\nfile:///tmp/Caf%C3%A9\n".as_slice(),
+                Some(vec![PathBuf::from("/tmp/Café")]),
+            ),
+            (
+                "text/uri-list",
+                b"file:///tmp/a\nfile://remote.invalid/tmp/secret\n".as_slice(),
+                None,
+            ),
+            (
+                "text/uri-list",
+                b"file:///tmp/a\nfile:///tmp/%GG\n".as_slice(),
+                None,
+            ),
+            ("text/plain", b"file:///tmp/a\n".as_slice(), None),
+        ] {
+            let provider = gtk::gdk::ContentProvider::for_bytes(mime, &glib::Bytes::from(input));
+            clipboard.set_content(Some(&provider)).unwrap();
+
+            // Act: this is a real GDK async clipboard stream on Xvfb.
+            let result = glib::MainContext::default().block_on(clipboard_paths(&clipboard));
+
+            // Assert: no partial successful import after a bad second URI,
+            // and unsupported MIME must not fall back to text as files.
+            match expected {
+                Some(paths) => assert_eq!(result.unwrap(), paths, "mime={mime}"),
+                None => assert!(result.is_err(), "unexpected clipboard admit for {mime}"),
+            }
+        }
+
+        let too_large = format!(
+            "file:///tmp/{}",
+            "x".repeat(URI_BYTES + 1 - "file:///tmp/".len())
+        );
+        let provider = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from(too_large.as_bytes()),
+        );
+        clipboard.set_content(Some(&provider)).unwrap();
+        assert!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .is_err(),
+            "oversized live clipboard stream was accepted"
+        );
+        clipboard.set_text("clipboard restored after outbound integration");
+    }
+
+    pub(super) fn verify_pending_preparation_cancel_and_stale_reply(panel: &Rc<Panel>) {
+        // Arrange: a real GLib completion task waits on a real one-shot
+        // response. No Selection token is forged and no send is possible.
+        let previous_notice = panel.model.borrow().notice;
+        let old_generation = panel.input_generation.borrow().clone();
+        let cancelled = CancellationToken::new();
+        panel.input_cancel.replace(Some(cancelled.clone()));
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Option<Selection>>();
+        panel.wait_selection(receiver, 123, None, old_generation.clone());
+        panel.model.borrow_mut().strip_target = Some("device".into());
+        assert!(panel.model.borrow().input_active);
+        assert!(panel.input_task.borrow().is_some());
+
+        // Act: simulate the user closing the preparation during an
+        // unresolved selection. The actual Panel method owns cancellation.
+        panel.close_input();
+
+        // Assert: no old callback can reauthorize an outbound send.
+        assert!(cancelled.is_cancelled());
+        assert!(!Rc::ptr_eq(
+            &old_generation,
+            &panel.input_generation.borrow()
+        ));
+        assert!(panel.input_cancel.borrow().is_none());
+        assert!(panel.input_task.borrow().is_none());
+        assert!(!panel.model.borrow().input_active);
+        assert!(panel.model.borrow().strip_target.is_none());
+        drop(sender);
+        panel.finish_prepared(123, None, old_generation, None);
+        assert_eq!(panel.model.borrow().notice, previous_notice);
+
+        // A current but unsuccessful completion follows the actual UI
+        // failure path: it never invents a valid selection or sends files.
+        let generation = panel.input_generation.borrow().clone();
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Option<Selection>>();
+        panel.wait_selection(receiver, 123, None, generation);
+        assert!(panel.model.borrow().input_active);
+        sender.send(None).unwrap();
+        let task = panel.input_task.borrow_mut().take().unwrap();
+        glib::MainContext::default().block_on(task).unwrap();
+        assert!(!panel.model.borrow().input_active);
+        assert_eq!(
+            panel.model.borrow().notice,
+            Some(
+                "Content preparation did not complete. Review Recover or discard the pending preparation."
+            )
+        );
+        assert!(panel.input_task.borrow().is_none());
+
+        panel.model.borrow_mut().notice = previous_notice;
+        panel.render();
+    }
+
+    pub(super) fn given_clipboard_owner_loss_before_async_read_when_source_is_replaced_then_old_paths_never_reappear(
+        panel: &Rc<Panel>,
+    ) {
+        // Arrange: all clipboard providers belong to this isolated GTK
+        // display. The production GDK async reader is never replaced.
+        let clipboard = gtk::prelude::WidgetExt::display(&panel.window).clipboard();
+        let original = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/former-owner\n"),
+        );
+        clipboard.set_content(Some(&original)).unwrap();
+        assert_eq!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .unwrap(),
+            vec![PathBuf::from("/tmp/former-owner")]
+        );
+
+        // Act: revoke ownership BEFORE a subsequent read begins. It must
+        // not replay the former owner's already-decoded file list.
+        clipboard
+            .set_content(None::<&gtk::gdk::ContentProvider>)
+            .unwrap();
+        assert!(!clipboard.formats().contain_mime_type("text/uri-list"));
+        assert!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .is_err(),
+            "lost clipboard ownership still admitted the former paths"
+        );
+
+        // A new owner's MIME bytes must replace, rather than append to,
+        // the old source. The new path is deliberately distinct.
+        let replacement = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/new-owner\nfile:///tmp/current-only\n"),
+        );
+        clipboard.set_content(Some(&replacement)).unwrap();
+        assert_eq!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .unwrap(),
+            vec![
+                PathBuf::from("/tmp/new-owner"),
+                PathBuf::from("/tmp/current-only"),
+            ]
+        );
+
+        // A remote URI after owner replacement must reject the *whole*
+        // new offer, not retain either earlier valid source.
+        let remote = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/valid\nfile://remote.invalid/tmp/foreign\n"),
+        );
+        clipboard.set_content(Some(&remote)).unwrap();
+        assert!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .is_err(),
+            "new remote owner leaked a previously admitted local path"
+        );
+
+        let recovered = gtk::gdk::ContentProvider::for_bytes(
+            "text/uri-list",
+            &glib::Bytes::from_static(b"file:///tmp/clean-recovery\n"),
+        );
+        clipboard.set_content(Some(&recovered)).unwrap();
+        assert_eq!(
+            glib::MainContext::default()
+                .block_on(clipboard_paths(&clipboard))
+                .unwrap(),
+            vec![PathBuf::from("/tmp/clean-recovery")]
+        );
+
+        // Restore a harmless MIME type, not any content from a real user.
+        clipboard.set_text("clipboard reset after owner transition verification");
+    }
+
+    pub(super) fn given_preparation_completion_queued_before_user_cancels_when_mainloop_runs_then_old_callback_never_changes_notice(
+        panel: &Rc<Panel>,
+    ) {
+        // Arrange: complete a real selection oneshot synchronously, but
+        // do not run the GLib main context until *after* user cancellation.
+        // No Selection capability is forged and no domain send is invoked.
+        let previous_notice = panel.model.borrow().notice;
+        let old_generation = panel.input_generation.borrow().clone();
+        let cancel = CancellationToken::new();
+        panel.input_cancel.replace(Some(cancel.clone()));
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Option<Selection>>();
+        let target = Target {
+            epoch: 123,
+            endpoint: "device".into(),
+        };
+        panel.wait_selection(receiver, 123, Some(target.clone()), old_generation.clone());
+        panel.model.borrow_mut().strip_target = Some("device".into());
+        assert!(panel.model.borrow().input_active);
+        assert!(panel.input_task.borrow().is_some());
+
+        // Act: a failed preparation reply is already available by the time
+        // the user explicitly closes the action. The close must win.
+        sender.send(None).unwrap();
+        panel.close_input();
+        let after_first_close = panel.input_generation.borrow().clone();
+        assert!(cancel.is_cancelled());
+        assert!(!Rc::ptr_eq(&old_generation, &after_first_close));
+
+        // A repeated cancellation is harmless and cannot revive the token.
+        panel.close_input();
+        assert!(!Rc::ptr_eq(
+            &after_first_close,
+            &panel.input_generation.borrow()
+        ));
+        glib::MainContext::default().iteration(false);
+
+        // Assert: late completion cannot set a stale failure notice, open
+        // the outgoing picker or restore an already dismissed target.
+        panel.finish_prepared(123, Some(target), old_generation, None);
+        assert_eq!(panel.model.borrow().notice, previous_notice);
+        assert!(!panel.model.borrow().input_active);
+        assert!(panel.model.borrow().strip_target.is_none());
+        assert!(panel.input_task.borrow().is_none());
+        assert!(panel.input_cancel.borrow().is_none());
+        panel.render();
+    }
+
     #[test]
     fn given_overlapping_formats_when_selected_then_files_win_before_image_and_text_without_fallback(
     ) {
@@ -457,5 +792,90 @@ mod tests {
             paths(b"file:///tmp/a%20b", false).unwrap(),
             vec![PathBuf::from("/tmp/a b")]
         );
+    }
+    #[test]
+    fn given_local_gnome_and_uri_clipboard_lists_when_decoded_then_paths_keep_order_and_utf8() {
+        // Arrange: the real GIO URI decoder receives GNOME and freedesktop
+        // clipboard formats, including CRLF, comments and escaped Unicode.
+        for (body, gnome, expected) in [
+            (
+                "copy\r\n# ignored\r\nfile:///tmp/first%20file\r\nfile://localhost/tmp/second\r\n",
+                true,
+                vec![
+                    PathBuf::from("/tmp/first file"),
+                    PathBuf::from("/tmp/second"),
+                ],
+            ),
+            (
+                "cut\nfile:///tmp/Caf%C3%A9\nfile:///tmp/Caf%C3%A9\n",
+                true,
+                vec![PathBuf::from("/tmp/Café"), PathBuf::from("/tmp/Café")],
+            ),
+            (
+                "# a file list\n\n  file:///tmp/one%20two  \r\nfile:///tmp/three\n",
+                false,
+                vec![PathBuf::from("/tmp/one two"), PathBuf::from("/tmp/three")],
+            ),
+            (
+                "file://LOCALHOST/tmp/only",
+                false,
+                vec![PathBuf::from("/tmp/only")],
+            ),
+        ] {
+            // Act: no duplicate removal, reordering, remote fallback or
+            // unintended interpretation of the GNOME command as a filename.
+            let decoded = paths(body.as_bytes(), gnome).unwrap();
+            assert_eq!(decoded, expected, "wrong clipboard path order: {body:?}");
+            assert!(decoded.iter().all(|path| path.is_absolute()));
+        }
+    }
+
+    #[test]
+    fn given_clipboard_uri_list_with_late_invalid_inputs_when_parsed_then_entire_import_is_rejected(
+    ) {
+        // Arrange: each bad second item must invalidate the entire batch;
+        // a valid first item may never be returned as a partial success.
+        for (body, gnome) in [
+            ("copy\nfile:///tmp/a", false),
+            ("paste\nfile:///tmp/a", true),
+            ("file:///tmp/a\nfile://remote.invalid/tmp/b", false),
+            ("file:///tmp/a\nfile://user@localhost/tmp/b", false),
+            ("file:///tmp/a\nfile://localhost:7/tmp/b", false),
+            ("file:///tmp/a\nfile:///tmp/%", false),
+            ("file:///tmp/a\nfile:///tmp/%a", false),
+            ("file:///tmp/a\nfile:///tmp/%GG", false),
+            ("file:///tmp/a\nhttps://example.invalid/file", false),
+            ("# comments and no local path\n", false),
+            ("copy\n# only a comment\n", true),
+        ] {
+            assert!(
+                paths(body.as_bytes(), gnome).is_err(),
+                "admitted a partial or foreign clipboard selection: {body:?}"
+            );
+        }
+
+        for malformed in [
+            b"file:///tmp/a\nfile:///tmp/b\0".as_slice(),
+            b"file:///tmp/a\nfile:///tmp/\xff".as_slice(),
+        ] {
+            assert!(
+                paths(malformed, false).is_err(),
+                "accepted invalid clipboard bytes after a valid URI"
+            );
+        }
+
+        // Exactly 256 KiB of otherwise valid local-URI text is permitted;
+        // one extra byte must fail, without returning a partial list.
+        let prefix = "file:///tmp/";
+        let bounded = format!("{prefix}{}", "x".repeat(URI_BYTES - prefix.len()));
+        let paths_at_limit = paths(bounded.as_bytes(), false).unwrap();
+        assert_eq!(paths_at_limit.len(), 1);
+        assert_eq!(
+            paths_at_limit[0].as_os_str().len(),
+            URI_BYTES - "file://".len()
+        );
+        let oversized = format!("{bounded}x");
+        assert_eq!(oversized.len(), URI_BYTES + 1);
+        assert!(paths(oversized.as_bytes(), false).is_err());
     }
 }

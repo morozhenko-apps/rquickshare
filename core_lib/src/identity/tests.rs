@@ -133,6 +133,104 @@ async fn given_required_consumers_when_acknowledgements_arrive_then_exact_revisi
 }
 
 #[tokio::test]
+async fn given_rapid_renames_when_old_acks_arrive_then_only_latest_generation_is_applied() {
+    for mdns_first in [false, true] {
+        // Arrange: two real independent identity consumers start fully applied.
+        let owner =
+            IdentityPolicy::new(name("Original"), &[ConsumerKind::Mdns, ConsumerKind::Gatt]);
+        let mut mdns = owner.subscribe(ConsumerKind::Mdns).unwrap();
+        let mut gatt = owner.subscribe(ConsumerKind::Gatt).unwrap();
+        assert_eq!(mdns.snapshot().revision, 1);
+        assert_eq!(gatt.snapshot().revision, 1);
+        mdns.acknowledge(1).unwrap();
+        gatt.acknowledge(1).unwrap();
+        assert_eq!(owner.applied(1), Ok(true));
+
+        // Act: multiple updates coalesce before the individual services see them.
+        assert_eq!(owner.set_override(Some(&name("Second"))), Ok(2));
+        assert_eq!(owner.set_override(Some(&name("Third"))), Ok(3));
+        assert_eq!(owner.set_override(Some(&name("Fourth"))), Ok(4));
+        assert_eq!(owner.set_override(Some(&name("Fourth"))), Ok(4));
+        mdns.changed().await.unwrap();
+        gatt.changed().await.unwrap();
+        assert_eq!(mdns.snapshot().revision, 4);
+        assert_eq!(gatt.snapshot().revision, 4);
+        for obsolete in 1..4 {
+            assert_eq!(owner.applied(obsolete), Err(IdentityError::Superseded));
+        }
+        assert_eq!(owner.applied(4), Ok(false));
+
+        // Assert: neither the old acknowledgements nor the first latest
+        // acknowledgement may complete a wait for the newest generation.
+        let (first, second) = if mdns_first {
+            (&mdns, &gatt)
+        } else {
+            (&gatt, &mdns)
+        };
+        let stop = CancellationToken::new();
+        let wait = owner.wait_applied(4, &stop);
+        pin_mut!(wait);
+        assert!(poll!(&mut wait).is_pending());
+        for stale in [2, 3] {
+            first.acknowledge(stale).unwrap();
+            second.acknowledge(stale).unwrap();
+            assert_eq!(owner.applied(4), Ok(false));
+            assert!(poll!(&mut wait).is_pending());
+        }
+        first.acknowledge(4).unwrap();
+        assert_eq!(owner.applied(4), Ok(false));
+        assert!(poll!(&mut wait).is_pending());
+        second.acknowledge(4).unwrap();
+        assert_eq!(poll!(&mut wait), Poll::Ready(Ok(())));
+        assert_eq!(owner.applied(4), Ok(true));
+        assert_eq!(first.acknowledge(3), Err(IdentityError::Consumer));
+        assert_eq!(second.acknowledge(4), Ok(()));
+    }
+}
+
+#[tokio::test]
+async fn given_acknowledged_consumer_loss_when_renamed_then_no_false_applied_result_survives() {
+    for drop_mdns in [false, true] {
+        // Arrange: a previously fully applied name must not mask a lost service.
+        let owner =
+            IdentityPolicy::new(name("Original"), &[ConsumerKind::Mdns, ConsumerKind::Gatt]);
+        let mut mdns = Some(owner.subscribe(ConsumerKind::Mdns).unwrap());
+        let mut gatt = Some(owner.subscribe(ConsumerKind::Gatt).unwrap());
+        mdns.as_mut().unwrap().snapshot();
+        gatt.as_mut().unwrap().snapshot();
+        mdns.as_ref().unwrap().acknowledge(1).unwrap();
+        gatt.as_ref().unwrap().acknowledge(1).unwrap();
+        assert_eq!(owner.applied(1), Ok(true));
+
+        // Act: one required consumer disappears after it already acknowledged.
+        if drop_mdns {
+            drop(mdns.take());
+        } else {
+            drop(gatt.take());
+        }
+        assert_eq!(owner.applied(1), Err(IdentityError::Unavailable));
+        assert_eq!(owner.set_override(Some(&name("Updated"))), Ok(2));
+        let surviving = if drop_mdns {
+            gatt.as_mut().unwrap()
+        } else {
+            mdns.as_mut().unwrap()
+        };
+        surviving.changed().await.unwrap();
+        assert_eq!(surviving.snapshot().revision, 2);
+        surviving.acknowledge(2).unwrap();
+
+        // Assert: the surviving participant cannot claim both services applied.
+        assert_eq!(owner.applied(2), Err(IdentityError::Unavailable));
+        assert_eq!(
+            owner.wait_applied(2, &CancellationToken::new()).await,
+            Err(IdentityError::Unavailable)
+        );
+        assert!(owner.subscribe(ConsumerKind::Mdns).is_err());
+        assert!(owner.subscribe(ConsumerKind::Gatt).is_err());
+    }
+}
+
+#[tokio::test]
 async fn given_waiting_apply_when_consumer_drops_or_revision_changes_then_wait_fails_without_timeout(
 ) {
     for supersede in [false, true] {

@@ -1,0 +1,129 @@
+# Release readiness and GitHub → R2 rehearsal
+
+Date: 2026-10-20. Primary task MODE A. Status: documentation and backlog preparation, NOT approval to create a public tag, write R2, sign artifacts, provision secrets, merge branches or install software.
+Related authorities: product-release-strategy.md, native-tagged-release.md, native-essential-priorities.md, native-essential-acceptance.md, native-r2.md.
+
+## Confirmed baseline
+
+- dev at review: 9045cadd15ab0f1ea2423ed5d3673efc0f9de33c; master at 3f6f8b32cd9414bce30865402f8b707e6b2b12e0. They differ. GitHub branch endpoint reported protected=false for each; effective repository rulesets and tag protections still need verification.
+- User built and verified the Ubuntu 26.04 amd64 native development package rquickshare-native_1.0.0-2.debug_amd64.deb (SHA-256 d88144bb7274c1d7615c7ca85659485c16e78d7c46f416c04d4b0ae175f3b710). APT dry run: 1 upgrade from 1.0.0-1.debug, 0 removals, 25 unrelated packages not upgraded. Real installation of revision 2 has not been reported.
+- Revision 2 source exact Preflight https://github.com/morozhenko-apps/rquickshare/actions/runs/39486686043 and Native GTK https://github.com/morozhenko-apps/rquickshare/actions/runs/39486686120 both completed SUCCESS.
+- Earlier 1.0.0-1.debug Pixel 6a → Ubuntu BWU migration and end-to-end transfer passed; current revision 2 UI behavior has not been physically tested. A received-file independent hash comparison was not reported.
+- Local build's nine rqs_lib warnings, bluer future incompatibility and dpkg-shlibdeps loader diversion warnings were nonfatal. Investigate compiler/dependency sustainability before promising stable support.
+- GitHub Releases API showed no published/draft releases in this repository at this review.
+
+## Prioritized remaining checklist
+
+| Priority | Work / owner issue | Status / release evidence |
+| --- | --- | --- |
+| 1 | Incoming Devices attention, badge and exact sender focus (#13) | Source and CI PASS; install revision 2 after idle check and test on KDE, collapsed/open, one/multiple requests, focus/scroll, reduced-motion and lock/DND |
+| 1 | Android ordinary two-way sharing | One Pixel inbound BWU transfer PASS, earlier outgoing smoke known; current build needs actual text/URL, multiple files/folders, explicit consent, matching sender/received SHA256 and cancellation checks |
+| 1 | Recovery & file safety | Verify disconnect mid-transfer, sleep/resume, full disk, inaccessible destination, conflicting/symlinked paths, partial-file publication, fail-closed behavior and deliberate explicit retry |
+| 1 | KDE installed lifecycle | Test tray and device drawer, file manager Send, single instance, autostart opt-in, updates/removal, settings retention, daemon reconnect/recovery |
+| 1 | #11 unroutable LAN IPv4 fallback | OPEN, architecture policy choice remains required; test unusable/multicast/broadcast and legitimate non-RFC1918 addresses |
+| 1 | #12 repeated mDNS discovery generation | Implementation + exact-source CI completed; reconcile still-open issue with evidence and remaining physical results |
+| 1 | #9 mDNS SDK reachability/test seam | OPEN, explicit architecture choice required; deterministic browse event/network transition tests pending |
+| Deferred | #8 BWU TCP pre-commit authentication | OPEN/DEFERRED by user, not fixed. Preserve Google interop, explicitly review residual DoS risk before stable public claims |
+| 2 | Complete release-candidate QA | Actual final tagged source Mode B, negative N1–N12 applicability, stable/flaky separation, package provenance and physical smoke. Do not equate Preflight with full Mode B gate |
+| 2 | GitHub → R2 rehearsal | Existing producer/publisher available but no actual tag→R2 end-to-end proof; validate tag/branch policies, isolated signing secrets, conditional R2 upload, immutable hashes and independent client readback |
+| 2 | Production APT + public direct .deb | Verify key source/signatures, actual isolated APT acquisition, Worker availability, install/enrollment, index refresh within 7-day expiry and failure alerting |
+| 3 | Official v1.0.0 | Release only after Linux readiness, approved provenance/security/branding/GPL/source notice and a verified master tag; public GitHub release last |
+
+Outside first Linux essential release: Google Account/Contacts, trusted auto-accept, QR interoperability, previews, resumable offsets/dedup, stream/AirDrop and native Windows/macOS ports. These remain longer-term roadmap items and must not be falsely called implemented for v1.0.0.
+
+## Existing deployment boundary (important)
+
+The approved first stable public tag is v1.0.0. The native-tag-publish.yml workflow currently triggers on all v* tag pushes, but its admission step only accepts stable vMAJOR.MINOR.PATCH tags, equal to native_desktop/Cargo.toml version and pointing to current master HEAD. After a 10x Mode B reusable gate it builds a release Debian package, signs with protected apt-release environment, conditionally uploads immutable pool/by-hash objects and then InRelease in dedicated PRODUCTION bucket rquickshare-native-apt, checks public https://download.morozhenko.com/dist/rQuickShare and actual APT download, then creates GitHub Release.
+
+The production bucket and active dists/.../InRelease object are hardcoded in native_r2.py and the read-only Worker configuration. No test tag must overwrite them. GitHub environment/secret names and effective protection rules were not available for verification in this inspection; never request/export secret values through chat.
+
+## Release rehearsal architectural decision: pending
+
+OPTION A (recommended): reserved version v1.0.0-rc.1 (release candidate), real Git tag + GitHub Actions pipeline, but only a separate private staging R2 bucket, staging signer and staging-scoped credentials. Modify stable workflow filters to reject RC *before* secrets/build; RC workflow must not use apt-release or deploy the production Worker. Canonical mapping from semver prerelease to Debian lower-than-stable 1.0.0~rc1-1, with tests and no reuse of mismatched 1.0.0-2.debug bytes under a new immutable version. Read back R2 bytes/SHA256 and verify test signed metadata via isolated APT. Staging success does not automatically release public v1.0.0.
+
+Pros: proves real Git-tag CI→bucket upload without changing live APT/download route, preserves first stable identity. Cons: separate CI trust boundaries, keys, credentials, version policy and setup; production Worker must still pass final release smoke.
+
+OPTION B: make v0.9.0 a genuine public production release through the existing protected master/tag workflow and production signed R2 bucket. Pros: tests full public download/APT path without a second staging environment. Cons: NOT a dry run; publicly trusted bytes and irreversible channel history, dependency/ABI/version downgrade against installed 1.0.0-2.debug, higher operational risk. Requires actual product/security release approval, not just testing intent.
+
+STOP FACTOR: creating separate staging distribution authority, changing prerelease version/tag policy, or authorizing production public publication is a material security/release decision. Do not create tag, bucket, keys, workflow or real R2 objects before user chooses A/B. The user requested reserving a near-term release and testing Git→bucket, not publishing unverified production assets.
+
+## Planned Option A delivery after approval
+
+1. Inspect protected master/tag rules and release environment metadata only; retain all existing production secrets and Worker route unchanged.
+2. Document and test release candidate tag syntax, exact SHA source identity, Debian prerelease version ordering and separation of prod/staging signing + R2 credentials.
+3. Implement dedicated staging release workflow and publisher targeting private staging only, with production flow refusing prerelease tags. Add fail-closed tests for missing/incorrect credentials, tag/master mismatch, wrong bucket, unsigned/mismatched artifact, conflicting immutable object, ambiguous R2 state and CAS/replay.
+4. Run one immutable RC tag after the agreed acceptance gate, verify jobs, object bytes and hashes from independent R2 readback, signed index from isolated APT, no production mutation. Record evidence and explicit cleanup/retention.
+5. On a later separate approval, ship v1.0.0 from protected master with full real-device checks, signed production snapshot and public HTTPS/GitHub Release verification.
+
+No other repo, R2 bucket, existing release, installed user service or master branch may be mutated in this planning task.
+
+## DECISION UPDATE — 2026-10-20: Option B selected, public v0.9.0
+
+**Owner decision:** choose **Option B**, an actual early public `v0.9.0` release into the existing production Cloudflare R2 bucket and signed APT channel. No isolated staging bucket or `v1.0.0-rc.1` staging release is planned. This decision supersedes the prior staging recommendation and staging STOP FACTOR in this document, but **does not waive required validation, credential custody, GitHub branch protection, source provenance, user acceptance, security disclosure or actual release gates**.
+
+**Mode A, implementation stages:**
+
+1. Record the selected public `v0.9.0` product semantics and existing distribution guarantees. This is a genuine, limited-scope Ubuntu 26.04 amd64 **early release**, not full Google Quick Share parity; `v1.0.0` becomes a later stability target. Keep `rquickshare-native` package identity, GPL/attribution, `download.morozhenko.com/dist/rQuickShare/`, existing bucket `rquickshare-native-apt`, signed suite and tag-gated CI workflow.
+2. Prepare a candidate **only on `dev`**: update native_desktop product crate and its exact lockfile package entry from `1.0.0` to `0.9.0`, reset Debian revision to `1` for a fresh never-published `0.9.0-1`; add negative version ordering fixtures. Do not rewrite historical internal `1.0.0-2.debug` evidence or the independent core and Tauri versions. Retain current `1.0.0-2.debug` binary for rollback/device testing; never re-label/reuse its bytes as `0.9.0`. Follow the existing package builder instead of custom direct uploads.
+3. Review complete exact-source Preflight/Native GTK and package/Mode B workflows; complete linked P0 Linux/Android tests, #13 visual acceptance, package lifecycle, security review and all required release gates. Actual authenticated `master`/tag rulesets and `apt-release` environment/secret presence must be verified by the repository operator. GitHub branch read currently reported `master.protected=false`; **do not enable automated signing from an unprotected production branch**.
+4. Once the candidate is accepted, fast-forward verified `dev` to protected `master`; create a **single immutable annotated** `v0.9.0` tag at the matching commit; let the existing tag workflow run release Mode B 10x, build, signed APT publish and public download checks. Do not bypass it through raw Wrangler upload or upload a debug .deb. Preserve source/binary digest receipts, prove signed APT acquisition and GitHub Release; never overwrite same-version bytes or move the tag.
+5. After publication, validate `InRelease` renewal before its 7-day expiry, explicit enrollment and update semantics. The owner's installed `1.0.0-1.debug` is **higher** than public `0.9.0-1` in Debian version order. `apt install` will **not** automatically downgrade it; any separate deliberate downgrade test requires preserving settings/rollback and explicit user authorization. The initial early public announcement and upgrade instructions must disclose this limitation.
+
+**Release stop conditions still active:** missing environment protection or publisher signing-only secrets, incomplete exact-source Mode B or meaningful physical acceptance, release-critical regression, conflicting signed R2 snapshot, mismatched immutable package or binary provenance. Scope selection authorizes preparation on dev; do **not** create the tag or modify production bucket while these are unresolved. No runtime environment/secrets are available to this connector for operator-only publishing.
+
+**Rollback before tag:** revert isolated development changes; retain existing debug packages and signing materials. **After tag/publishing**: no tag movement or overwriting immutable objects; use a new patch release for corrections, with explicit signed archive transition. Option B is an operational release, not a reversible dry run.
+
+## B implementation evidence — product identity and release gate
+
+Date 2026-10-20. MODE A. Changes recorded **on dev only**, not the release branch:
+
+- `28aaef56295f55894d47e899781dec17b7fc360c`: `native_desktop/Cargo.toml` product version `0.9.0`, matching `native_desktop/Cargo.lock` package entry, and native Debian revision reset `2→1` (first public package `rquickshare-native_0.9.0-1_amd64.deb`). Version/ordering negative regression in `scripts/tests/test_native_deb.py` verifies `0.9.0-1` sorts below historical `1.0.0-1.debug` and `1.0.0-2.debug`, and below internal `0.9.0-1.debug`. Local system `dpkg --compare-versions` independently returned true for all six specified orderings; the package itself has not been built locally under this new version.
+- `ce405618b0eb224094dbffea1a2f26c6595c7d77`: production tag admission now fails closed if GitHub's `branches/master` API does not report `protected=true`. A matching tag SHA alone did **not** imply protected release authority, so this enforces the already documented trust assumption. It currently blocks publication because the branch status was `false` at last read. Authorized operator must provision actual branch and tag rules before signed publication.
+- `3139fc59755103852f1e600fea53d665acf2e2a4`: GitHub Release notes for the selected `v0.9.0` explicitly state early public Linux-only support and the open BWU socket-handoff DoS limitation (#8). Later tags keep their existing general release notes, not an unconditional false early-release label.
+- Initial [Native GTK run 39491269847](https://github.com/morozhenko-apps/rquickshare/actions/runs/39491269847) failed **one out of 86** isolated GTK tests (85 passed) because the About dialog test asserted a hardcoded `1.0.0` against the correctly rendered `0.9.0`. `0b02808fd621cf31f4e00819f56fb49cdeec41a4` fixes the *test contract* to use `env!("CARGO_PKG_VERSION")` rather than hardcoding. Full final-source CI result must be read separately; no GREEN claim from a prior failing SHA.
+- The prior installed `1.0.0-1.debug` and tested uninstalled `1.0.0-2.debug` remain immutable. Never report an APT downgrade as an upgrade, or tell the owner to replace the installed app without explicit controlled hardware acceptance.
+
+### Operator-owned GitHub controls (no secret export to chat/repo)
+
+1. On GitHub `morozhenko-apps/rquickshare` → Settings → Rules → Rulesets, require protection of `master` against force push/deletion, and enforce repository-appropriate trusted update checks. Confirm the GitHub REST branch `protected=true` value after effective rules apply. Protect creation, update and deletion of `v*` tags against untrusted actors. The release CI's source-commit check is necessary but not sufficient to prove a tag is authorized.
+2. GitHub Settings → Environments → `apt-release`: make the tag publisher environment available only to the intended protected release source/tag policy; ensure the dedicated preexisting signing **subkey**, pinned public keyring, least-privilege R2 bucket and Worker token secrets, plus `RQS_R2_ACCOUNT_ID` variable, are present. Confirm **names/presence only**, never reveal values in the issue/chat or application logs.
+3. Because this is an unattended tag release design (already approved separately), a required human environment reviewer would block the automated release. Protect workflows/master/tag and environment secret edits instead; do not weaken source/tag verification just to get a green release job.
+4. Only when Linux hardware acceptance, strict final Mode B and package/source identity checks pass, intentionally promote the verified candidate from dev to master, create a never-reused annotated `v0.9.0` tag, and observe the production publisher as a true real release. On R2 or public download failure, retain immutable bytes, diagnose and use a new version for corrections, never force rollback by overwriting `InRelease`/a tag without signed-authority verification.
+
+### Remaining gates
+
+- [ ] Full exact-final-source CI success for the version/test and release workflow changes.
+- [ ] Real 0.9.0-1 uninstalled package build/verify + SHA256 and actual matching tag source provenance.
+- [ ] Operator rulesets and signing environment presence/protection.
+- [ ] Hardware consent/file/text/folder/error lifecycle acceptance on Linux/Pixel for the release candidate.
+- [ ] Strict complete Mode B and release actionlint check on exact intended tag source.
+- [ ] Public signed production R2 objects, HTTPS readback, isolated APT, GitHub Release, signed-index refresh.
+
+## Release-v0.9.0 exact-source validation update
+
+- `0b02808fd621cf31f4e00819f56fb49cdeec41a4`: [Native GTK UI verification 39491932598](https://github.com/morozhenko-apps/rquickshare/actions/runs/39491932598) **completed SUCCESS** after eliminating the hardcoded About version assertion. Both strict lint/format and GTK isolated widget/controller checks are represented by this exact workflow; do not attribute the earlier failure to transport or runtime.
+- [Preflight 39491926302](https://github.com/morozhenko-apps/rquickshare/actions/runs/39491926302) was still **in progress** at last observation. Mark final source Preflight pending until GitHub reports completion; earlier cancelled intermediate builds do not establish success or failure of the final candidate.
+- No release tag or public R2 change has been made. Debug package acceptance, final 0.9.0 package-build/signer/rulesets and complete Mode B remain separately open.
+
+## Release version STOP FACTOR — inherited v0.9.0 tag (2026-10-21)
+
+**This supersedes any instruction above to push/create `v0.9.0`.** Actual GitHub Git References API returned `refs/tags/v0.9.0` pointing to commit `f850713a75c219299ba797742f4269c6e61a0c84` (previous upstream release message `chore(master): release 0.9.0 (#108)`). It is a retained historical tag in this fork. The fork also has `v0.11.5` pointing to `2c5feed9496e4c6f382052a95d75d67c6f1caede` (previous release 0.11.5). GitHub Releases listing was empty, but **absence of a GitHub Release does not mean tag is unused**.
+
+The user has approved **Option B: real production R2/APT distribution**, not tag replacement. Reusing `v0.9.0` would violate immutable source↔version provenance and protected-tag ownership. Do not delete, force-move or recycle historic tags; do not promote the current `0.9.0-1` candidate under a false tag or write any object to production bucket.
+
+**Pending architectural public version choice**:
+- **A, recommended:** `v0.12.0`. Git refs API returned 404 for `v0.12.0`, and it follows the historically existing `v0.11.5` in SemVer order. New product version `0.12.0`, native Debian `0.12.0-1`, separate new code/doc commits; `v1.0.0` remains later target. Benefits: clean monotonic release history. Cost: change prepared version fixtures/docs and rerun affected source/package gates.
+- **B:** `v0.9.1`, also absent from exact tag lookup. Benefits: stays near user's requested number. Drawbacks: confusing backwards order relative to previously imported `v0.11.5` tag, even though not the signed native Debian package; extra explanation on public history and update semantics.
+- **C:** keep `v0.9.0` only by introducing a separate new tag namespace and release contract such as `rqs-v0.9.0`, with CI/provenance/version mapping updates. Benefits: product number remains 0.9.0. Drawbacks: changes a currently agreed foundational tag identity and would break standard existing v* automation, more complex release contracts. Not recommended.
+
+All options retain approved existing signed production `rquickshare-native-apt` channel and Ubuntu 26.04 amd64 limitation. STOP FACTOR: **await owner version selection** before any release-version, master, tag, R2 or GitHub Release mutation. Independent test infrastructure corrections may continue under Mode B, but cannot establish approval to ship the collided version.
+
+Prior test-gate failure on `16e632e4` uncovered mandatory `scripts/ci-check-workflow-policy.sh` prohibition of `push` triggers for native package and release checks. Those push triggers were withdrawn in `36902271`; both workflows are manual-only again, and the GPG temp-path fixture correction `330961c6` remains. The corrected candidate package gate has not yet been recorded successful at the latest observation; never treat the first failed smoke as a passed package.
+
+## Current native-tag namespace (2026-10-22)
+
+**The current authoritative release ref is `native/v0.9.0`, not historical upstream `v0.9.0`.** Earlier staging/tag options in this decision log and instructions to create `v0.9.0` were superseded by explicit user-approved [native tag namespace migration](native-tag-namespace-migration-2026-10-22.md). The Linux product stays `0.9.0`; the signed R2/APT channel and shared verified `.deb` bytes are unchanged. The archive restore selects `native/vX.Y.Z` from the verified signed package version. Preserve existing upstream refs, signing profiles, R2/Worker and `master`.
+
+Before any native tag can run release publishing, the operator must update GitHub's **existing** active `protect-release-tags` ruleset: keep the current `v*` include pattern to protect history, and add **`native/v*`** to that same tag ruleset with its existing restriction/bypass settings. In `apt-release` Environment → Selected branches and tags, keep `master` and replace the old `v*` entry with **`native/v*`** (manual reviewer retained). Verify exact rules/branch before approving a tag. This avoids creating a redundant third Ruleset and keeps original upstream refs protected.
+
+No tag, GitHub Release, `master` promotion, signing or R2 write was performed during namespace implementation. The existing product `0.9.0` source is still a candidate subject to automatic package/checks, one final tagged Mode B 10x, and physical KDE/Pixel acceptance. The prior text in this older decision record is retained for chronology only; do not treat old `v0.9.0` issuance instructions as current.

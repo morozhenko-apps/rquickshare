@@ -96,6 +96,56 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn given_two_fragmented_frames_when_each_read_is_interrupted_then_headers_never_splice() {
+        // Exercise all nonempty split boundaries across consecutive frames.
+        let first = [0x10, 0x20, 0x30, 0x40];
+        let second = [0xa0, 0xb0, 0xc0, 0xd0];
+        for first_split in 1..4 {
+            for second_split in 1..4 {
+                let (mut stream, mut peer) = tokio::io::duplex(16);
+                let mut header = FrameHeader::default();
+
+                peer.write_all(&first[..first_split]).await.unwrap();
+                {
+                    let pending = header.read(&mut stream);
+                    tokio::pin!(pending);
+                    assert!(futures::poll!(pending.as_mut()).is_pending());
+                }
+                peer.write_all(&first[first_split..]).await.unwrap();
+                peer.write_all(&second[..second_split]).await.unwrap();
+                assert_eq!(header.read(&mut stream).await.unwrap(), first);
+
+                {
+                    let pending = header.read(&mut stream);
+                    tokio::pin!(pending);
+                    assert!(futures::poll!(pending.as_mut()).is_pending());
+                }
+                peer.write_all(&second[second_split..]).await.unwrap();
+                assert_eq!(header.read(&mut stream).await.unwrap(), second);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn given_io_failure_after_partial_prefix_when_retried_then_partial_bytes_survive() {
+        let first = [0x11, 0x22, 0x33, 0x44];
+        let next = [0x55, 0x66, 0x77, 0x88];
+        for consumed in 1..4 {
+            let mut header = FrameHeader::default();
+            let mut interrupted =
+                std::io::Cursor::new(first[..consumed].to_vec()).chain(FailedRead);
+            assert_eq!(
+                header.read(&mut interrupted).await.unwrap_err().kind(),
+                std::io::ErrorKind::ConnectionReset
+            );
+            let mut recovered =
+                std::io::Cursor::new([first[consumed..].to_vec(), next.to_vec()].concat());
+            assert_eq!(header.read(&mut recovered).await.unwrap(), first);
+            assert_eq!(header.read(&mut recovered).await.unwrap(), next);
+        }
+    }
+
     struct FailedRead;
 
     impl AsyncRead for FailedRead {

@@ -112,6 +112,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ble_half_close_preserves_inbound_read_after_outbound_eof() {
+        // Arrange: the application has sent its final outbound control bytes.
+        let (mut peer, transport) = tokio::io::duplex(128);
+        let mut stream = MigratableStream::Ble(transport);
+
+        // Act: close only our write side and let the peer drain the message.
+        stream.write_all(b"goodbye").await.unwrap();
+        stream.flush().await.unwrap();
+        stream.shutdown().await.unwrap();
+
+        // Assert: the peer sees the complete message and then EOF.
+        let mut message = [0_u8; 7];
+        peer.read_exact(&mut message).await.unwrap();
+        assert_eq!(&message, b"goodbye");
+        assert_eq!(peer.read(&mut message).await.unwrap(), 0);
+
+        // The peer can still send a final control response after local EOF.
+        peer.write_all(b"ack").await.unwrap();
+        let mut response = [0_u8; 3];
+        stream.read_exact(&mut response).await.unwrap();
+        assert_eq!(&response, b"ack");
+    }
+
+    #[tokio::test]
+    async fn tcp_half_close_preserves_inbound_read_after_outbound_eof() {
+        // Arrange: a local loopback pair exercises the real TCP variant.
+        let (mut peer, transport) = tcp_pair().await;
+        let mut stream = MigratableStream::Tcp(transport);
+
+        // Act: flushing and closing the write half must not close the read half.
+        stream.write_all(b"goodbye").await.unwrap();
+        stream.flush().await.unwrap();
+        stream.shutdown().await.unwrap();
+
+        // Assert: the peer drains all sent data before observing EOF.
+        let mut message = [0_u8; 7];
+        peer.read_exact(&mut message).await.unwrap();
+        assert_eq!(&message, b"goodbye");
+        assert_eq!(peer.read(&mut message).await.unwrap(), 0);
+
+        peer.write_all(b"ack").await.unwrap();
+        let mut response = [0_u8; 3];
+        stream.read_exact(&mut response).await.unwrap();
+        assert_eq!(&response, b"ack");
+    }
+
+    #[tokio::test]
     async fn tcp_transport_round_trip() {
         let (mut peer, transport) = tcp_pair().await;
         let mut stream = MigratableStream::Tcp(transport);

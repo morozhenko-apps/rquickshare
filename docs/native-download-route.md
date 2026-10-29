@@ -1,3 +1,8 @@
+> Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
+> Historical Worker, nested archive and full remote snapshot instructions
+> below are superseded. The owner approved a fresh flat channel without
+> a legacy migration; production cutover has not been performed.
+
 # Shared download hostname, isolated rQuickShare APT prefix
 
 Current product and distribution policy:

@@ -19,8 +19,8 @@ from urllib.parse import urlsplit
 
 import native_deb
 
-SUITE = "rquickshare-native-ubuntu26.04"
-PRODUCTION_URI = "https://download.morozhenko.com/dist/rQuickShare/"
+SUITE = "./"
+PRODUCTION_URI = "https://download.morozhenko.com/dist/rQuickShare/linux/"
 LIFETIME = timedelta(days=7)
 MAX_INDEX = 1024 * 1024
 MAX_PACKAGE = 1024 * 1024 * 1024
@@ -111,7 +111,7 @@ def paragraphs(data):
 
 
 def index(root, architecture):
-    raw = run("dpkg-scanpackages", "--multiversion", "--hash", "sha256", "pool", "/dev/null", cwd=root).encode()
+    raw = run("dpkg-scanpackages", "--multiversion", "--hash", "sha256", ".", "/dev/null", cwd=root / "linux").encode()
     entries = [entry for entry in paragraphs(raw) if entry.get("Architecture") == architecture]
     require(len(entries) == 1, "Expected one native release per architecture")
     entry = entries[0]
@@ -120,14 +120,12 @@ def index(root, architecture):
 
 def release(root, architectures, date):
     require(date.tzinfo is not None and date.utcoffset() == timedelta(0) and date.microsecond == 0, "Expected whole-second UTC date")
-    fields = ["Origin: rQuickShare", "Label: rQuickShare", f"Suite: {SUITE}", f"Codename: {SUITE}",
-              "Architectures: " + " ".join(architectures), "Components: main", "Date: " + format_datetime(date, usegmt=True),
-              "Valid-Until: " + format_datetime(date + LIFETIME, usegmt=True), "Acquire-By-Hash: yes", "SHA256:"]
-    for architecture in architectures:
-        for name in ["Packages", "Packages.gz"]:
-            relative = f"main/binary-{architecture}/{name}"
-            path = root / "dists" / SUITE / relative
-            fields.append(f" {digest(path)} {path.stat().st_size} {relative}")
+    fields = ["Origin: rQuickShare", "Label: rQuickShare",
+              "Architectures: " + " ".join(architectures), "Date: " + format_datetime(date, usegmt=True),
+              "Valid-Until: " + format_datetime(date + LIFETIME, usegmt=True), "SHA256:"]
+    for name in ["Packages", "Packages.gz"]:
+        path = root / "linux" / name
+        fields.append(f" {digest(path)} {path.stat().st_size} {name}")
     return ("\n".join(fields) + "\n").encode()
 
 
@@ -151,24 +149,17 @@ def prepare(packages, output, now=None):
         require(arch not in admitted, "Duplicate release architecture")
         admitted[arch] = package
     with stage(output) as root:
-        pool = root / "pool/main/r/rquickshare-native"
-        pool.mkdir(parents=True)
+        directory = root / "linux"
+        directory.mkdir()
         for arch, source in sorted(admitted.items()):
-            target = pool / f"rquickshare-native_{version}_{arch}.deb"
+            target = directory / f"rquickshare-native_{version}_{arch}.deb"
             shutil.copyfile(source, target)
             target.with_suffix(".deb.sha256").write_text(native_deb.checksum(target))
-        for arch in sorted(admitted):
-            directory = root / "dists" / SUITE / f"main/binary-{arch}"
-            directory.mkdir(parents=True)
-            data = index(root, arch)
-            require(len(data) <= MAX_INDEX, "Index exceeds limit")
-            for name, content in [("Packages", data), ("Packages.gz", gzip.compress(data, mtime=0))]:
-                path = directory / name
-                path.write_bytes(content)
-                by_hash = directory / "by-hash/SHA256" / digest(path)
-                by_hash.parent.mkdir(parents=True, exist_ok=True)
-                by_hash.write_bytes(content)
-        (root / "dists" / SUITE / "Release").write_bytes(release(root, sorted(admitted), now))
+        data = b"".join(index(root, arch) for arch in sorted(admitted))
+        require(len(data) <= MAX_INDEX, "Index exceeds limit")
+        (directory / "Packages").write_bytes(data)
+        (directory / "Packages.gz").write_bytes(gzip.compress(data, mtime=0))
+        (directory / "Release").write_bytes(release(root, sorted(admitted), now))
         validate_tree(root, now)
 
 
@@ -184,7 +175,7 @@ def inventory(root):
 def validate_tree(root, now=None, signed=False, check_time=True):
     inventory(root)
     root = root.resolve(strict=True)
-    base = root / "dists" / SUITE
+    base = root / "linux"
     raw = read(base / "Release", 16384)
     parsed = paragraphs(raw)
     require(len(parsed) == 1, "Expected one Release stanza")
@@ -198,46 +189,36 @@ def validate_tree(root, now=None, signed=False, check_time=True):
     if check_time:
         now = clock() if now is None else now
         require(date.tzinfo is not None and date <= now + timedelta(seconds=10) and now < date + LIFETIME, "Expired or future repository metadata")
-    expected = {f"dists/{SUITE}/Release"}
+    expected = {"linux/Release", "linux/Packages", "linux/Packages.gz"}
+    data = read(base / "Packages")
+    entries = paragraphs(data)
+    require(len(entries) == len(architectures), "Expected one indexed package per architecture")
     packages = {}
     version = None
-    for arch in architectures:
-        directory = base / f"main/binary-{arch}"
-        data = read(directory / "Packages")
-        entries = paragraphs(data)
-        require(len(entries) == 1, "Expected one indexed native package")
-        entry = entries[0]
+    for arch, entry in zip(architectures, entries):
         native_deb.validate_metadata(entry)
         require(entry["Architecture"] == arch and not entry["Version"].endswith(".debug"), "Wrong native release architecture/profile")
         require(version in {None, entry["Version"]}, "Mixed channel versions")
         version = entry["Version"]
-        name = f"pool/main/r/rquickshare-native/rquickshare-native_{version}_{arch}.deb"
-        require(entry.get("Filename") == name, "Unexpected package path")
-        package = root / name
+        filename = f"rquickshare-native_{version}_{arch}.deb"
+        require(entry.get("Filename") == "./" + filename, "Unexpected package path")
+        package = base / filename
         regular(package.with_suffix(".deb.sha256"), 256)
         package_digest = digest(package)
         require(entry.get("SHA256") == package_digest and entry.get("Size") == str(package.stat().st_size), "Indexed package hash/size mismatch")
         native_deb.verify(package, smoke=False)
-        require(data == index(root, arch), "Package index differs from actual package metadata")
         packages[arch] = package_digest
-        expected |= {name, name + ".sha256"}
-        compressed = read(directory / "Packages.gz")
-        require(compressed == gzip.compress(data, mtime=0), "Unexpected or corrupted compressed index")
-        for filename in ["Packages", "Packages.gz"]:
-            path = directory / filename
-            relative = path.relative_to(root).as_posix()
-            by_hash = f"{directory.relative_to(root).as_posix()}/by-hash/SHA256/{digest(path)}"
-            require(read(root / by_hash) == read(path), "By-hash index differs")
-            expected |= {relative, by_hash}
+        expected |= {"linux/" + filename, "linux/" + filename + ".sha256"}
+    require(data == b"".join(index(root, arch) for arch in architectures), "Package index differs from actual package metadata")
+    require(read(base / "Packages.gz") == gzip.compress(data, mtime=0), "Unexpected or corrupted compressed index")
     require(raw == release(root, architectures, date), "Release fields/hash/size differ from actual indexes")
     if signed:
-        expected |= {f"dists/{SUITE}/InRelease", f"dists/{SUITE}/Release.gpg"}
+        expected.add("linux/InRelease")
     seen = set()
-    allowed_directories = {str(parent) for name in expected for parent in Path(name).parents}
     for path in inventory(root):
         name = path.relative_to(root).as_posix()
         if path.is_dir():
-            require(name in allowed_directories, "Unexpected repository directory")
+            require(name == "linux", "Unexpected repository directory")
         else:
             require(path.is_file() and name in expected, "Unexpected repository file")
             seen.add(name)
@@ -268,9 +249,9 @@ def public_key(keyring, expected):
 
 def signatures(root, keyring, expected):
     public_key(keyring, expected)
-    base = root / "dists" / SUITE
+    base = root / "linux"
     read(base / "Release", 16384)
-    for path in [base / "InRelease", base / "Release.gpg"]:
+    for path in [base / "InRelease"]:
         regular(path, 32768)
         data = read(path, 32768)
         begin = b"-----BEGIN PGP SIGNED MESSAGE-----\n" if path.name == "InRelease" else b"-----BEGIN PGP SIGNATURE-----\n"
@@ -280,8 +261,7 @@ def signatures(root, keyring, expected):
     with tempfile.TemporaryDirectory(prefix="rqs-gpgv-") as temporary:
         cleartext = Path(temporary) / "Release"
         common = ["gpgv", "--homedir", temporary, "--keyring", str(keyring.absolute()), "--status-fd", "1"]
-        statuses = [run(*common, "--output", str(cleartext), str(base / "InRelease")),
-                    run(*common, str(base / "Release.gpg"), str(base / "Release"))]
+        statuses = [run(*common, "--output", str(cleartext), str(base / "InRelease"))]
         for status in statuses:
             valid = [line.split() for line in status.splitlines() if line.startswith("[GNUPG:] VALIDSIG ")]
             require(len(valid) == 1 and len(valid[0]) >= 11 and valid[0][9] in {"8", "9", "10"}
@@ -321,12 +301,11 @@ def sign(source, output, home, keyring, expected, now=None, previous=None, passp
         compare_previous(current, verify(previous, keyring, expected, now, check_time=False))
     with stage(output) as root:
         shutil.copytree(source, root, dirs_exist_ok=True)
-        base = root / "dists" / SUITE
+        base = root / "linux"
         command = ["gpg", "--no-options", "--homedir", str(home.absolute()), "--batch", "--no-tty", "--local-user", expected, "--digest-algo", "SHA256"]
         if passphrase_file is not None:
             command += ["--pinentry-mode", "loopback", "--passphrase-file", str(passphrase_file.absolute())]
         run(*command, "--output", str(base / "InRelease"), "--clearsign", str(base / "Release"))
-        run(*command, "--armor", "--output", str(base / "Release.gpg"), "--detach-sign", str(base / "Release"))
         verify(root, keyring, expected, now, previous)
 
 
@@ -335,7 +314,7 @@ def bootstrap(repository_uri, repository, keyring, expected, output, now=None):
     architectures = sorted(verify(repository, keyring, expected, now)["packages"])
     with stage(output) as root:
         shutil.copyfile(keyring, root / "rquickshare-native-archive-keyring.gpg")
-        sources = f"Types: deb\nURIs: {repository_uri}\nSuites: {SUITE}\nComponents: main\nArchitectures: {' '.join(architectures)}\nBy-Hash: force\nSigned-By: /etc/apt/keyrings/rquickshare-native-archive-keyring.gpg {expected}\n"
+        sources = f"Types: deb\nURIs: {repository_uri}\nSuites: {SUITE}\nArchitectures: {' '.join(architectures)}\nSigned-By: /etc/apt/keyrings/rquickshare-native-archive-keyring.gpg {expected}\n"
         (root / "rquickshare-native.sources").write_text(sources)
         (root / "FINGERPRINT").write_text(expected + "\n")
         for path in root.iterdir():

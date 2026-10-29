@@ -16,6 +16,43 @@ impl Rows {
         self.entries.clear();
     }
 }
+
+/// Empty-page entries are keyed by stable source IDs, not by rendered language.
+/// Update the owned GtkLabel on every render even when the entry is reused.
+fn refresh_empty_caption(entry: &Entry, source: &'static str) {
+    if let Some(text) = entry.root.first_child().and_downcast::<gtk::Label>() {
+        text.set_label(crate::i18n::label(source));
+    }
+}
+// Return the smallest valid scroll movement that fully reveals a keyed row.
+// An oversized row is aligned to its start; any already visible row is unchanged.
+fn reveal_vertical_interval(
+    start: f64,
+    end: f64,
+    offset: f64,
+    page_size: f64,
+    lower: f64,
+    upper: f64,
+) -> Option<f64> {
+    if page_size <= 0.0 || end <= start {
+        return None;
+    }
+    let max_offset = (upper - page_size).max(lower);
+    let target = if start < offset {
+        start
+    } else if end > offset + page_size {
+        if end - start > page_size {
+            start
+        } else {
+            end - page_size
+        }
+    } else {
+        return None;
+    };
+    let value = target.clamp(lower, max_offset);
+    (value != offset).then_some(value)
+}
+
 fn named(root: &gtk::Widget, name: &str) -> Option<gtk::Widget> {
     if root.widget_name() == name {
         return Some(root.clone());
@@ -57,6 +94,15 @@ fn card_transfer_visible(
 }
 fn payload_label(details: &TransferDetails) -> String {
     use rqs_lib::sessions::details::PayloadKind;
+    match details.status {
+        DetailsStatus::Unavailable => {
+            return crate::i18n::label("Waiting for details").into();
+        }
+        DetailsStatus::Unsupported => {
+            return crate::i18n::label("Unsupported content").into();
+        }
+        DetailsStatus::Ready => {}
+    }
     match details.kind {
         PayloadKind::Files if details.files.len() == 1 => details.files[0]
             .name
@@ -66,10 +112,18 @@ fn payload_label(details: &TransferDetails) -> String {
                 !ext.is_empty() && ext.len() <= 12 && ext.bytes().all(|b| b.is_ascii_alphanumeric())
             })
             .map(|ext| ext.to_ascii_uppercase())
-            .unwrap_or_else(|| "File".into()),
-        PayloadKind::Files => format!("{} files", details.files.len()),
-        PayloadKind::Text => "Text".into(),
-        PayloadKind::Url => "Link".into(),
+            .unwrap_or_else(|| crate::i18n::label("File").into()),
+        PayloadKind::Files => crate::i18n::file_count(details.files.len()),
+        PayloadKind::Text => crate::i18n::label("Text").into(),
+        PayloadKind::Url => crate::i18n::label("Link").into(),
+    }
+}
+/// Missing metadata is an in-progress handshake, not an anonymous file.
+fn peer_title(name: &str, status: DetailsStatus) -> &str {
+    if name.is_empty() && status == DetailsStatus::Unavailable {
+        crate::i18n::label("Connecting…")
+    } else {
+        name
     }
 }
 fn transferring(phase: Phase) -> bool {
@@ -185,18 +239,18 @@ pub(super) fn transfer_row(
     heading.set_widget_name("transfer-heading");
     heading.append(&device_icon(
         kind,
-        phase_text(phase),
+        crate::i18n::transfer_phase(phase_text(phase)),
         Badge::Transfer(phase),
     ));
-    let title = label(if sender.is_empty() {
-        if incoming {
-            "Incoming request"
+    let title = if sender.is_empty() {
+        label(if incoming {
+            crate::i18n::label("Incoming request")
         } else {
-            "Transfer"
-        }
+            crate::i18n::label("Transfer")
+        })
     } else {
-        sender
-    });
+        label(&crate::i18n::isolate_untrusted(sender))
+    };
     title.set_widget_name("row-peer");
     title.set_selectable(false);
     title.set_hexpand(true);
@@ -216,7 +270,7 @@ pub(super) fn transfer_row(
     progress.set_valign(gtk::Align::Center);
     progress.set_visible(matches!(phase, Phase::Sending | Phase::Receiving));
     heading.append(&progress);
-    let status = label(phase_text(phase));
+    let status = label(crate::i18n::transfer_phase(phase_text(phase)));
     status.set_selectable(false);
     status.set_widget_name("row-status");
     status.set_visible(phase.is_terminal());
@@ -251,7 +305,7 @@ impl Panel {
         if transfer.direction == Direction::Inbound {
             if let Some(revision) = transfer.reveal_revision {
                 if transfer.phase == Phase::Finished {
-                    let reveal = gtk::Button::with_label("Show in folder");
+                    let reveal = gtk::Button::with_label(crate::i18n::label("Show in folder"));
                     reveal.set_widget_name("result-reveal");
                     reveal.set_sensitive(ready);
                     let weak = Rc::downgrade(self);
@@ -265,7 +319,7 @@ impl Panel {
                 } else if !transfer.completed_files.is_empty() {
                     let saved = gtk::Box::new(gtk::Orientation::Vertical, 8);
                     for (index, file) in transfer.completed_files.iter().enumerate() {
-                        let name = label(&file.name);
+                        let name = label(&crate::i18n::isolate_untrusted(&file.name));
                         name.set_max_width_chars(40);
                         name.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
                         saved.append(&name);
@@ -276,7 +330,7 @@ impl Panel {
                     let popover = gtk::Popover::new();
                     popover.set_child(Some(&saved));
                     let menu = gtk::MenuButton::builder()
-                        .label("Saved files")
+                        .label(crate::i18n::label("Saved files"))
                         .popover(&popover)
                         .build();
                     heading.append(&menu);
@@ -305,9 +359,9 @@ impl Panel {
             }
         }
         let direction = label(if transfer.direction == Direction::Inbound {
-            "Receive"
+            crate::i18n::label("Receive")
         } else {
-            "Send"
+            crate::i18n::label("Send")
         });
         direction.set_wrap(false);
         let date = transfers::timestamp(None);
@@ -324,19 +378,49 @@ impl Panel {
         root.append(&row);
     }
     pub(super) fn focus_transfer(&self, id: &str) {
-        if let Some(entry) = self
+        let Some(row) = self
             .rows
             .borrow()
             .entries
             .get(&("nearby".to_owned(), id.to_owned()))
-        {
-            if let Some(accept) = named(entry.root.upcast_ref(), "accept") {
-                accept.grab_focus();
-            } else {
-                entry.root.set_focusable(true);
-                entry.root.grab_focus();
-            }
+            .map(|entry| entry.root.clone())
+        else {
+            return;
+        };
+        // Focus the keyed request, not the untrusted advertised device name.
+        // A focus change alone does not guarantee that an offscreen request
+        // becomes visible after GTK's new row allocation.
+        if let Some(accept) = named(row.upcast_ref(), "accept") {
+            accept.grab_focus();
+        } else {
+            row.set_focusable(true);
+            row.grab_focus();
         }
+        let Some(scroll) = self.builder.object::<gtk::ScrolledWindow>("nearby-scroll") else {
+            return;
+        };
+        let content = self.box_widget("nearby");
+        // A one-shot frame callback observes the settled row geometry. There
+        // is no timer, retry or recurrent frame work. If the row is removed or
+        // the drawer is hidden before the frame, it cannot scroll stale UI.
+        scroll.add_tick_callback(move |scroll, _| {
+            if scroll.is_mapped() {
+                if let Some(bounds) = row.compute_bounds(&content) {
+                    let adjustment = scroll.vadjustment();
+                    if let Some(value) = reveal_vertical_interval(
+                        bounds.y() as f64,
+                        (bounds.y() + bounds.height()) as f64,
+                        adjustment.value(),
+                        adjustment.page_size(),
+                        adjustment.lower(),
+                        adjustment.upper(),
+                    ) {
+                        adjustment.set_value(value);
+                    }
+                }
+            }
+            glib::ControlFlow::Break
+        });
     }
     fn cached_transfer(
         self: &Rc<Self>,
@@ -360,10 +444,13 @@ impl Panel {
                 self.transfer_card(transfer, ready, true)
             };
             let root = transfer_row(
-                transfer
-                    .recipient
-                    .as_deref()
-                    .unwrap_or(&transfer.details.sender),
+                peer_title(
+                    transfer
+                        .recipient
+                        .as_deref()
+                        .unwrap_or(&transfer.details.sender),
+                    transfer.details.status,
+                ),
                 transfer.details.device,
                 transfer.phase,
                 &details,
@@ -373,12 +460,18 @@ impl Panel {
             }
             if let Some(summary) = named(root.upcast_ref(), "row-summary") {
                 let mut description = if incoming {
-                    String::from("Check this code on the sending device before accepting.")
+                    String::from(crate::i18n::label(
+                        "Check this code on the sending device before accepting.",
+                    ))
                 } else {
                     String::new()
                 };
                 for file in transfer.details.files.iter() {
-                    description.push_str(&format!("\n{} · {} bytes", file.name, file.size));
+                    description.push_str(&format!(
+                        "\n{} · {}",
+                        crate::i18n::isolate_untrusted(&file.name),
+                        crate::i18n::byte_count(file.size)
+                    ));
                 }
                 summary.set_tooltip_text(Some(&description));
                 summary.update_property(&[gtk::accessible::Property::Description(&description)]);
@@ -462,16 +555,17 @@ impl Panel {
         {
             let text = if transfer.phase.is_terminal() {
                 format!(
-                    "{} · {} bytes",
+                    "{} · {}",
                     payload_label(&transfer.details),
-                    transfer.details.total_bytes
+                    crate::i18n::byte_count(transfer.details.total_bytes)
                 )
             } else if !transfer.details.pin.is_empty() {
-                format!(
-                    "{} · Code: {}",
-                    payload_label(&transfer.details),
-                    transfer.details.pin
-                )
+                let code = crate::i18n::pin_code(&transfer.details.pin);
+                if code.is_empty() {
+                    payload_label(&transfer.details)
+                } else {
+                    format!("{} · {}", payload_label(&transfer.details), code)
+                }
             } else {
                 payload_label(&transfer.details)
             };
@@ -486,7 +580,8 @@ impl Panel {
                 transfer.details.transferred_bytes,
                 transfer.details.total_bytes,
             ));
-            progress.set_tooltip_text(Some(phase_text(transfer.phase)));
+            let phase_label = crate::i18n::transfer_phase(phase_text(transfer.phase));
+            progress.set_tooltip_text(Some(phase_label));
         }
         root
     }
@@ -526,13 +621,13 @@ impl Panel {
                 controls.append(&device_icon(
                     rqs_lib::service::client::state::DeviceKind::Unknown,
                     if projection.1 {
-                        "Nearby advertised device"
+                        crate::i18n::label("Nearby advertised device")
                     } else {
-                        "Unavailable"
+                        crate::i18n::label("Unavailable")
                     },
                     state,
                 ));
-                let title = label(&projection.0);
+                let title = label(&crate::i18n::isolate_untrusted(&projection.0));
                 title.set_selectable(false);
                 title.set_selectable(false);
                 title.set_hexpand(true);
@@ -551,13 +646,25 @@ impl Panel {
                 strip.set_transition_duration(160);
                 let inputs = gtk::Box::new(gtk::Orientation::Horizontal, 3);
                 for (kind, icon, title) in [
-                    (outbound::Kind::Files, "text-x-generic-symbolic", "File"),
-                    (outbound::Kind::Folder, "folder-symbolic", "Folder"),
-                    (outbound::Kind::Text, "insert-text-symbolic", "Text"),
+                    (
+                        outbound::Kind::Files,
+                        "text-x-generic-symbolic",
+                        crate::i18n::label("File"),
+                    ),
+                    (
+                        outbound::Kind::Folder,
+                        "folder-symbolic",
+                        crate::i18n::label("Folder"),
+                    ),
+                    (
+                        outbound::Kind::Text,
+                        "insert-text-symbolic",
+                        crate::i18n::label("Text"),
+                    ),
                     (
                         outbound::Kind::Clipboard,
                         "edit-paste-symbolic",
-                        "Clipboard",
+                        crate::i18n::label("Clipboard"),
                     ),
                 ] {
                     let button = gtk::Button::from_icon_name(icon);
@@ -577,7 +684,7 @@ impl Panel {
                 }
                 strip.set_child(Some(&inputs));
                 controls.append(&strip);
-                let send = gtk::Button::with_label("Send");
+                let send = gtk::Button::with_label(crate::i18n::label("Send"));
                 send.set_widget_name("send-device");
                 let weak = Rc::downgrade(self);
                 let endpoint_for_send = id.clone();
@@ -636,7 +743,8 @@ impl Panel {
                         transfer.details.transferred_bytes,
                         transfer.details.total_bytes,
                     ));
-                    progress.set_tooltip_text(Some(phase_text(transfer.phase)));
+                    let phase_label = crate::i18n::transfer_phase(phase_text(transfer.phase));
+                    progress.set_tooltip_text(Some(phase_label));
                 }
             }
             if let Some(code) = named(root.upcast_ref(), "device-code").and_downcast::<gtk::Label>()
@@ -644,8 +752,9 @@ impl Panel {
                 let pin = active
                     .map(|transfer| transfer.details.pin.as_str())
                     .unwrap_or_default();
-                code.set_visible(!pin.is_empty());
-                code.set_text(&format!("Code: {pin}"));
+                let displayed = crate::i18n::pin_code(pin);
+                code.set_visible(!displayed.is_empty());
+                code.set_text(&displayed);
             }
             if let Some(send) = named(root.upcast_ref(), "send-device") {
                 send.set_sensitive(ready && projection.1 && active.is_none());
@@ -699,7 +808,7 @@ impl Panel {
                 let entry = rows.entries.entry(key.clone()).or_insert_with(|| {
                     let root = card();
                     if !title.is_empty() {
-                        let text = label(title);
+                        let text = label(crate::i18n::label(title));
                         text.set_selectable(false);
                         root.append(&text);
                     }
@@ -709,6 +818,7 @@ impl Panel {
                         endpoint: None,
                     }
                 });
+                refresh_empty_caption(entry, title);
                 pages.get_mut(page).unwrap().push(entry.root.clone());
                 used.insert(key);
             }
@@ -721,7 +831,92 @@ impl Panel {
 }
 
 #[cfg(test)]
+mod metadata_label_tests {
+    use super::*;
+    use rqs_lib::sessions::details::{FileDetail, PayloadKind};
+
+    #[test]
+    fn given_missing_or_unsupported_metadata_when_card_is_rendered_then_no_fake_zero_files() {
+        let mut details = TransferDetails::default();
+        assert_eq!(details.status, DetailsStatus::Unavailable);
+        assert_eq!(
+            payload_label(&details),
+            crate::i18n::label("Waiting for details")
+        );
+        assert_eq!(
+            peer_title("", details.status),
+            crate::i18n::label("Connecting…")
+        );
+        assert_eq!(peer_title("Sender", details.status), "Sender");
+
+        details.status = DetailsStatus::Unsupported;
+        assert_eq!(
+            payload_label(&details),
+            crate::i18n::label("Unsupported content")
+        );
+        assert_eq!(peer_title("", details.status), "");
+        assert_eq!(peer_title("Sender", details.status), "Sender");
+    }
+
+    #[test]
+    fn given_metadata_becomes_ready_when_rendering_then_actual_payload_kind_and_count_appear() {
+        let mut details = TransferDetails {
+            status: DetailsStatus::Ready,
+            ..TransferDetails::default()
+        };
+        details.files = vec![FileDetail {
+            name: "photo.jpg".into(),
+            size: 8,
+        }]
+        .into();
+        assert_eq!(payload_label(&details), "JPG");
+        details.files = vec![
+            FileDetail {
+                name: "a.txt".into(),
+                size: 1,
+            },
+            FileDetail {
+                name: "b.txt".into(),
+                size: 2,
+            },
+        ]
+        .into();
+        assert_eq!(payload_label(&details), crate::i18n::file_count(2));
+        details.kind = PayloadKind::Text;
+        details.files = std::sync::Arc::default();
+        assert_eq!(payload_label(&details), crate::i18n::label("Text"));
+        details.kind = PayloadKind::Url;
+        assert_eq!(payload_label(&details), crate::i18n::label("Link"));
+        assert_eq!(peer_title("", details.status), "");
+    }
+}
+
+#[cfg(test)]
 pub(super) fn verify_keyed_layout() {
+    // The cached empty card must repaint from the canonical source key.
+    // Reusing the same row after a language switch must never preserve stale text.
+    for source in [
+        "No nearby devices. Make the receiving device visible.",
+        "No incoming requests",
+        "No transfers",
+    ] {
+        let root = card();
+        let caption = label("Stale English label");
+        caption.set_selectable(false);
+        root.append(&caption);
+        let entry = Entry {
+            root,
+            transfer: None,
+            endpoint: None,
+        };
+        refresh_empty_caption(&entry, source);
+        assert_eq!(caption.text(), crate::i18n::label(source));
+        assert!(!caption.is_selectable());
+        caption.set_label("Stale English label");
+        refresh_empty_caption(&entry, source);
+        assert_eq!(caption.text(), crate::i18n::label(source));
+        assert_eq!(entry.root.first_child(), Some(caption.upcast()));
+    }
     // Arrange
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let first = card();
@@ -801,6 +996,37 @@ pub(super) fn verify_keyed_layout() {
     }
     assert_eq!(clicks.get(), 5);
     assert_eq!(details.observe_children().n_items(), 1);
+    for phase in [
+        Phase::Queued,
+        Phase::Active,
+        Phase::AwaitingConsent,
+        Phase::Receiving,
+        Phase::Sending,
+        Phase::CancelRequested,
+        Phase::Finished,
+        Phase::Rejected,
+        Phase::Cancelled,
+        Phase::Failed,
+        Phase::Disconnected,
+    ] {
+        let expected = crate::i18n::transfer_phase(phase_text(phase));
+        let card = transfer_row(
+            "Example peer",
+            rqs_lib::service::client::state::DeviceKind::Phone,
+            phase,
+            &gtk::Box::new(gtk::Orientation::Horizontal, 0),
+        );
+        let status = named(card.upcast_ref(), "row-status")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        assert_eq!(status.text(), expected, "{phase:?}");
+        let icon = named(card.upcast_ref(), "row-icon").unwrap();
+        assert_eq!(icon.tooltip_text().as_deref(), Some(expected), "{phase:?}");
+    }
+    assert_ne!(
+        crate::i18n::transfer_phase(phase_text(Phase::CancelRequested)),
+        crate::i18n::transfer_phase(phase_text(Phase::Cancelled))
+    );
 
     let live = ["ep-1", "ep-2"].into_iter().collect::<BTreeSet<_>>();
     assert_eq!(
@@ -862,6 +1088,37 @@ mod badge_tests {
 }
 
 #[cfg(test)]
+mod focus_scroll_tests {
+    use super::reveal_vertical_interval;
+
+    #[test]
+    fn given_offscreen_or_visible_consent_row_when_requested_then_scroll_moves_minimally() {
+        for (start, end, offset, page, expected) in [
+            (0.0, 40.0, 400.0, 200.0, Some(0.0)),
+            (620.0, 680.0, 400.0, 200.0, Some(480.0)),
+            (450.0, 490.0, 400.0, 200.0, None),
+            (350.0, 420.0, 400.0, 200.0, Some(350.0)),
+            (600.0, 900.0, 100.0, 200.0, Some(600.0)),
+            (780.0, 830.0, 500.0, 200.0, Some(630.0)),
+            (120.0, 140.0, 0.0, 0.0, None),
+            (120.0, 120.0, 0.0, 200.0, None),
+        ] {
+            assert_eq!(
+                reveal_vertical_interval(start, end, offset, page, 0.0, 1000.0),
+                expected,
+                "row={start}..{end}, viewport={offset}..{}",
+                offset + page
+            );
+        }
+        // The scroll target cannot leave the adjustment's legal range.
+        assert_eq!(
+            reveal_vertical_interval(980.0, 990.0, 200.0, 300.0, 0.0, 1000.0),
+            Some(690.0)
+        );
+    }
+}
+
+#[cfg(test)]
 mod device_contract_tests {
     use super::*;
     #[test]
@@ -916,6 +1173,78 @@ mod device_contract_tests {
     }
 
     #[test]
+    fn given_all_peer_direction_phase_memberships_when_projected_then_only_authoritative_live_rows_are_hidden(
+    ) {
+        // Arrange: distinct current and stale endpoint identities.
+        let phases = [
+            Phase::Queued,
+            Phase::Active,
+            Phase::AwaitingConsent,
+            Phase::Receiving,
+            Phase::Sending,
+            Phase::CancelRequested,
+            Phase::Finished,
+            Phase::Rejected,
+            Phase::Cancelled,
+            Phase::Failed,
+            Phase::Disconnected,
+        ];
+        let memberships: [BTreeSet<&str>; 3] = [
+            BTreeSet::new(),
+            ["current"].into_iter().collect(),
+            ["stale"].into_iter().collect(),
+        ];
+        for discovered in &memberships {
+            for association in [None, Some("current"), Some("stale")] {
+                for direction in [Direction::Inbound, Direction::Outbound] {
+                    for phase in phases {
+                        // Act: use the independently defined ownership contract.
+                        let expected_bound = if direction == Direction::Outbound {
+                            association.filter(|id| discovered.contains(id))
+                        } else {
+                            None
+                        };
+                        let expected_visible = !phase.is_terminal() && expected_bound.is_none();
+
+                        // Assert: exact identity and complete visibility decision.
+                        assert_eq!(
+                            bound_current_endpoint(direction, association, discovered),
+                            expected_bound
+                        );
+                        assert_eq!(
+                            card_transfer_visible(direction, phase, association, discovered),
+                            expected_visible,
+                            "{direction:?} {phase:?} {association:?} {discovered:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn given_all_progress_extremes_when_projected_then_fraction_is_exact_finite_and_monotonic() {
+        // Arrange / Act / Assert: independently compute the saturated ratio.
+        let boundaries = [0, 1, 2, 3, 254, 255, 65_535, u64::MAX];
+        for total in boundaries {
+            let mut previous = 0.0;
+            for done in boundaries {
+                let expected = if total == 0 {
+                    0.0
+                } else {
+                    (done.min(total) as f64) / (total as f64)
+                };
+                let actual = progress_fraction(done, total);
+                assert_eq!(actual, expected, "done={done} total={total}");
+                assert!(actual.is_finite());
+                assert!((0.0..=1.0).contains(&actual));
+                assert!(actual >= previous, "progress decreased for total={total}");
+                previous = actual;
+            }
+        }
+    }
+
+    #[test]
     fn given_byte_progress_when_unknown_or_overrun_then_bar_stays_finite_and_bounded() {
         for (done, total, expected) in [
             (0, 0, 0.0),
@@ -927,6 +1256,109 @@ mod device_contract_tests {
             (u64::MAX, u64::MAX, 1.0),
         ] {
             assert_eq!(progress_fraction(done, total), expected);
+        }
+    }
+}
+
+#[cfg(test)]
+mod untrusted_payload_label_tests {
+    use super::*;
+    use rqs_lib::service::client::state::FileDetail;
+    use rqs_lib::sessions::details::PayloadKind;
+
+    fn summary(kind: PayloadKind, names: &[&str]) -> String {
+        // These label-sanitization fixtures exercise metadata that has
+        // arrived. Unavailable metadata has a separate privacy-safe label.
+        let details = TransferDetails {
+            kind,
+            status: DetailsStatus::Ready,
+            files: names
+                .iter()
+                .map(|name| FileDetail {
+                    name: (*name).to_owned(),
+                    size: 1,
+                })
+                .collect::<Vec<_>>()
+                .into(),
+            ..Default::default()
+        };
+        payload_label(&details)
+    }
+
+    #[test]
+    fn given_untrusted_single_file_extensions_when_projected_then_only_bounded_ascii_label_is_displayed(
+    ) {
+        // Arrange: all the raw names originate at the untrusted remote peer.
+        for (filename, expected) in [
+            ("receipt.txt", "TXT"),
+            ("receipt.TXT", "TXT"),
+            ("archive.tar.gz", "GZ"),
+            ("invoice.x1", "X1"),
+            ("a.0", "0"),
+            ("a.123456789012", "123456789012"),
+            ("a.1234567890123", "File"),
+            ("a.", "File"),
+            ("filename", "File"),
+            (".hidden", "HIDDEN"),
+            ("nested/path/<b>private</b>.txt", "TXT"),
+            ("<img src=x>.svg", "SVG"),
+            ("nested/path/<script>.bad!", "File"),
+            ("untrusted.é", "File"),
+            ("untrusted.中文", "File"),
+            ("untrusted.💣", "File"),
+            ("name._", "File"),
+            ("name.dash-1", "File"),
+            ("name.space ext", "File"),
+            ("name.new\nline", "File"),
+        ] {
+            let actual = summary(PayloadKind::Files, &[filename]);
+            if expected == "File" {
+                assert_eq!(actual, crate::i18n::label("File"), "filename={filename:?}");
+            } else {
+                assert_eq!(actual, expected, "filename={filename:?}");
+                assert!(
+                    actual.is_ascii(),
+                    "remote extension must not escape as Unicode"
+                );
+                assert!(actual.bytes().all(|byte| byte.is_ascii_alphanumeric()));
+                assert!(!actual.contains('/') && !actual.contains('<') && !actual.contains('>'));
+            }
+        }
+    }
+
+    #[test]
+    fn given_file_manifest_cardinality_and_payload_kind_when_projected_then_summary_never_echoes_remote_paths(
+    ) {
+        // Arrange: a multi-file payload or non-file resource never exposes
+        // untrusted file metadata as the summary.
+        for (kind, names, expected) in [
+            (PayloadKind::Files, vec![], "0 files"),
+            (PayloadKind::Files, vec!["private.bin"], "BIN"),
+            (
+                PayloadKind::Files,
+                vec!["<secret>.txt", "private/location.html"],
+                "2 files",
+            ),
+            (
+                PayloadKind::Files,
+                vec!["x.bin", "y.bin", "z.bin"],
+                "3 files",
+            ),
+            (PayloadKind::Text, vec![], "Text"),
+            (PayloadKind::Text, vec!["<secret>.txt"], "Text"),
+            (PayloadKind::Url, vec![], "Link"),
+            (PayloadKind::Url, vec!["private/location.html"], "Link"),
+        ] {
+            let actual = summary(kind, &names);
+            let localized_expected = match expected {
+                "2 files" => crate::i18n::file_count(2),
+                "3 files" => crate::i18n::file_count(3),
+                "Text" => crate::i18n::label("Text").to_owned(),
+                "Link" => crate::i18n::label("Link").to_owned(),
+                _ => expected.to_owned(),
+            };
+            assert_eq!(actual, localized_expected, "kind={kind:?} names={names:?}");
+            assert!(!actual.contains('<') && !actual.contains('/') && !actual.contains('>'));
         }
     }
 }

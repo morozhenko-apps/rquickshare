@@ -11,6 +11,44 @@ fn private_directory() -> tempfile::TempDir {
 use super::*;
 
 #[test]
+fn given_saved_visible_temporary_or_hidden_when_daemon_core_starts_then_receiving_remains_manual_only(
+) {
+    for stored_mode in [
+        crate::Visibility::Visible,
+        crate::Visibility::Invisible,
+        crate::Visibility::Temporarily,
+    ] {
+        let startup = StartupSettings {
+            visibility: stored_mode,
+            port: Some(32711),
+            download_path: Some(std::path::PathBuf::from("/tmp/received")),
+            ..StartupSettings::default()
+        };
+        // The settings are not modified or migrated behind the user's back.
+        let original = startup.clone();
+        let core = startup_core(startup).unwrap();
+        assert_eq!(
+            core.subscribe_visibility().current(),
+            crate::Visibility::Invisible,
+            "saved mode {stored_mode:?} must not auto-advertise"
+        );
+        assert_eq!(original.visibility, stored_mode);
+        assert_eq!(original.port, Some(32711));
+        assert_eq!(
+            original.download_path.as_deref(),
+            Some(std::path::Path::new("/tmp/received"))
+        );
+        // Live visibility actions remain functional, but cannot silently
+        // authorize an unstarted daemon.
+        assert!(!core.visibility.set_running(crate::Visibility::Temporarily));
+        assert_eq!(
+            core.subscribe_visibility().current(),
+            crate::Visibility::Invisible
+        );
+    }
+}
+
+#[test]
 fn given_native_settings_check_when_missing_corrupt_or_directory_identity_changes_then_check_is_read_only_and_never_defaults_corruption(
 ) {
     use crate::service::native_settings::{CardMode, DirectoryIntent, Edit, Store, StoreError};

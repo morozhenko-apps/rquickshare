@@ -12,6 +12,7 @@ pub(super) struct Editor {
     panel: Weak<Panel>,
     base: RefCell<Option<SettingsView>>,
     visibility: gtk::DropDown,
+    language: gtk::DropDown,
     name: gtk::Entry,
     name_hint: gtk::Label,
     port: gtk::Entry,
@@ -137,21 +138,15 @@ fn login_failure(error: crate::login::Error) -> &'static str {
 impl Editor {
     pub fn open(panel: &Rc<Panel>) {
         let window = gtk::Window::builder()
-            .title("rQuickShare Settings")
+            .title(crate::i18n::label("rQuickShare Settings"))
             .transient_for(&panel.window)
             .application(&panel.window.application().unwrap())
             .default_width(760)
-            .resizable(true)
+            .resizable(false)
             .build();
+        window.set_icon_name(Some(crate::tray::ICON_NAME));
+        super::chrome::close_only_titlebar(&window);
         let content = gtk::Box::new(gtk::Orientation::Vertical, 10);
-        let about = gtk::Button::with_label("About rQuickShare");
-        about.set_halign(gtk::Align::Start);
-        let weak = Rc::downgrade(panel);
-        about.connect_clicked(move |_| {
-            if let Some(panel) = weak.upgrade() {
-                panel.show_about();
-            }
-        });
         content.set_margin_top(20);
         content.set_margin_bottom(20);
         content.set_margin_start(20);
@@ -164,68 +159,65 @@ impl Editor {
         let editor = Rc::new(Self {
             panel: Rc::downgrade(panel),
             base: RefCell::new(None),
+            language: gtk::DropDown::from_strings(&crate::ui_language::choices()),
             visibility: gtk::DropDown::from_strings(&[
-                "Select visibility…",
-                "Visible",
-                "Hidden",
-                "Visible for one minute",
+                crate::i18n::label("Select visibility…"),
+                crate::i18n::label("Visible"),
+                crate::i18n::label("Hidden"),
+                crate::i18n::label("Visible for one minute"),
             ]),
             name: gtk::Entry::builder()
-                .placeholder_text("Automatic computer name")
+                .placeholder_text(crate::i18n::label("Automatic computer name"))
                 .build(),
-            name_hint: label(
+            name_hint: label(crate::i18n::label(
                 "Leave empty to use the computer name. OK applies changes to new connections.",
-            ),
+            )),
             port: gtk::Entry::builder()
-                .placeholder_text("Automatic")
+                .placeholder_text(crate::i18n::label("Automatic"))
                 .input_purpose(gtk::InputPurpose::Digits)
                 .build(),
-            directory: label("Connect to read the receive folder"),
+            directory: label(crate::i18n::label("Connect to read the receive folder")),
             directory_intent: Cell::new(0),
             file: RefCell::new(None),
-            recover: gtk::CheckButton::with_label("Back up and replace damaged settings"),
-            status: label("Sharing settings are unavailable."),
-            save: gtk::Button::with_label("OK"),
-            cancel: gtk::Button::with_label("Cancel"),
+            recover: gtk::CheckButton::with_label(crate::i18n::label(
+                "Back up and replace damaged settings",
+            )),
+            status: label(crate::i18n::label("Sharing settings are unavailable.")),
+            save: gtk::Button::with_label(crate::i18n::label("OK")),
+            cancel: gtk::Button::with_label(crate::i18n::label("Cancel")),
             window: window.clone(),
             sections: pages.clone(),
             confirming: Cell::new(false),
-            reload: gtk::Button::with_label("Reload saved values"),
-            retry: gtk::Button::with_label("Retry pending save"),
-            restart: gtk::Button::with_label("Restart sharing"),
-            choose: gtk::Button::with_label("Choose folder…"),
-            default: gtk::Button::with_label("Use default"),
+            reload: gtk::Button::with_label(crate::i18n::label("Reload saved values")),
+            retry: gtk::Button::with_label(crate::i18n::label("Retry pending save")),
+            restart: gtk::Button::with_label(crate::i18n::label("Restart sharing")),
+            choose: gtk::Button::with_label(crate::i18n::label("Choose folder…")),
+            default: gtk::Button::with_label(crate::i18n::label("Use default")),
             dirty: Cell::new(false),
             loading: Cell::new(false),
             busy: Cell::new(false),
             closed: Cell::new(false),
             task: RefCell::new(None),
             dialog: RefCell::new(None),
-            login: gtk::CheckButton::with_label("Start at sign-in"),
-            login_apply: gtk::Button::with_label("Apply login start"),
-            login_reload: gtk::Button::with_label("Reload login state"),
-            login_status: label("Login settings are unavailable."),
+            login: gtk::CheckButton::with_label(crate::i18n::label("Start at sign-in")),
+            login_apply: gtk::Button::with_label(crate::i18n::label("Apply login start")),
+            login_reload: gtk::Button::with_label(crate::i18n::label("Reload login state")),
+            login_status: label(crate::i18n::label("Login settings are unavailable.")),
             login_dirty: Cell::new(false),
             login_loading: Cell::new(false),
             login_busy: Cell::new(false),
             login_task: RefCell::new(None),
         });
         editor.visibility.set_selected(0);
+        editor
+            .language
+            .set_selected(u32::from(crate::ui_language::selection()));
         editor.name_hint.set_selectable(false);
         editor.directory.set_wrap(false);
         editor
             .directory
             .set_ellipsize(gtk::pango::EllipsizeMode::Middle);
         editor.directory.set_max_width_chars(44);
-        let brand = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        let logo = gtk::Image::from_icon_name(crate::tray::ICON_NAME);
-        logo.set_pixel_size(32);
-        brand.append(&logo);
-        let title = label("rQuickShare");
-        title.add_css_class("title-2");
-        brand.append(&title);
-        content.append(&brand);
-        content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
         let navigation = gtk::StackSidebar::new();
         navigation.set_stack(&pages);
         navigation.set_size_request(160, -1);
@@ -250,44 +242,57 @@ impl Editor {
             column.append(&row);
         };
         let general = section();
-        field(&general, "Device name", editor.name.upcast_ref());
+        field(
+            &general,
+            crate::i18n::label("Language"),
+            editor.language.upcast_ref(),
+        );
+        field(
+            &general,
+            crate::i18n::label("Device name"),
+            editor.name.upcast_ref(),
+        );
         general.append(&editor.name_hint);
         general.append(&editor.login);
-        general.append(&label(
+        general.append(&label(crate::i18n::label(
             "Starts sharing and the tray at sign-in, with the card hidden.",
-        ));
+        )));
         general.append(&editor.login_status);
-        pages.add_titled(&general, Some("general"), "General");
+        pages.add_titled(&general, Some("general"), crate::i18n::label("General"));
         let receiving = section();
-        field(&receiving, "Visibility", editor.visibility.upcast_ref());
-        field(&receiving, "Receive folder", editor.directory.upcast_ref());
+        field(
+            &receiving,
+            crate::i18n::label("Visibility"),
+            editor.visibility.upcast_ref(),
+        );
+        field(
+            &receiving,
+            crate::i18n::label("Receive folder"),
+            editor.directory.upcast_ref(),
+        );
         let folder = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         folder.append(&editor.choose);
         folder.append(&editor.default);
         receiving.append(&folder);
-        receiving.append(&label("Each incoming transfer still requires your confirmation. Folder changes affect new requests."));
-        pages.add_titled(&receiving, Some("receiving"), "Receiving");
+        receiving.append(&label(crate::i18n::label("Each incoming transfer still requires your confirmation. Folder changes affect new requests.")));
+        pages.add_titled(
+            &receiving,
+            Some("receiving"),
+            crate::i18n::label("Receiving"),
+        );
         let advanced = section();
-        field(&advanced, "Port", editor.port.upcast_ref());
-        advanced.append(&label("Leave empty or use 0 for automatic selection. A changed port requires restarting sharing when idle."));
+        field(
+            &advanced,
+            crate::i18n::label("Port"),
+            editor.port.upcast_ref(),
+        );
+        advanced.append(&label(crate::i18n::label("Leave empty or use 0 for automatic selection. A changed port requires restarting sharing when idle.")));
         advanced.append(&editor.recover);
         advanced.append(&editor.reload);
         advanced.append(&editor.retry);
         advanced.append(&editor.restart);
         advanced.append(&editor.login_reload);
-        pages.add_titled(&advanced, Some("advanced"), "Advanced");
-        let information = section();
-        information.append(&label(&format!(
-            "rQuickShare {}",
-            env!("CARGO_PKG_VERSION")
-        )));
-        information.append(&label(
-            "Send and receive nearby files and text.
-GNU General Public License v3.0.",
-        ));
-        information.append(&about);
-        pages.add_titled(&information, Some("about"), "About");
-        content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+        pages.add_titled(&advanced, Some("advanced"), crate::i18n::label("Advanced"));
         content.append(&editor.status);
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         actions.set_halign(gtk::Align::End);
@@ -369,6 +374,12 @@ GNU General Public License v3.0.",
             }
         });
         let weak = Rc::downgrade(&editor);
+        editor.language.connect_selected_notify(move |_| {
+            if let Some(editor) = weak.upgrade() {
+                editor.refresh();
+            }
+        });
+        let weak = Rc::downgrade(&editor);
         editor.choose.connect_clicked(move |_| {
             if let Some(editor) = weak.upgrade() {
                 editor.choose_folder();
@@ -379,7 +390,9 @@ GNU General Public License v3.0.",
             if let Some(editor) = weak.upgrade() {
                 editor.file.borrow_mut().take();
                 editor.directory_intent.set(1);
-                editor.directory.set_text("Default Downloads folder");
+                editor
+                    .directory
+                    .set_text(crate::i18n::label("Default Downloads folder"));
                 editor.changed();
             }
         });
@@ -416,6 +429,10 @@ GNU General Public License v3.0.",
             self.act(Operation::Reload);
         }
     }
+    fn language_changed(&self) -> bool {
+        self.language.selected() != u32::from(crate::ui_language::selection())
+    }
+
     fn needs_native_save(&self) -> bool {
         self.dirty.get()
             || self.base.borrow().as_ref().is_some_and(|view| {
@@ -432,7 +449,9 @@ GNU General Public License v3.0.",
             return;
         }
         self.confirming.set(true);
-        if self.needs_native_save() {
+        if self.needs_native_save()
+            && !(self.language_changed() && !self.dirty.get() && !self.login_dirty.get())
+        {
             self.act(Operation::Save);
         } else {
             self.finish_confirmation();
@@ -443,17 +462,36 @@ GNU General Public License v3.0.",
         if self.login_dirty.get() {
             if !self.login_apply.is_sensitive() {
                 self.confirming.set(false);
-                self.status.set_text(
+                self.status.set_text(crate::i18n::label(
                     "Sign-in state changed or is unavailable. Reload it before confirming.",
-                );
+                ));
                 self.refresh();
                 return;
             }
             self.login_action(true);
         } else {
+            let changed = self.language_changed();
+            if changed && crate::ui_language::save(self.language.selected() as u8).is_err() {
+                self.confirming.set(false);
+                self.status.set_text(crate::i18n::label(
+                    "Cannot save interface language. Check configuration permissions.",
+                ));
+                self.refresh();
+                return;
+            }
             self.confirming.set(false);
             self.window.set_visible(false);
             if let Some(panel) = self.panel.upgrade() {
+                if changed {
+                    panel.retranslate();
+                    // Only the closed secondary editor is reconstructed on next open.
+                    // The panel, daemon, prepared sources and transfer owners are retained.
+                    self.closed.set(true);
+                    panel.settings_owner.borrow_mut().take();
+                    if let Some(window) = panel.settings.borrow_mut().take() {
+                        window.destroy();
+                    }
+                }
                 panel.apply_presentation();
             }
         }
@@ -464,6 +502,8 @@ GNU General Public License v3.0.",
         }
         self.confirming.set(false);
         self.login_dirty.set(false);
+        self.language
+            .set_selected(u32::from(crate::ui_language::selection()));
         if let Some(panel) = self.panel.upgrade() {
             let saved = panel.model.borrow().state.settings.clone();
             if let Some(view) = saved {
@@ -489,18 +529,20 @@ GNU General Public License v3.0.",
         }
         self.dirty.set(true);
         self.status.set_text(if self.name_input().is_err() {
-            "Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name."
-        } else { "Changes will apply after OK." });
+            crate::i18n::label("Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name.")
+        } else { crate::i18n::label("Changes will apply after OK.") });
         self.refresh();
     }
     fn load(&self, view: SettingsView) {
         self.loading.set(true);
         self.name.set_text(&view.device_name);
         self.name_hint.set_text(&if view.resolved_name.is_empty() {
-            "Leave empty to use the computer name. OK applies changes to new connections."
-                .to_owned()
+            crate::i18n::label(
+                "Leave empty to use the computer name. OK applies changes to new connections.",
+            )
+            .to_owned()
         } else {
-            format!("Name for new connections: {}", view.resolved_name)
+            crate::i18n::resolved_name(&view.resolved_name)
         });
         self.visibility.set_selected(u32::from(view.visibility) + 1);
         self.port.set_text(&if view.port < 0 {
@@ -509,23 +551,29 @@ GNU General Public License v3.0.",
             view.port.to_string()
         });
         self.directory
-            .set_text(if view.directory_display.is_empty() {
-                "Default Downloads folder"
+            .set_text(&if view.directory_display.is_empty() {
+                crate::i18n::label("Default Downloads folder").to_owned()
             } else {
-                &view.directory_display
+                crate::i18n::isolate_untrusted(&view.directory_display)
             });
         self.directory_intent
             .set(if view.configured { 0 } else { 1 });
         self.file.borrow_mut().take();
         self.recover.set_active(false);
         self.dirty.set(false);
-        self.status.set_text(status(&view));
+        let message = status(&view);
+        self.status.set_text(if message == "Saved and applied." {
+            ""
+        } else {
+            crate::i18n::label(message)
+        });
         self.base.replace(Some(view));
         self.loading.set(false);
         self.refresh();
     }
     pub fn refresh(&self) {
         self.refresh_login();
+        self.status.set_visible(!self.status.text().is_empty());
         let Some(panel) = self.panel.upgrade() else {
             return;
         };
@@ -573,12 +621,14 @@ GNU General Public License v3.0.",
             && parse_port(self.port.text().as_str()).is_ok()
             && !model.state.settings_pending
             && (!damaged || self.recover.is_active());
+        let language_only = self.language_changed() && !self.dirty.get() && !self.login_dirty.get();
         self.save.set_sensitive(
             !self.confirming.get()
                 && !self.busy.get()
                 && !self.login_busy.get()
-                && (!self.needs_native_save() || native_ready)
-                && (!self.login_dirty.get() || self.login_apply.is_sensitive()),
+                && (language_only
+                    || ((!self.needs_native_save() || native_ready)
+                        && (!self.login_dirty.get() || self.login_apply.is_sensitive()))),
         );
         self.cancel
             .set_sensitive(!self.busy.get() && !self.login_busy.get());
@@ -596,7 +646,7 @@ GNU General Public License v3.0.",
             .set_label(if latest.is_some_and(|view| view.running) {
                 "Restart sharing"
             } else {
-                "Start sharing"
+                crate::i18n::label("Start sharing")
             });
         self.restart.set_visible(latest.is_some_and(|view| {
             view.available && (!view.running || view.restart_required || view.error == 4)
@@ -617,8 +667,9 @@ GNU General Public License v3.0.",
             widget.set_sensitive(ready && writable && !model.state.settings_pending);
         }
         if !available {
-            self.status
-                .set_text("Sharing settings are unavailable. Retry the connection from the card.");
+            self.status.set_text(crate::i18n::label(
+                "Sharing settings are unavailable. Retry the connection from the card.",
+            ));
         }
     }
     pub fn refresh_login(&self) {
@@ -656,20 +707,20 @@ GNU General Public License v3.0.",
         self.login_reload
             .set_visible(view.error.is_some() || view.enabled.is_none());
         self.login_reload.set_sensitive(ready);
-        self.login_status
-            .set_text(if self.login_busy.get() || view.busy {
-                "Waiting for login settings…"
-            } else if let Some(error) = view.error {
-                login_failure(error)
-            } else if self.login_dirty.get() {
-                "Sign-in choice will apply after OK."
-            } else if view.enabled == Some(true) {
-                "Daemon and tray will start at sign-in; the card stays hidden."
-            } else if view.enabled == Some(false) {
-                "Login start is off."
-            } else {
-                "Login settings are unavailable."
-            });
+        let caption = if self.login_busy.get() || view.busy {
+            crate::i18n::label("Waiting for login settings…")
+        } else if let Some(error) = view.error {
+            login_failure(error)
+        } else if self.login_dirty.get() {
+            crate::i18n::label("Sign-in choice will apply after OK.")
+        } else if view.enabled == Some(true) {
+            crate::i18n::label("Daemon and tray will start at sign-in; the card stays hidden.")
+        } else if view.enabled == Some(false) {
+            crate::i18n::label("Login start is off.")
+        } else {
+            crate::i18n::label("Login settings are unavailable.")
+        };
+        self.login_status.set_text(crate::i18n::label(caption));
     }
     fn login_action(self: &Rc<Self>, apply: bool) {
         self.refresh_login();
@@ -700,7 +751,8 @@ GNU General Public License v3.0.",
             Err(error) => {
                 self.confirming.set(false);
                 self.login_dirty.set(true);
-                self.login_status.set_text(login_failure(error));
+                self.login_status
+                    .set_text(crate::i18n::label(login_failure(error)));
                 self.refresh();
                 return;
             }
@@ -719,8 +771,8 @@ GNU General Public License v3.0.",
                     editor.refresh_login();
                     if let Err(error) = result {
                         editor.confirming.set(false);
-                        editor.login_status.set_text(login_failure(error));
-                        editor.status.set_text("Sign-in change was not confirmed. Any acknowledged sharing settings remain saved.");
+                        editor.login_status.set_text(crate::i18n::label(login_failure(error)));
+                        editor.status.set_text(crate::i18n::label("Sign-in change was not confirmed. Any acknowledged sharing settings remain saved."));
                     } else if editor.confirming.get() {
                         editor.finish_confirmation();
                     }
@@ -749,32 +801,36 @@ GNU General Public License v3.0.",
             Operation::Restart => handle.restart_service(),
             Operation::Save => {
                 let Ok(visibility) = selected_visibility(self.visibility.selected()) else {
-                    self.status
-                        .set_text("Choose a visibility setting before saving.");
+                    self.status.set_text(crate::i18n::label(
+                        "Choose a visibility setting before saving.",
+                    ));
                     return;
                 };
                 let Ok(port) = parse_port(self.port.text().as_str()) else {
-                    self.status
-                        .set_text("Port must be empty or an integer from 0 to 65535.");
+                    self.status.set_text(crate::i18n::label(
+                        "Port must be empty or an integer from 0 to 65535.",
+                    ));
                     return;
                 };
                 let Ok(device_name) = self.name_input() else {
-                    self.status.set_text("Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name.");
+                    self.status.set_text(crate::i18n::label("Device name is too long or contains unsupported characters or surrounding spaces. Leave empty for the automatic name."));
                     return;
                 };
                 let Some(base) = self.base.borrow().clone() else {
                     return;
                 };
                 let Ok(request) = rqs_lib::service::process::fresh_epoch() else {
-                    self.status
-                        .set_text("Cannot create a save identity. Try again.");
+                    self.status.set_text(crate::i18n::label(
+                        "Cannot create a save identity. Try again.",
+                    ));
                     return;
                 };
                 let directory = match self.file.borrow().as_ref().map(File::try_clone).transpose() {
                     Ok(file) => file,
                     Err(_) => {
-                        self.status
-                            .set_text("Cannot retain the selected folder. Choose it again.");
+                        self.status.set_text(crate::i18n::label(
+                            "Cannot retain the selected folder. Choose it again.",
+                        ));
                         return;
                     }
                 };
@@ -799,13 +855,14 @@ GNU General Public License v3.0.",
             Ok(completion) => completion,
             Err(error) => {
                 self.confirming.set(false);
-                self.status.set_text(failure(error));
+                self.status.set_text(crate::i18n::label(failure(error)));
                 self.refresh();
                 return;
             }
         };
         self.busy.set(true);
-        self.status.set_text("Waiting for the service…");
+        self.status
+            .set_text(crate::i18n::label("Waiting for the service…"));
         self.refresh();
         let weak = Rc::downgrade(self);
         self.task.replace(Some(glib::spawn_future_local(async move {
@@ -821,9 +878,9 @@ GNU General Public License v3.0.",
                             else { editor.confirming.set(false); editor.sections.set_visible_child_name("advanced"); }
                         }
                     },
-                    Ok(_) if matches!(operation, Operation::Restart) => editor.status.set_text("Sharing restart requested. Retry the connection from the card to read its state."),
-                    Ok(_) => { editor.confirming.set(false); editor.status.set_text("Settings acknowledgement was incomplete. Reload before making another edit."); },
-                    Err(error) => { editor.confirming.set(false); editor.status.set_text(failure(error)); },
+                    Ok(_) if matches!(operation, Operation::Restart) => editor.status.set_text(crate::i18n::label("Sharing restart requested. Retry the connection from the card to read its state.")),
+                    Ok(_) => { editor.confirming.set(false); editor.status.set_text(crate::i18n::label("Settings acknowledgement was incomplete. Reload before making another edit.")); },
+                    Err(error) => { editor.confirming.set(false); editor.status.set_text(crate::i18n::label(failure(error))); },
                 }
                 editor.refresh();
             }
@@ -850,10 +907,10 @@ GNU General Public License v3.0.",
             editor.dialog.borrow_mut().take();
             let Some(panel) = editor.panel.upgrade() else { return };
             let path = match result {
-                Ok(file) => match file.path() { Some(path) => path, None => { editor.busy.set(false); editor.status.set_text("Choose an accessible local folder."); editor.refresh(); return } },
+                Ok(file) => match file.path() { Some(path) => path, None => { editor.busy.set(false); editor.status.set_text(crate::i18n::label("Choose an accessible local folder.")); editor.refresh(); return } },
                 Err(error) => {
                     editor.busy.set(false);
-                    if !error.matches(gtk::DialogError::Dismissed) && !error.matches(gio::IOErrorEnum::Cancelled) { editor.status.set_text("Cannot open the folder chooser."); }
+                    if !error.matches(gtk::DialogError::Dismissed) && !error.matches(gio::IOErrorEnum::Cancelled) { editor.status.set_text(crate::i18n::label("Cannot open the folder chooser.")); }
                     editor.refresh(); return;
                 }
             };
@@ -864,8 +921,8 @@ GNU General Public License v3.0.",
                 if let Some(editor) = weak.upgrade().filter(|editor| !editor.closed.get()) {
                     editor.busy.set(false);
                     match result {
-                        Ok(Ok((file, display))) => { editor.file.replace(Some(file)); editor.directory_intent.set(2); editor.directory.set_text(&display); editor.changed(); },
-                        _ => editor.status.set_text("Cannot acquire the selected folder. Check access and choose again."),
+                        Ok(Ok((file, display))) => { editor.file.replace(Some(file)); editor.directory_intent.set(2); editor.directory.set_text(&crate::i18n::isolate_untrusted(&display)); editor.changed(); },
+                        _ => editor.status.set_text(crate::i18n::label("Cannot acquire the selected folder. Check access and choose again.")),
                     }
                     editor.refresh();
                 }
@@ -906,7 +963,7 @@ pub(super) fn verify_editor_smoke(editor: &Editor) {
         assert!(output.is_absolute());
         let panel = editor.panel.upgrade().unwrap();
         let window = panel.settings.borrow().as_ref().unwrap().clone();
-        for page in ["general", "receiving", "advanced", "about"] {
+        for page in ["general", "receiving", "advanced"] {
             editor.sections.set_visible_child_name(page);
             window.queue_draw();
             let captured = Rc::new(Cell::new(false));
@@ -951,21 +1008,39 @@ pub(super) fn verify_editor_smoke(editor: &Editor) {
     assert_eq!(panel.drawer(), before); // Settings edits never change drawer presentation.
     assert!(editor.is_dirty());
     let staged = editor.name.text();
-    for section in ["receiving", "advanced", "about", "general"] {
+    for section in ["receiving", "advanced", "general"] {
         editor.sections.set_visible_child_name(section);
         assert_eq!(editor.name.text(), staged);
         assert_eq!(panel.drawer(), before);
     }
-    assert_eq!(editor.sections.pages().n_items(), 4);
+    assert_eq!(editor.sections.pages().n_items(), 3);
     assert!(!editor.save.is_sensitive()); // No daemon cannot acknowledge this edit.
     editor.busy.set(true);
     editor.cancel_draft();
     assert!(editor.window.is_visible()); // An admitted operation cannot be closed midway.
     editor.busy.set(false);
+    let saved_language = editor.language.selected();
+    editor
+        .language
+        .set_selected(if saved_language == 1 { 2 } else { 1 });
+    assert!(editor.language_changed()); // Staged only: no user preference file is written.
     editor.cancel_draft();
+    assert_eq!(editor.language.selected(), saved_language);
     assert!(!editor.window.is_visible());
     assert!(!editor.is_dirty());
     assert_eq!(panel.drawer(), before);
+    // The language-only change must remain locally confirmable even offline,
+    // while native settings and login settings remain untouched.
+    editor.window.present();
+    editor
+        .language
+        .set_selected(if saved_language == 1 { 2 } else { 1 });
+    assert!(editor.language_changed());
+    assert!(!editor.is_dirty());
+    assert!(!editor.login_dirty.get());
+    assert!(editor.save.is_sensitive());
+    editor.cancel_draft();
+    assert_eq!(editor.language.selected(), saved_language);
     editor.window.present();
     assert!(editor.window.child().unwrap().is::<gtk::Box>());
     editor.port.set_text("655350");
@@ -1095,6 +1170,110 @@ mod tests {
             assert!(!message.contains("/proc"));
         }
     }
+    #[test]
+    fn given_acknowledgement_gate_cross_product_when_confirmed_then_only_exact_saved_live_state_passes(
+    ) {
+        // Arrange / Act / Assert: all 2^9 independent gate dimensions.
+        for mask in 0u16..512 {
+            let mut view = SettingsView::unavailable(1);
+            view.available = mask & 1 != 0;
+            view.source = if mask & 2 != 0 { 2 } else { 1 };
+            view.revision = if mask & 4 != 0 { 3 } else { 0 };
+            view.visibility_recovered = mask & 8 == 0;
+            view.configured = mask & 16 != 0;
+            view.running = mask & 32 != 0;
+            view.error = if mask & 64 != 0 { 0 } else { 3 };
+            view.applied_live_revision = if mask & 128 != 0 { view.revision } else { 7 };
+            view.restart_required = mask & 256 == 0;
+            view.name_status = 2;
+            assert_eq!(confirmation_applied(&view), mask == 511, "mask={mask}");
+        }
+        let mut valid = SettingsView::unavailable(1);
+        valid.available = true;
+        valid.source = 2;
+        valid.revision = 3;
+        valid.applied_live_revision = 3;
+        valid.configured = true;
+        valid.running = true;
+        for (name_status, expected) in [
+            (0, true),
+            (1, false),
+            (2, true),
+            (3, false),
+            (4, true),
+            (255, true),
+        ] {
+            valid.name_status = name_status;
+            assert_eq!(confirmation_applied(&valid), expected, "name={name_status}");
+        }
+    }
+
+    #[test]
+    fn given_conflicting_settings_statuses_when_presented_then_failure_precedence_never_claims_success(
+    ) {
+        // Arrange: a fully applied baseline, then independent precedence violations.
+        let mut valid = SettingsView::unavailable(1);
+        valid.available = true;
+        valid.source = 2;
+        valid.revision = 4;
+        valid.applied_live_revision = 4;
+        valid.configured = true;
+        valid.running = true;
+        assert_eq!(status(&valid), "Saved and applied.");
+        for error in 1u8..=4 {
+            for name_status in [0u8, 1, 2, 3, 4] {
+                let mut broken = valid.clone();
+                broken.error = error;
+                broken.name_status = name_status;
+                assert_ne!(status(&broken), "Saved and applied.");
+                assert!(!confirmation_applied(&broken));
+            }
+        }
+        for source in [0u8, 1] {
+            let mut migrated = valid.clone();
+            migrated.source = source;
+            assert_ne!(status(&migrated), "Saved and applied.");
+            assert!(!confirmation_applied(&migrated));
+        }
+        let mut unavailable = valid.clone();
+        unavailable.available = false;
+        unavailable.error = 4;
+        assert_eq!(status(&unavailable), "Sharing settings are unavailable.");
+        let mut recovered = valid.clone();
+        recovered.visibility_recovered = true;
+        recovered.running = false;
+        assert!(status(&recovered).contains("visibility is invalid"));
+        assert!(!confirmation_applied(&recovered));
+    }
+
+    #[test]
+    fn given_port_format_boundary_matrix_when_parsed_then_only_valid_decimal_u16_survives() {
+        // Arrange / Act / Assert: overflow, formatting and Unicode whitespace.
+        for number in [0u16, 1, 9, 10, 255, 256, 1024, 65534, 65535] {
+            let input = format!("  {number:06}  ");
+            assert_eq!(parse_port(&input), Ok(i32::from(number)));
+        }
+        for invalid in [
+            "65536",
+            "9999999999999999999999",
+            "0x10",
+            "+42",
+            "-0",
+            "42.0",
+            "1_000",
+            "4 2",
+            "４２",
+            "²",
+            "NaN",
+            "Infinity",
+        ] {
+            assert_eq!(parse_port(invalid), Err(()), "{invalid:?}");
+        }
+        for blank in ["", " ", "\t", "\n", "\u{2003}"] {
+            assert_eq!(parse_port(blank), Ok(-1), "{blank:?}");
+        }
+    }
+
     #[test]
     fn given_port_input_when_parsed_then_only_automatic_or_u16_values_are_accepted() {
         // Arrange / Act / Assert

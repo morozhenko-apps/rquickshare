@@ -1,0 +1,8 @@
+# Compatibility only: actionlint v1.7.7 predates the officially supported
+# GitHub-hosted ubuntu-26.04 runner, independently verified in Actions.
+# This names an existing GitHub-hosted label for static analysis only;
+# no runner becomes self-hosted and no security checks are disabled.
+# Remove this override once the pinned actionlint recognizes Ubuntu 26.04.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

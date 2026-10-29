@@ -1,6 +1,6 @@
 name: Release workflow contract check
 
-# Validate release workflow syntax explicitly, without a heavy dev build.
+# Deliberate one-off contract check. The CI cadence policy forbids dev push triggers.
 on:
   workflow_dispatch:
 
@@ -28,6 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/release-tools/actionlint" \
+            -config-file .github/actionlint.yaml \
             -shellcheck= -pyflakes= \
             .github/workflows/native-tag-publish.yml \
             .github/workflows/native-apt-refresh.yml \

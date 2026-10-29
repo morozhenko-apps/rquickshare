@@ -159,7 +159,26 @@ class SigningBackupTests(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             backup.verify(ciphertext, self.primary, self.root, wrong, self.root / "wrong-password")
         self.assertFalse((self.root / "wrong-password").exists())
-        self.assertFalse(any(p.name.startswith((".rqs-backup-crypto-", ".rqs-recovery-check-", ".rqs-recovery-proof-")) for p in self.root.rglob("*")))
+        self.assertFalse(any(p.name.startswith((".rqs-c-", ".rqs-r-", ".rqs-p-")) for p in self.root.rglob("*")))
+
+    def test_given_gpg_agent_socket_boundary_when_restoring_then_long_private_home_is_rejected_before_writes(self):
+        # The longest GnuPG agent socket is S.gpg-agent.browser. Linux sun_path
+        # needs a trailing NUL and cannot hold more than 107 pathname bytes.
+        suffix = "/S.gpg-agent.browser"
+        fitting = Path("/" + "x" * (backup.MAX_AGENT_SOCKET_PATH_BYTES - len(suffix) - 1))
+        self.assertEqual(len(str(fitting / "S.gpg-agent.browser")), backup.MAX_AGENT_SOCKET_PATH_BYTES)
+        backup.require_agent_socket(fitting)
+        with self.assertRaises(ValueError):
+            backup.require_agent_socket(Path(str(fitting) + "x"))
+        with self.assertRaises(ValueError):
+            backup.require_agent_socket(Path("/" + "é" * 45))
+
+        # Deep caller-owned restore destinations fail before creating any
+        # authority, signer, identity or private material.
+        deep = self.root / ("deep-" + "x" * 75)
+        with self.assertRaises(ValueError):
+            backup.restore_values(self.values, self.primary, deep, self.pinentry)
+        self.assertFalse(deep.exists())
 
     def test_given_cancelled_password_or_oversized_input_when_encrypting_then_no_ready_backup_or_source_change_occurs(self):
         before = dict(self.values)

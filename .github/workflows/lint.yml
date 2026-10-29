@@ -71,6 +71,12 @@ jobs:
           "$RUNNER_TEMP/native-publication-python/bin/python" -m pip install -r scripts/requirements-r2.txt
           "$RUNNER_TEMP/native-publication-python/bin/python" -m unittest discover -s scripts/tests -v
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Flat distribution and receipt cleanup contracts
+        run: node --test scripts/tests/*.test.mjs
+
   frontend:
     name: Frontend lint, typecheck and unit tests
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.head.ref != 'dev'

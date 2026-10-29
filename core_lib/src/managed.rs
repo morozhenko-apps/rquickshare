@@ -105,6 +105,16 @@ impl ManagedSender {
     }
 
     pub fn try_send(&self, info: SendInfo) -> Result<TransferControl, RejectedSend> {
+        self.try_send_verified(info, None)
+    }
+
+    /// Native-private expected identity for a cached trusted route. The new
+    /// outbound session must independently reauthenticate before Introduction.
+    pub(crate) fn try_send_verified(
+        &self,
+        info: SendInfo,
+        expected: Option<crate::peer_authentication::VerifiedPeerCredential>,
+    ) -> Result<TransferControl, RejectedSend> {
         let permit = match self.sender.try_reserve() {
             Ok(permit) => permit,
             Err(error) => {
@@ -118,7 +128,7 @@ impl ManagedSender {
             }
         };
         let cancellation = CancellationToken::new();
-        let session = match self.sessions.open(
+        let mut session = match self.sessions.open(
             TransferType::Outbound,
             Some(info.id.clone()),
             cancellation.clone(),
@@ -135,6 +145,9 @@ impl ManagedSender {
                 })
             }
         };
+        if let Some(expected) = expected {
+            session.require_verified_peer(expected);
+        }
         let (completion, released) = watch::channel(false);
         let control = TransferControl {
             cancellation: cancellation.clone(),

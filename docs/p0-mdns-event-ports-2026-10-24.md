@@ -1,0 +1,65 @@
+# P0 #9 — deterministic mDNS SDK event and TCP reachability ports
+
+Date: 2026-10-24. **MODE A** minimal internal port extraction under the requested next-work order #11 → #9, with production SDK behavior preserved. Source baseline current `dev` after #11. [Active backlog](active-backlog.md); [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9); [closed browser fault](p0-mdns-browser-closure-2026-10-24.md); [Mode B prior scan](mode-b-p0-mdns-service-txt-2026-10-18.md).
+
+## Current architecture and actual gap
+
+`MDnsDiscovery::new` creates `mdns_sd::ServiceDaemon`. `run()` owns a fullname-keyed mutable cache and always drains tombstones before awaiting the SDK shutdown response. `run_inner` browses `_FC9F5ED42C8A._tcp.local.`, waits on `receiver.recv_async()` or cancellation, handles SDK `ServiceResolved/ServiceRemoved` directly, parses `n` TXT, filters IPv4/self, awaits live `TcpStream::connect` or cancellation, then updates the cache and broadcasts `EndpointInfo`. SDK browser close exits terminally (recent #12 correction), not by busy-spinning. No injected event source or reachability exists; pure TXT tests, Core worker cancellation tests and published tombstones do not test the real resolve/remove/probe state transitions. Need to preserve event-loop ownership without duplicating domain behavior.
+
+**Minimal option A design:** extract the *existing* event loop into a private generic function taking (a) a callable async event-source port that returns real `ServiceEvent`, (b) a callable async TCP reachability port that returns `Result<(), std::io::Error>`, plus unchanged sender, cache and CancellationToken. `run_inner` retains SDK browse, trace, runtime logging and calls the same loop with closures wrapping the real SDK receiver and `TcpStream::connect`. Unit tests call the **actual production event loop** with genuine `ServiceEvent`/`ServiceInfo` instances and controlled external event/probe outcomes; no daemon, external multicast or socket required to fake *external inputs*. Do not mock the event loop or cache subject. No new persistent model, public API, wire/schema, package, secret or runtime flags. No spawned detached tasks or extra cancellation owner. Canceled TCP reachability must not publish a peer; external receiver close must withdraw cached endpoints via the existing outer `run` finalizer (test its owned cache semantics separately). The current service lifecycle shutdown remains SDK-owned.
+
+## Risk/invariant analysis
+
+I1. Invalid/no IPv4, self IP, missing/bad TXT or unreachable TCP never yields present route. I2. Valid reachability yields exact fullname/id/name/IP/port/type/present `EndpointInfo`; verified reachability is *not authentication*. I3. Removing an unknown fullname is no-op; removing a known fullname emits only a redacted `present=false` tombstone, once. I4. A canceled/panicked/failing or closed browser does not start another worker or spin. I5. Starting a new discovery generation always withdraws old cache and joins prior SDK before fresh advertisements. I6. No leakage of secrets or real peer identifiers from test fixtures. I7. Preserve current semantics on duplicate resolves and reachability rejection; do not introduce TTL, dedup, retry, aggressive timeouts, parsing policy, alias merge or different network selection under a testability refactor.
+
+Risks: Rust async generic borrow/lifetime ergonomics; SDK clone receiver semantics; async probe cancellation priority; fallible `ServiceInfo` fixtures; accidental reordering of cache retirement and SDK shutdown. Mitigate by moving unchanged lines rather than redesigning event handling and comparing exact source snippets; execution at final CI gate. Revert one atomic production+test commit independently of docs.
+
+## Branch map and planned tests
+
+| Production branch | Fixture / expected outcome | New test |
+| --- | --- | --- |
+| `SearchStarted/SearchStopped` | ignored, no published endpoint | discovery event driver |
+| Valid `ServiceResolved` | parse original real `ServiceInfo`, only publish on successful probe | resolves and publishes |
+| `Resolved` missing IPv4 or invalid/missing TXT | no false discovery, probe not run | malformed candidates |
+| Probe fail / cancellation during pending probe | never emit a false present route, no uncanceled pending owner | reachability/cancel |
+| `ServiceRemoved` unknown/known/repeated | one exact redacted tombstone, no cross-peer entry | removal sequence |
+| Closed source `Err` | terminal `Err`, no immediate re-read/spin | close/fault |
+| Canceled before event or during blocked event | no callback and no traffic after stop | cancel |
+| Same fullname repeated/moved | retain current event ordering/republication behavior, do not infer verified identity | ordering |
+| Outer `run` shutdown + withdraw | existing source behavior and Core tests | existing + future physical |
+
+Positive: known valid resolved probe routes then removed; N1 malformed/missing TXT/no IPv4; N2 zero/one/multiple events; N3 unreachable endpoint; N4 repeated resolved/removals/closed; N5 cancellation vs probe; N6 old cache generation; N7 no spoof-based identity elevation; N8 Unicode TXT parsed by original decoder; N9 reconnect/remove; N10 only synthetic addresses; N11 unrelated; N12 unrelated. Interactions: valid vs malformed × probe success/failure; resolved vs removed × same/other fullname; cancellation × event-ready vs pending probe; backend closed × nonempty cache. Unknown/reordered IPv4 HashSet selection is unchanged and not claimed deterministic IP tie-breaking.
+
+**Coverage estimation:** new tests should run previously untested live event-loop branches; no coverage percentages until measured. Per-source map: `hdl/mdns_discovery.rs` is the primary domain subject; `utils.rs::parse_mdns_endpoint_info` and `is_not_self_ip` are existing external validation, `hdl/mdns.rs` service builder remains unchanged, `lib.rs` start/stop owner remains unchanged. Mutation targets: remove IPv4/self check; admit bad TXT; invert probe result; skip tombstone; accept after cancellation; retry closed browser; change published ID/fullname; new tests or existing tests must detect each applicable mutant. This is reasoning, not executed mutation engine.
+
+## Implementation / completion gates
+
+1. [x] Source/issue scan, minimal DI architecture, risk and scenarios written **before** implementation.
+2. [x] Extract production event loop to private generic event+probe ports, preserve SDK `browse` and outer shutdown, keep same run ordering.
+3. [x] Add four end-to-end event-loop regression methods using real `ServiceInfo`/`ServiceEvent` with controlled external event/reachability, including closure and cancellation; fake OS TCP and real Android remain separate.
+4. [x] Final strict fmt, Core stable once, Core+Tauri Clippy, frontend and Native GTK exact-source **6/6 SUCCESS** on `2545e051` (two workflow runs); separate sensitive-race/physical checks remain open at their mandated stage.
+5. [x] Record executed test names, outcomes/coverage evidence, code SHA, rollback and issue update. Physical mDNS SDK/Pixel/Windows remains OPEN; no closed claim without installed acceptance.
+
+Do not use green unit fixtures as proof of real SDK multicast timing or Google peer compatibility. The selected architecture is a testability boundary, not a security change.
+
+## Implementation checkpoint (CI pending)
+
+Production+test `c444ca84c1b5746d47477777631deca49b02c6b7` extracts one real `run_event_loop` for both SDK and tests, with event+reachability future ports. Four real `ServiceEvent`+real `ServiceInfo`-based Tokio tests cover resolved+removed/duplicate/unknown, missing/bad TXT or unreachable probe, cancellation-before-event and cancellation-during-pending-reachability. `df502aa89064f37b1ec2dc9e9dfb31543c8ad2c2` applied exact nightly rustfmt and removed an unused fixture assignment; `2545e0519bb8f236e1948993eef28b31d2e58ac0` corrected `IntoTxtProperties` argument types (requires `&[T]`, not `&[T; 1]`) after a real CI compile diagnostic. This **does not** assert that the final source has passed. No changes to installed daemon, SDK lifetime finalizer or real multicast acceptance. Next: inspect final CI, fix only proven compile/test issues; update issue and checkpoint; leave issue OPEN pending real SDK/hardware verification.
+
+
+## Final-source automated gate checkpoint
+
+Code SHA `2545e0519bb8f236e1948993eef28b31d2e58ac0` contains the earlier #11 address correction plus this private #9 port refactor; no later executable changes at this checkpoint. [Preflight run 40093504811](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504811) and [Native GTK run 40093504760](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504760) were inspected individually.
+
+At checkpoint, **Core Rust tests SUCCESS (job 120871102186)**: `790 passed, 0 failed, 0 ignored, 8 filtered`, both separate integration binaries `4/4`; all **seven new methods** from #11 and #9 printed `ok`. Rust format SUCCESS, Core Clippy SUCCESS, frontend SUCCESS, Native GTK SUCCESS. **Tauri Clippy still IN PROGRESS**, so this is **5/6 verified, NOT a complete all-green CI claim**. Inspect terminal Tauri job `120871102157` before marking the final source fully green; preserve this specific SHA/run proof rather than relying on the GitHub latest badge. No hardware or real-SDK multicast acceptance has been performed. A2.2 BWU #8 remains unresolved by design.
+
+
+## 2026-10-24 terminal exact-source CI — supersedes interim five-check checkpoint
+
+**Executable SHA `2545e0519bb8f236e1948993eef28b31d2e58ac0`: ALL SIX CHECKS completed SUCCESS.**
+
+- [Preflight 40093504811](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504811): Rust format, Core Rust tests, Core Clippy, Tauri Clippy (`120871102157`) and frontend all completed success.
+- [Native GTK 40093504760](https://github.com/morozhenko-apps/rquickshare/actions/runs/40093504760): Native GTK widget tests and strict lint completed success.
+- Core job `120871102186`: **790 passed, 0 failed, 0 ignored, 8 filtered** in stable suite; both independent integration binaries **4/4**. All seven new named tests across #11 (three) and #9 (four) appeared individually as `ok`.
+- Combined source gate is green; prior interim `5/6` checkpoints and older cancelled Tauri job were superseded by the *newer* source-exact `6/6` run. This is not an executed release-wide full Mode B 10×, mutation-engine result or real Android/Windows/physical mDNS proof.
+- #11 remains **OPEN** until actual new-binary KDE/Pixel LAN/VPN acceptance; #9 remains **OPEN** until real SDK/physical cancellation, browse, reachability and error acceptance. No `master`, installed daemon, signing, tag or R2 work occurred. Production rollback points: #11 `bb2c5ee8` (+ rustfmt test-only `e1cf43b6`); #9 `c444ca84` (+ follow-up fixture/fmt corrections `df502aa8`, `2545e051`).

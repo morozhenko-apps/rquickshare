@@ -5,6 +5,27 @@ use rqs_lib::service::{
 };
 
 #[test]
+fn prepared_source_summary_uses_exact_localized_counts_without_mutating_source_kind() {
+    use rqs_lib::sessions::details::PayloadKind;
+    for count in [0, 1, 2, u32::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Files, count, u64::MAX),
+            crate::i18n::prepared_files(count)
+        );
+    }
+    for bytes in [0, 1, 1024, u64::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Text, u32::MAX, bytes),
+            crate::i18n::prepared_content(false, bytes)
+        );
+        assert_eq!(
+            source_summary(PayloadKind::Url, u32::MAX, bytes),
+            crate::i18n::prepared_content(true, bytes)
+        );
+    }
+}
+
+#[test]
 fn given_complete_view_and_busy_flags_when_controls_are_projected_then_only_synchronized_live_idle_state_is_mutable(
 ) {
     // Arrange
@@ -47,6 +68,66 @@ fn given_complete_view_and_busy_flags_when_controls_are_projected_then_only_sync
     assert!(!controls_ready(&state, false));
     state.view = None;
     assert!(!controls_ready(&state, false));
+}
+
+#[test]
+fn given_authoritative_incoming_revisions_when_devices_attention_is_reconciled_then_only_unreviewed_requests_pulse_and_new_requests_focus(
+) {
+    let mut attention = DeviceAttention::default();
+    assert!(!attention.has_unreviewed());
+    assert_eq!(
+        attention.observe(Some(9), [("phone-a".into(), 1)], false),
+        None
+    );
+    assert!(attention.has_unreviewed());
+    assert_eq!(attention.review_pending().as_deref(), Some("phone-a"));
+    assert!(!attention.has_unreviewed());
+
+    // Re-rendering the same immutable view never retriggers attention.
+    assert_eq!(
+        attention.observe(Some(9), [("phone-a".into(), 1)], true),
+        None
+    );
+    assert!(!attention.has_unreviewed());
+
+    // A second device is focused while the drawer is already open.
+    assert_eq!(
+        attention.observe(
+            Some(9),
+            [("phone-a".into(), 1), ("phone-b".into(), 2)],
+            true,
+        ),
+        Some("phone-b".into())
+    );
+    assert!(!attention.has_unreviewed());
+    // A new consent round is a new request even when the transfer ID is reused.
+    assert_eq!(
+        attention.observe(
+            Some(9),
+            [("phone-a".into(), 3), ("phone-b".into(), 2)],
+            false,
+        ),
+        None
+    );
+    assert!(attention.has_unreviewed());
+    assert_eq!(attention.review_pending().as_deref(), Some("phone-a"));
+    assert!(!attention.has_unreviewed());
+
+    // Resolved requests, disconnection and daemon epoch replacement retire all
+    // presentation rights rather than leaking a stale device focus.
+    assert_eq!(
+        attention.observe(Some(9), Vec::<(String, u64)>::new(), false),
+        None
+    );
+    assert!(!attention.has_unreviewed());
+    assert_eq!(attention.review_pending(), None);
+    attention.observe(Some(9), [("old".into(), 1)], false);
+    assert!(attention.has_unreviewed());
+    attention.observe(None, Vec::<(String, u64)>::new(), false);
+    assert!(!attention.has_unreviewed());
+    assert_eq!(attention.review_pending(), None);
+    attention.observe(Some(10), [("new".into(), 1)], false);
+    assert_eq!(attention.review_pending().as_deref(), Some("new"));
 }
 
 fn labels(widget: &impl IsA<gtk::Widget>) -> Vec<gtk::Label> {
@@ -111,6 +192,10 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     );
     // Act / Assert
     assert_eq!(panel.model.borrow().drawer, Drawer::Closed);
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Show devices and transfers"))
+    );
     assert!(panel.box_widget("compact").get_visible());
     assert!(!panel.pages.get_visible());
     assert!(!panel.box_widget("source").get_visible());
@@ -148,6 +233,29 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
         panel.curtain.action_name().as_deref(),
         Some("panel.discard")
     );
+    assert_eq!(
+        panel.reconnect_button.label().as_deref(),
+        Some(crate::i18n::label("Retry connection"))
+    );
+    let expected_curtain = format!(
+        "{}\n{}",
+        crate::i18n::label("Choose target devices"),
+        crate::i18n::label("Clear prepared files")
+    );
+    assert_eq!(
+        panel.curtain.label().as_deref(),
+        Some(expected_curtain.as_str())
+    );
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Hide devices and transfers"))
+    );
+    assert_eq!(
+        panel.button("quick-receive").tooltip_text().as_deref(),
+        Some(crate::i18n::label(
+            "Review an incoming request or become visible for one minute"
+        ))
+    );
     assert!(!panel.box_widget("source").get_visible());
     for removed in ["header", "mode", "settings-button", "close", "send-entry"] {
         assert!(panel.builder.object::<gtk::Widget>(removed).is_none());
@@ -177,8 +285,24 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     panel.button("quick-devices").emit_clicked();
     assert_eq!(panel.drawer(), Drawer::Closed);
     assert!(!panel.box_widget("device-drawer").get_visible());
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Show devices and transfers"))
+    );
+    assert_eq!(
+        panel.curtain.action_name().as_deref(),
+        Some("panel.discard")
+    );
     panel.button("quick-devices").emit_clicked();
     assert_eq!(panel.drawer(), Drawer::Open);
+    assert_eq!(
+        panel.button("quick-devices").tooltip_text().as_deref(),
+        Some(crate::i18n::label("Hide devices and transfers"))
+    );
+    assert_eq!(
+        panel.curtain.action_name().as_deref(),
+        Some("panel.discard")
+    );
     panel.show_sending();
     assert_eq!(panel.pages.visible_child_name().as_deref(), Some("nearby"));
     assert_eq!(panel.drawer(), Drawer::Open);
@@ -268,35 +392,62 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
                 .join(" ");
             assert!(
                 texts.contains(if kind == rqs_lib::sessions::details::PayloadKind::Url {
-                    "Link · 3 bytes"
+                    "Link · 3 B"
                 } else {
-                    "Text · 3 bytes"
+                    "Text · 3 B"
                 })
             );
-            assert!(texts.contains("Code: 0123"));
-            assert!(!texts.contains("files") && !texts.contains("Review all files"));
+            assert!(texts.contains(&crate::i18n::pin_code("0123")));
+            assert!(!texts.contains(&crate::i18n::file_count(1)));
+            assert!(!texts.contains(crate::i18n::label("Review all files")));
             assert!(labels(&row).iter().all(|label| !label.uses_markup()));
         }
     }
-    let row = details_card(&details);
-    assert!(labels(&row)
+    let invalid_pin = TransferDetails {
+        pin: "01\u{202e}23".into(),
+        ..details.clone()
+    };
+    let invalid = details_card(&invalid_pin);
+    assert!(!labels(&invalid)
         .iter()
-        .any(|label| label.text() == format!("{} · advertised device", details.sender)));
+        .any(|label| label.widget_name() == "detail-code"));
+    assert_eq!(invalid_pin.pin, "01\u{202e}23");
+    assert_eq!(details.pin, "0123");
+    let row = details_card(&details);
+    assert!(labels(&row).iter().any(|label| {
+        label.text()
+            == format!(
+                "{} · {}",
+                crate::i18n::isolate_untrusted(&details.sender),
+                crate::i18n::label("advertised device")
+            )
+    }));
     assert!(labels(&row).iter().all(|label| !label.uses_markup()));
     assert!(labels(&row)
         .iter()
-        .any(|label| label.text() == "Code: 0123"));
+        .any(|label| label.text() == crate::i18n::pin_code("0123")));
     let expander = row
         .last_child()
         .unwrap()
         .downcast::<gtk::Expander>()
         .unwrap();
+    assert_eq!(
+        expander.label().as_deref(),
+        Some(crate::i18n::label("Review all files"))
+    );
     assert!(expander.child().is_none());
     expander.set_expanded(true);
     let file_labels = labels(&expander.child().unwrap());
     assert_eq!(file_labels.len(), 256);
     for (index, label) in file_labels.iter().enumerate() {
-        assert_eq!(label.text(), format!("<file-{index}>.txt · 1 bytes"));
+        assert_eq!(
+            label.text(),
+            format!(
+                "{} · {}",
+                crate::i18n::isolate_untrusted(&format!("<file-{index}>.txt")),
+                crate::i18n::byte_count(1)
+            )
+        );
         assert!(!label.uses_markup());
     }
     expander.set_expanded(false);
@@ -327,14 +478,15 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     for action in ["Receive", "Send", "Hide", "Devices"] {
         assert!(compact_text.contains(action));
     }
-    assert!(!compact_text.contains("Code: 4821"));
+    assert!(!compact_text.contains(&crate::i18n::pin_code("4821")));
     expand_details(&panel.box_widget("incoming"));
     let reviewed = labels(&panel.box_widget("incoming"))
         .iter()
         .map(|label| label.text().to_string())
         .collect::<Vec<_>>()
         .join(" ");
-    assert!(reviewed.contains("Code: 4821") && reviewed.contains("Example.pdf"));
+    assert!(reviewed.contains(&crate::i18n::pin_code("4821")));
+    assert!(reviewed.contains("Example.pdf"));
     assert!(!compact_text.contains("Example.pdf"));
     // The actual card row has direct consent, no Receive indirection or lower body.
     fn consent_controls(widget: &gtk::Widget, found: &mut Vec<String>) {
@@ -346,8 +498,13 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
         }
         if widget.widget_name() == "row-summary" {
             assert_eq!(
-                widget.clone().downcast::<gtk::Label>().unwrap().text(),
-                "PDF · Code: 4821"
+                widget
+                    .clone()
+                    .downcast::<gtk::Label>()
+                    .unwrap()
+                    .text()
+                    .to_string(),
+                format!("PDF · {}", crate::i18n::pin_code("4821"))
             );
             assert!(widget.tooltip_text().unwrap().contains("Example.pdf"));
         }
@@ -360,6 +517,18 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     let mut direct = Vec::new();
     consent_controls(panel.box_widget("nearby").upcast_ref(), &mut direct);
     assert_eq!(direct, ["decline", "accept"]);
+    let transfer_captions = labels(&panel.box_widget("transfers"))
+        .iter()
+        .map(|label| label.text().to_string())
+        .collect::<Vec<_>>();
+    assert!(transfer_captions.contains(&crate::i18n::transfer_recipient("Example phone")));
+    assert!(transfer_captions.contains(&crate::i18n::transfer_recipient("Example laptop")));
+    assert!(transfer_captions.contains(&crate::i18n::transfer_progress(
+        2048,
+        12345,
+        crate::i18n::ProgressKind::Sent,
+    )));
+    assert!(transfer_captions.contains(&crate::i18n::transfer_phase("Queued").to_string()));
 
     panel.set_drawer(Drawer::Open);
     let open_width = panel.window.measure(gtk::Orientation::Horizontal, -1);
@@ -398,29 +567,53 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     panel.actions.activate_action("settings", None);
     let settings = panel.settings.borrow().as_ref().unwrap().clone();
     assert!(settings.is_visible());
+    chrome::assert_close_only_titlebar(&settings);
     panel.actions.activate_action("about", None);
     let about = panel.about.borrow().as_ref().unwrap().clone();
-    assert!(about.is_visible());
-    assert_eq!(about.program_name().as_deref(), Some("rQuickShare"));
-    assert_eq!(about.version().as_deref(), Some("1.0.0"));
+    assert!(about.window.is_visible());
+    chrome::assert_close_only_titlebar(&about.window);
+    assert_eq!(about.name.text(), "rQuickShare Native");
     assert_eq!(
-        about.comments().as_deref(),
-        Some("Independent fork of Martichou/rquickshare. Send and receive nearby files and text")
+        about.version.text(),
+        format!(
+            "{} {}",
+            crate::i18n::about_label("Version"),
+            env!("CARGO_PKG_VERSION")
+        )
     );
+    assert!(about.author.text().contains("(morozhenko)"));
+    assert!(about
+        .author
+        .text()
+        .contains(if crate::i18n::active() == "ru" {
+            "Станислав Мосейко"
+        } else {
+            "Stanislav Moseyko"
+        }));
+    assert!(about.upstream.text().contains("Martichou/rquickshare"));
+    assert_eq!(about.website.uri(), "https://morozhenko.com");
+    assert_eq!(about.website.label().as_deref(), Some("morozhenko.com ↗"));
+    assert!(about.license.text().contains("GNU GPLv3"));
     assert_eq!(
-        about.logo_icon_name().as_deref(),
+        about.icon.icon_name().as_deref(),
         Some(crate::tray::ICON_NAME)
     );
-    about.close();
-    assert!(!about.is_visible());
+    assert!(!about.window.is_resizable());
+    assert!(about.window.title().unwrap().contains("Native"));
+    assert!(!about.window.child().unwrap().is::<gtk::Stack>());
+    let previous = about.window.child().unwrap();
+    about.retranslate();
+    assert_eq!(about.window.child(), Some(previous));
+    about.window.close();
+    assert!(!about.window.is_visible());
     panel.actions.activate_action("about", None);
-    assert_eq!(*panel.about.borrow().as_ref().unwrap(), about);
-    assert!(about.is_visible());
+    assert!(Rc::ptr_eq(panel.about.borrow().as_ref().unwrap(), &about));
+    assert!(about.window.is_visible());
     assert_eq!(panel.drawer(), Drawer::Closed);
     settings::verify_editor_smoke(panel.settings_owner.borrow().as_ref().unwrap());
     assert!(labels(&panel.box_widget("incoming"))
         .iter()
-        .any(|label| label.text() == "Code: 4821"));
+        .any(|label| label.text() == crate::i18n::pin_code("4821")));
     assert_eq!(
         panel
             .actions
@@ -474,6 +667,27 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     );
     panel.sending.popdown();
     panel.render();
+    // Regression: the localized empty card is keyed by its English source.
+    // Repaint must replace a stale GTK label without altering the Core view.
+    let empty_source = "No incoming requests";
+    let nearby = panel.box_widget("incoming");
+    let stale = labels(&nearby)
+        .into_iter()
+        .find(|item| item.text() == crate::i18n::label(empty_source))
+        .expect("empty nearby card");
+    stale.set_text("stale language from cached render");
+    let epoch = panel.model.borrow().state.view.as_ref().unwrap().epoch;
+    panel.retranslate();
+    assert!(!labels(&panel.box_widget("incoming"))
+        .iter()
+        .any(|item| item.text() == "stale language from cached render"));
+    assert!(labels(&panel.box_widget("incoming"))
+        .iter()
+        .any(|item| item.text() == crate::i18n::label(empty_source)));
+    assert_eq!(
+        panel.model.borrow().state.view.as_ref().unwrap().epoch,
+        epoch
+    );
     fn assert_no_choices(widget: &gtk::Widget) {
         assert!(!widget.is::<gtk::CheckButton>());
         let mut child = widget.first_child();
@@ -486,6 +700,18 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     outbound::verify(&panel);
     panel.show_transfers();
     assert!(panel.transfers.borrow().is_some());
+    panel.retranslate();
+    assert_eq!(
+        panel
+            .transfers
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .surface()
+            .title()
+            .as_deref(),
+        Some(crate::i18n::label("History"))
+    );
     assert_eq!(panel.pages.visible_child_name().as_deref(), Some("nearby"));
     assert!(!panel.model.borrow().closing);
 
@@ -555,7 +781,7 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert!(panel.model.borrow().closing);
     assert!(panel.settings.borrow().is_none());
     assert!(panel.about.borrow().is_none());
-    assert!(!about.is_visible());
+    assert!(!about.window.is_visible());
     assert!(panel.settings_owner.borrow().is_none());
     assert!(panel.context.parent().is_none());
     assert!(!settings.is_visible());

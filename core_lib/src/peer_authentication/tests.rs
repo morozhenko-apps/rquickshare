@@ -545,3 +545,88 @@ fn given_exact_conflicting_or_expired_replays_when_processed_then_failure_and_se
     time.0.store(21800, Ordering::SeqCst);
     assert!(auth.finish(Some(1)).is_err());
 }
+
+#[test]
+fn given_actual_valid_credential_when_mutually_verified_then_only_certificate_proof_is_exposed() {
+    let (mut first, _) = setup(Role::Receiver, true, true);
+    assert_eq!(first.verify(&proof(Role::Receiver)), Outcome::Success);
+    let (outcome, identity) = first
+        .finish_with_credential(Some(Status::Success as i32))
+        .unwrap();
+    assert_eq!(outcome, Outcome::Success);
+    let identity = identity.expect("verified certificate proof");
+    assert_eq!(
+        format!("{identity:?}"),
+        "VerifiedPeerCredential([redacted])"
+    );
+
+    let (mut second, _) = setup(Role::Receiver, true, true);
+    assert_eq!(second.verify(&proof(Role::Receiver)), Outcome::Success);
+    let (_, another) = second
+        .finish_with_credential(Some(Status::Success as i32))
+        .unwrap();
+    assert_eq!(Some(identity), another);
+    // Same trusted key does not prove two discovery routes belong to it;
+    // no endpoint, transport, IP or name is attached to this type.
+}
+
+#[test]
+fn given_anonymous_unable_or_peer_decline_when_finished_then_no_verified_credential_exists() {
+    let mut anonymous = PeerAuthentication::anonymous(Role::Receiver);
+    anonymous.bind_token(&TOKEN).unwrap();
+    assert_eq!(anonymous.verify(&proof(Role::Receiver)), Outcome::Unable);
+    assert_eq!(
+        anonymous
+            .finish_with_credential(Some(Status::Success as i32))
+            .unwrap()
+            .0,
+        Outcome::Unable
+    );
+
+    for remote in [None, Some(Status::Unable as i32)] {
+        let (mut known, _) = setup(Role::Sender, true, true);
+        assert_eq!(known.verify(&proof(Role::Sender)), Outcome::Success);
+        let (outcome, credential) = known.finish_with_credential(remote).unwrap();
+        assert_eq!(outcome, Outcome::Unable);
+        assert!(credential.is_none());
+    }
+
+    let (mut hash_only, _) = setup(Role::Receiver, false, true);
+    assert_eq!(hash_only.verify(&proof(Role::Receiver)), Outcome::Unable);
+    let (outcome, credential) = hash_only
+        .finish_with_credential(Some(Status::Success as i32))
+        .unwrap();
+    assert_eq!(outcome, Outcome::Unable);
+    assert!(credential.is_none());
+}
+
+#[test]
+fn given_expired_verified_peer_when_finishing_then_identity_fails_closed() {
+    let (mut known, time) = setup(Role::Receiver, true, true);
+    assert_eq!(known.verify(&proof(Role::Receiver)), Outcome::Success);
+    // Peer certificates use an explicit 30-minute public tolerance.
+    // At the exclusive end of that tolerance the proof must fail closed.
+    time.0.store(21_800, Ordering::SeqCst);
+    assert!(known
+        .finish_with_credential(Some(Status::Success as i32))
+        .is_err());
+}
+
+#[test]
+fn given_cached_verified_route_when_new_peer_is_anonymous_rotated_or_mismatched_then_payload_authentication_fails_closed(
+) {
+    let expected = VerifiedPeerCredential::test_fixture([0x33; 32]);
+    let matching = VerifiedPeerCredential::test_fixture([0x33; 32]);
+    let wrong = VerifiedPeerCredential::test_fixture([0x44; 32]);
+
+    // Current Google anonymous sessions keep their ordinary PIN/consent path
+    // only when no *previously trusted* route assumption is being relied on.
+    assert!(enforce_expected_route_peer(None, None).is_ok());
+    assert!(enforce_expected_route_peer(None, Some(&wrong)).is_ok());
+
+    // Once Core has selected a previously authenticated route, a new
+    // PairedKey Unable/no certificate is NOT consent to downgrade.
+    assert!(enforce_expected_route_peer(Some(&expected), None).is_err());
+    assert!(enforce_expected_route_peer(Some(&expected), Some(&wrong)).is_err());
+    assert!(enforce_expected_route_peer(Some(&expected), Some(&matching)).is_ok());
+}

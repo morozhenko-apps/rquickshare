@@ -50,4 +50,67 @@ mod tests {
         owner.close().await;
         assert!(stop.is_cancelled());
     }
+    #[tokio::test]
+    async fn given_immediately_ready_signal_when_shutdown_created_then_stop_is_cancelled_before_close(
+    ) {
+        // Arrange / Act / Assert
+        let owner = Shutdown::from_signal(std::future::ready(()));
+        let stop = owner.stop.clone();
+        stop.cancelled().await;
+        assert!(stop.is_cancelled());
+        owner.close().await;
+        assert!(stop.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn given_disconnected_signal_sender_when_wait_finishes_then_stop_is_cancelled() {
+        // Arrange: dropping a signal source completes the observed future.
+        let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+        drop(sender);
+        let owner = Shutdown::from_signal(async move {
+            let _ = receiver.await;
+        });
+        let stop = owner.stop.clone();
+
+        // Act / Assert
+        stop.cancelled().await;
+        assert!(stop.is_cancelled());
+        owner.close().await;
+    }
+
+    #[tokio::test]
+    async fn given_forever_pending_signal_when_explicit_close_runs_then_worker_joins_and_stop_remains_cancelled(
+    ) {
+        // Arrange
+        let owner = Shutdown::from_signal(std::future::pending());
+        let stop = owner.stop.clone();
+        assert!(!stop.is_cancelled());
+
+        // Act
+        owner.close().await;
+
+        // Assert
+        assert!(stop.is_cancelled());
+        stop.cancelled().await;
+    }
+
+    #[tokio::test]
+    async fn given_signal_and_close_racing_when_both_complete_then_shutdown_is_idempotently_cancelled(
+    ) {
+        // Arrange: neither outcome depends on which ready branch wins.
+        for _ in 0..64 {
+            let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+            let owner = Shutdown::from_signal(async move {
+                let _ = receiver.await;
+            });
+            let stop = owner.stop.clone();
+
+            // Act
+            let (_, ()) = tokio::join!(async move { sender.send(()) }, owner.close());
+
+            // Assert
+            assert!(stop.is_cancelled());
+            stop.cancelled().await;
+        }
+    }
 }

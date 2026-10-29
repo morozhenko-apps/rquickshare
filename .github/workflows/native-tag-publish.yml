@@ -2,7 +2,7 @@ name: Publish rQuickShare
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["native/v*"]
 
 permissions:
   contents: read
@@ -24,15 +24,26 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # A matching commit alone cannot establish protected release authority.
+      # Fail before build/signing if production master has no effective protection.
+      - name: Require protected production master before accepting a release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/branches/master" --jq '.protected' |
+            grep -Fxq true
       - name: Confirm stable tag equals current master and native version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || exit 1
+          version="$(python3 scripts/native_release_tag.py version "$GITHUB_REF_NAME")"
+          test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag
           git fetch --no-tags origin master
           [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/master^{commit})" ]] || exit 1
-          version="${GITHUB_REF_NAME#v}"
+          test "$(python3 scripts/native_release_tag.py tag "$version")" = "$GITHUB_REF_NAME"
           actual="$(python3 -c 'import tomllib; print(tomllib.load(open("native_desktop/Cargo.toml", "rb"))["package"]["version"])')"
           revision="$(python3 -c 'import tomllib; print(tomllib.load(open("native_desktop/packaging/release.toml", "rb"))["revision"])')"
           [[ "$version" == "$actual" && "$revision" =~ ^[1-9][0-9]{0,9}$ ]] || exit 1
@@ -42,16 +53,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: infra/native-download/package-lock.json
-      - name: Validate public download Worker
-        working-directory: infra/native-download
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npm run types
-          npm run check
-          npm test
-          npm run dry-run
+      - name: Validate flat distribution and cleanup contracts
+        run: node --test scripts/tests/*.test.mjs
 
   mode-b:
     name: Full Mode B (10x) on release tag
@@ -62,20 +65,27 @@ jobs:
 
   package:
     needs: [admission, mode-b]
-    runs-on: ubuntu-24.04
-    container: ubuntu:26.04
-    env:
-      HOME: /root
+    runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
       - name: Install Ubuntu 26.04 native ABI dependencies
         run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates git curl build-essential pkg-config dpkg-dev python3 python3-venv \
             protobuf-compiler libdbus-1-dev libudev-dev libgtk-4-dev libgtk4-layer-shell-dev \
             libfontconfig-dev libseccomp-dev bubblewrap glycin-loaders \
             dbus-daemon dbus-x11 xvfb xauth desktop-file-utils gnupg gpgv
+      - name: Require real unprivileged Bubblewrap sandbox on native Ubuntu 26.04
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /etc/os-release
+          test "$VERSION_ID" = "26.04"
+          test "$(id -u)" -ne 0
+          # The real Glycin loader needs user, PID and mount namespaces.
+          bwrap --die-with-parent --unshare-user --unshare-pid \
+            --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
@@ -114,13 +124,7 @@ jobs:
             ${{ runner.temp }}/native-packages/*.deb
             ${{ runner.temp }}/native-packages/*.deb.sha256
           if-no-files-found: error
-          retention-days: 30
-      - uses: actions/upload-artifact@v6
-        with:
-          name: unsigned-apt
-          path: ${{ runner.temp }}/native-apt-unsigned/
-          if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
 
   publish:
     needs: [admission, package]
@@ -132,6 +136,8 @@ jobs:
       REVISION: ${{ needs.admission.outputs.revision }}
       SIGNING_FINGERPRINT: 6D8854762CF0C86881138A56695A0888D09FA616
       RQS_R2_ACCOUNT_ID: ${{ vars.RQS_R2_ACCOUNT_ID }}
+    outputs:
+      receipt: ${{ steps.publish.outputs.receipt }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -140,10 +146,6 @@ jobs:
         with:
           name: native-package
           path: ${{ runner.temp }}/native-package
-      - uses: actions/download-artifact@v6
-        with:
-          name: unsigned-apt
-          path: ${{ runner.temp }}/unsigned-apt
       - name: Check exact artifact identity and public account configuration
         shell: bash
         run: |
@@ -151,21 +153,15 @@ jobs:
           [[ "$RQS_R2_ACCOUNT_ID" =~ ^[a-f0-9]{32}$ ]] || exit 1
           test -s "$RUNNER_TEMP/native-package/rquickshare-native_${VERSION}-${REVISION}_amd64.deb"
           test -s "$RUNNER_TEMP/native-package/rquickshare-native_${VERSION}-${REVISION}_amd64.deb.sha256"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: infra/native-download/package-lock.json
-      - name: Deploy only the dedicated read-only R2 Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.RQS_CLOUDFLARE_API_TOKEN }}
+      # The existing R2 Custom Domain serves the flat public files directly.
+      # The publisher verifies public bytes before committing release metadata.
+      - name: Prepare flat APT metadata from the single verified package
         shell: bash
-        working-directory: infra/native-download
         run: |
           set -euo pipefail
-          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || exit 1
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx wrangler deploy
+          python3 scripts/native_apt.py prepare \
+            --package "$RUNNER_TEMP/native-package/rquickshare-native_${VERSION}-${REVISION}_amd64.deb" \
+            --output "$RUNNER_TEMP/unsigned-apt"
       - name: Prepare isolated S3 SDK before importing any key
         shell: bash
         run: |
@@ -227,6 +223,7 @@ jobs:
           python3 scripts/native_apt.py verify --repository "$RUNNER_TEMP/signed-apt" \
             --keyring "$private/keyring.gpg" --fingerprint "$SIGNING_FINGERPRINT" "${previous[@]}"
       - name: Publish immutable R2 pool and by-hash, then conditional InRelease
+        id: publish
         env:
           RQS_R2_ACCESS_KEY_ID: ${{ secrets.RQS_R2_ACCESS_KEY_ID }}
           RQS_R2_SECRET_ACCESS_KEY: ${{ secrets.RQS_R2_SECRET_ACCESS_KEY }}
@@ -241,16 +238,21 @@ jobs:
           "$RUNNER_TEMP/release-python/bin/python" scripts/native_r2.py publish \
             --repository "$RUNNER_TEMP/signed-apt" \
             --keyring "$RUNNER_TEMP/rqs-release-private/keyring.gpg" \
-            --fingerprint "$SIGNING_FINGERPRINT" --account-id "$RQS_R2_ACCOUNT_ID" "${baseline[@]}"
+            --fingerprint "$SIGNING_FINGERPRINT" --account-id "$RQS_R2_ACCOUNT_ID" "${baseline[@]}" \
+            --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" \
+            --receipt "$RUNNER_TEMP/publication-receipt.json"
+          printf 'receipt=' >> "$GITHUB_OUTPUT"
+          base64 -w0 "$RUNNER_TEMP/publication-receipt.json" >> "$GITHUB_OUTPUT"
+          printf '\n' >> "$GITHUB_OUTPUT"
       - name: Verify public HTTPS archive and actual isolated APT package acquisition
         shell: bash
         run: |
           set -euo pipefail
-          base="https://download.morozhenko.com/dist/rQuickShare"
-          curl -fsS "$base/dists/rquickshare-native-ubuntu26.04/InRelease" -o "$RUNNER_TEMP/public-InRelease"
-          cmp "$RUNNER_TEMP/public-InRelease" "$RUNNER_TEMP/signed-apt/dists/rquickshare-native-ubuntu26.04/InRelease"
+          base="https://download.morozhenko.com/dist/rQuickShare/linux"
+          curl -fsS "$base/InRelease" -o "$RUNNER_TEMP/public-InRelease"
+          cmp "$RUNNER_TEMP/public-InRelease" "$RUNNER_TEMP/signed-apt/linux/InRelease"
           name="rquickshare-native_${VERSION}-${REVISION}_amd64.deb"
-          curl -fsS "$base/pool/main/r/rquickshare-native/$name" -o "$RUNNER_TEMP/public.deb"
+          curl -fsS "$base/$name" -o "$RUNNER_TEMP/public.deb"
           cmp "$RUNNER_TEMP/public.deb" "$RUNNER_TEMP/native-package/$name"
           private="$RUNNER_TEMP/rqs-release-private"
           python3 scripts/native_apt.py bootstrap --repository "$RUNNER_TEMP/signed-apt" \
@@ -272,16 +274,6 @@ jobs:
           (cd "$RUNNER_TEMP/isolated-apt/download" && \
              apt-get "${apt_flags[@]}" download "rquickshare-native=${VERSION}-${REVISION}")
           cmp "$RUNNER_TEMP/isolated-apt/download/$name" "$RUNNER_TEMP/native-package/$name"
-      - name: Stage public APT enrollment assets from the verified signed snapshot
-        uses: actions/upload-artifact@v6
-        with:
-          name: apt-enrollment
-          path: |
-            ${{ runner.temp }}/apt-bootstrap/rquickshare-native-archive-keyring.gpg
-            ${{ runner.temp }}/apt-bootstrap/rquickshare-native.sources
-            ${{ runner.temp }}/apt-bootstrap/FINGERPRINT
-          if-no-files-found: error
-          retention-days: 30
       - name: Clean runner-local signing material
         if: always()
         shell: bash
@@ -292,34 +284,47 @@ jobs:
           rm -rf "$RUNNER_TEMP/rqs-release-private" "$RUNNER_TEMP/previous-signed" \
                  "$RUNNER_TEMP/signed-apt" "$RUNNER_TEMP/unsigned-apt"
 
-  github-release:
+  cleanup:
     needs: [admission, package, publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Remove exact package archive after verified public R2 readback
+        env:
+          RECEIPT_BASE64: ${{ needs.publish.outputs.receipt }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$RECEIPT_BASE64" | base64 --decode > "$RUNNER_TEMP/receipt.json"
+          node scripts/cleanup-published-artifacts.mjs --verified-receipt "$RUNNER_TEMP/receipt.json"
+          rm -f "$RUNNER_TEMP/receipt.json"
+
+  github-release:
+    needs: [admission, publish, cleanup]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v6
-        with:
-          name: native-package
-          path: ${{ runner.temp }}/native-package
-      - uses: actions/download-artifact@v6
-        with:
-          name: apt-enrollment
-          path: ${{ runner.temp }}/apt-enrollment
-      - name: Publish GitHub Release only after signed R2 and APT succeed
+      - name: Publish text-only GitHub Release after signed R2 and cleanup
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          assets=("$RUNNER_TEMP"/native-package/*.deb "$RUNNER_TEMP"/native-package/*.deb.sha256
-                  "$RUNNER_TEMP"/apt-enrollment/rquickshare-native-archive-keyring.gpg
-                  "$RUNNER_TEMP"/apt-enrollment/rquickshare-native.sources
-                  "$RUNNER_TEMP"/apt-enrollment/FINGERPRINT)
-          [[ "${#assets[@]}" -eq 5 ]] || exit 1
-          for asset in "${assets[@]}"; do [[ -s "$asset" ]] || exit 1; done
-          gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --title "rQuickShare ${TAG#v}" \
-            --notes "Independent fork of Martichou/rquickshare (GPLv3). This package targets Ubuntu 26.04 amd64. Windows and macOS ports are planned but not yet shipped. Direct .deb and signed APT refer to identical package bytes."
+          notes="Independent fork of Martichou/rquickshare (GPLv3). Ubuntu 26.04 amd64. Direct DEB and signed flat APT use identical bytes at https://download.morozhenko.com/dist/rQuickShare/linux/ . Latest verified download: https://download.morozhenko.com/dist/rQuickShare/latest.json . Windows and macOS are not shipped. No GitHub binary attachments."
+          if [[ "$TAG" == "native/v0.9.0" ]]; then
+            notes="$notes Early public Linux release with explicit device consent; BLE-to-TCP admission security review: https://github.com/morozhenko-apps/rquickshare/issues/8 ."
+          fi
+          if [[ "$TAG" == "native/v1.0.0" ]]; then
+            notes="$notes Known limitations accepted for this release: BLE-to-TCP admission availability risk (https://github.com/morozhenko-apps/rquickshare/issues/8); authenticated grouping of unverified peer routes is not implemented (https://github.com/morozhenko-apps/rquickshare/issues/16). Neither issue is claimed fixed. Each incoming transfer still requires explicit consent."
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "rQuickShare ${TAG#native/v}" --notes "$notes"

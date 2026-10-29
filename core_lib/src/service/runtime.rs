@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
+use std::time::Instant;
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures::FutureExt;
@@ -11,8 +12,13 @@ use tokio::sync::broadcast;
 
 use super::*;
 use crate::managed::{ControlLost, ManagedSender, OutboundReceiver, RejectionKind};
-use crate::sessions::{ConsentToken, SessionControl, SessionError, SessionEvent, SessionId};
+use crate::sessions::{
+    ConsentToken, RouteProof, SessionControl, SessionError, SessionEvent, SessionId,
+};
 use crate::{EndpointInfo, OutboundPayload, SendInfo, State, RQS};
+
+mod route_registry;
+use route_registry::RouteRegistry;
 
 const DISCOVERY_EVENTS: usize = 128;
 const OWNED_DISPATCHES: usize = 32;
@@ -78,11 +84,14 @@ struct Binding {
     transfer: TransferId,
     control: SessionControl,
     consent: Option<ConsentToken>,
+    /// Only outbound sessions have a selected exact route/socket generation.
+    route: Option<(String, SocketAddr)>,
 }
 struct Pending {
     transfer: TransferId,
     endpoint: String,
     request: SendInfo,
+    expected_peer: Option<crate::peer_authentication::VerifiedPeerCredential>,
 }
 
 pub struct NativeRuntime {
@@ -90,8 +99,9 @@ pub struct NativeRuntime {
     coordinator: Coordinator,
     sender: ManagedSender,
     events: broadcast::Receiver<SessionEvent>,
+    route_proofs: broadcast::Receiver<RouteProof>,
     discovery: broadcast::Receiver<EndpointInfo>,
-    routes: BTreeMap<String, Route>,
+    routes: RouteRegistry,
     endpoint_sequence: u64,
     bindings: BTreeMap<SessionId, Binding>,
     pending: Option<Pending>,
@@ -193,9 +203,13 @@ impl NativeRuntime {
                 .sessions()
                 .subscribe_fresh()
                 .map_err(|_| RuntimeError::CoreUnavailable)?;
-            Ok::<_, RuntimeError>((coordinator, sender, receiver, events))
+            let route_proofs = sender
+                .sessions()
+                .subscribe_route_proofs_fresh()
+                .map_err(|_| RuntimeError::CoreUnavailable)?;
+            Ok::<_, RuntimeError>((coordinator, sender, receiver, events, route_proofs))
         })();
-        let (coordinator, sender, receiver, events) = match prepared {
+        let (coordinator, sender, receiver, events, route_proofs) = match prepared {
             Ok(parts) => parts,
             Err(error) => {
                 return Err(RejectedRuntime {
@@ -205,7 +219,8 @@ impl NativeRuntime {
             }
         };
         let (discovery_sender, discovery) = broadcast::channel(DISCOVERY_EVENTS);
-        let mut runtime = Self::assemble(core, coordinator, sender, events, discovery);
+        let mut runtime =
+            Self::assemble(core, coordinator, sender, events, route_proofs, discovery);
         runtime.startup = Some(Startup {
             receiver,
             discovery_sender,
@@ -218,14 +233,17 @@ impl NativeRuntime {
     /// After abandonment or failure, await shutdown and construct a fresh runtime.
     pub async fn start(&mut self) -> Result<(), RuntimeError> {
         let startup = self.startup.take().ok_or(RuntimeError::CoreUnavailable)?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::RuntimeStartRequested);
         if self.core.start(startup.receiver).await.is_err() {
             self.core.stop().await;
             return Err(RuntimeError::CoreUnavailable);
         }
-        if self.core.discovery(startup.discovery_sender).is_err() {
+        crate::receiver_trace::event(crate::receiver_trace::Event::RuntimeCoreReady);
+        if self.core.discovery(startup.discovery_sender).await.is_err() {
             self.core.stop().await;
             return Err(RuntimeError::CoreUnavailable);
         }
+        crate::receiver_trace::event(crate::receiver_trace::Event::RuntimeDiscoveryWorkerReady);
         self.started = true;
         Ok(())
     }
@@ -235,6 +253,7 @@ impl NativeRuntime {
         coordinator: Coordinator,
         sender: ManagedSender,
         events: broadcast::Receiver<SessionEvent>,
+        route_proofs: broadcast::Receiver<RouteProof>,
         discovery: broadcast::Receiver<EndpointInfo>,
     ) -> Self {
         Self {
@@ -242,8 +261,9 @@ impl NativeRuntime {
             coordinator,
             sender,
             events,
+            route_proofs,
             discovery,
-            routes: BTreeMap::new(),
+            routes: RouteRegistry::default(),
             endpoint_sequence: 0,
             bindings: BTreeMap::new(),
             pending: None,
@@ -395,6 +415,7 @@ impl NativeRuntime {
                         .collect(),
                 )?;
                 self.routes.remove(&id);
+                crate::receiver_trace::event(crate::receiver_trace::Event::MdnsRouteRetired);
             }
         } else if info.present == Some(true) {
             let Some(addr) = info
@@ -415,16 +436,42 @@ impl NativeRuntime {
             if name.len() > 256 || name.chars().any(char::is_control) {
                 return Ok(());
             }
+            let first_admitted = existing.is_none() && self.endpoint_sequence == 0;
             let id = match existing {
                 Some(id) => {
                     let route = &self.routes[&id];
                     if route.name == name && route.addr == addr {
                         return Ok(());
                     }
-                    // Label and route updates must share the snapshot revision.
-                    // Check exhaustion before mutating the already visible route.
-                    self.coordinator.advance()?;
-                    id
+                    if route.addr != addr {
+                        // An untrusted mDNS fullname does NOT authenticate a
+                        // new socket as the former recipient. Retire the old
+                        // capability before exposing a fresh route generation:
+                        // an already queued Send must fail, never silently
+                        // follow an address now owned by a different phone.
+                        let sequence = self
+                            .endpoint_sequence
+                            .checked_add(1)
+                            .ok_or(Error::Exhausted)?;
+                        let replacement =
+                            format!("ep-{:032x}-{:016x}", self.coordinator.epoch, sequence);
+                        let mut endpoints: Vec<_> = self
+                            .routes
+                            .keys()
+                            .filter(|key| **key != id)
+                            .cloned()
+                            .collect();
+                        endpoints.push(replacement.clone());
+                        self.coordinator.set_endpoints(endpoints)?;
+                        self.routes.remove(&id);
+                        self.endpoint_sequence = sequence;
+                        replacement
+                    } else {
+                        // A label-only change does not grant a new transport
+                        // capability or redirect the already selected socket.
+                        self.coordinator.advance()?;
+                        id
+                    }
                 }
                 None => {
                     if self.routes.len() >= self.coordinator.limits.endpoints {
@@ -450,6 +497,9 @@ impl NativeRuntime {
                     addr,
                 },
             );
+            if first_admitted {
+                crate::receiver_trace::event(crate::receiver_trace::Event::FirstMdnsRouteAdmitted);
+            }
         }
         Ok(())
     }
@@ -479,6 +529,7 @@ impl NativeRuntime {
                         transfer,
                         control,
                         consent: None,
+                        route: None,
                     },
                 );
                 // Open carries a live capability; later ordered Changed events carry historical state.
@@ -555,6 +606,58 @@ impl NativeRuntime {
         Ok(progressed)
     }
 
+    /// Consume a proof only from the live outbound session that actually
+    /// connected to this generation's original exact socket. No mDNS, IPC or
+    /// BLE advertisement may supply a peer credential.
+    fn observed_route_proof(&mut self, proof: RouteProof) {
+        let Some(binding) = self.bindings.get(&proof.session) else {
+            return;
+        };
+        let snapshot = binding.control.snapshot();
+        // A very short successful transfer can reach Finished before this
+        // owner drains an already-issued authenticated proof. The proof
+        // originates from that live session before its terminal transition,
+        // so retain it only for successful Finished, never for a rejected,
+        // cancelled or disconnected peer.
+        if snapshot.direction != crate::channel::TransferType::Outbound
+            || (crate::sessions::terminal(&snapshot.state) && snapshot.state != State::Finished)
+        {
+            return;
+        }
+        let Some((id, addr)) = binding.route.as_ref() else {
+            return;
+        };
+        self.routes.bind_authenticated_route(
+            id,
+            *addr,
+            proof.peer,
+            proof.connect_latency,
+            proof.observed_at,
+            Instant::now(),
+        );
+    }
+
+    fn drain_route_proofs(&mut self) -> Result<bool, RuntimeError> {
+        let mut progressed = false;
+        for _ in 0..128 {
+            match self.route_proofs.try_recv() {
+                Ok(proof) => {
+                    self.observed_route_proof(proof);
+                    progressed = true;
+                }
+                Err(broadcast::error::TryRecvError::Empty) => return Ok(progressed),
+                Err(broadcast::error::TryRecvError::Lagged(_)) => {
+                    // Missing even a single proof invalidates inferred links,
+                    // but independent exact routes remain fully usable.
+                    self.routes.invalidate_proofs();
+                    return Ok(true);
+                }
+                Err(broadcast::error::TryRecvError::Closed) => return self.fault().map(|_| false),
+            }
+        }
+        Ok(progressed)
+    }
+
     fn drain_discovery(&mut self) -> Result<bool, RuntimeError> {
         let mut progressed = false;
         for _ in 0..DISCOVERY_EVENTS {
@@ -581,7 +684,9 @@ impl NativeRuntime {
             let Some(dispatch) = self.coordinator.next_send()? else {
                 return Ok(false);
             };
-            let Some(route) = self.routes.get(&dispatch.endpoint) else {
+            let Some((chosen_endpoint, route)) =
+                self.routes.preferred(&dispatch.endpoint, Instant::now())
+            else {
                 self.coordinator.observe(dispatch.transfer, Phase::Failed)?;
                 self.coordinator.owner_closed(dispatch.transfer)?;
                 self.coordinator.source_released(dispatch.transfer)?;
@@ -589,7 +694,8 @@ impl NativeRuntime {
             };
             self.pending = Some(Pending {
                 transfer: dispatch.transfer,
-                endpoint: dispatch.endpoint,
+                endpoint: chosen_endpoint.to_owned(),
+                expected_peer: self.routes.expected_peer(chosen_endpoint, Instant::now()),
                 request: SendInfo {
                     id: format!(
                         "send-{:032x}-{:016x}",
@@ -608,9 +714,24 @@ impl NativeRuntime {
             self.coordinator.source_released(pending.transfer)?;
             return Ok(true);
         };
+        // An expected identity from a previous authenticated session must
+        // remain live until queue admission. Otherwise fail, never downgrade
+        // to an anonymous handshake or try an unrelated fallback address.
+        if pending.expected_peer.is_some()
+            && self.routes.expected_peer(&pending.endpoint, Instant::now()) != pending.expected_peer
+        {
+            self.coordinator.observe(pending.transfer, Phase::Failed)?;
+            self.coordinator.owner_closed(pending.transfer)?;
+            self.coordinator.source_released(pending.transfer)?;
+            return Ok(true);
+        }
+        let route_binding = (pending.endpoint.clone(), route.addr);
         pending.request.addr = route.addr.to_string();
         pending.request.name = route.name.clone();
-        match self.sender.try_send(pending.request) {
+        match self
+            .sender
+            .try_send_verified(pending.request, pending.expected_peer.clone())
+        {
             Ok(control) => {
                 let session = control.session();
                 self.bindings.insert(
@@ -619,6 +740,7 @@ impl NativeRuntime {
                         transfer: pending.transfer,
                         control: session,
                         consent: None,
+                        route: Some(route_binding),
                     },
                 );
                 self.releases.push(Box::pin(async move {
@@ -631,6 +753,7 @@ impl NativeRuntime {
                     transfer: pending.transfer,
                     endpoint: pending.endpoint,
                     request: *rejected.request,
+                    expected_peer: pending.expected_peer,
                 });
                 match rejected.kind {
                     RejectionKind::Full => Ok(false),
@@ -747,6 +870,10 @@ impl NativeRuntime {
         if !self.started || self.coordinator.lifecycle == Lifecycle::Stopped {
             return Err(Error::NotRunning.into());
         }
+        // A valid proof is emitted before the session's terminal event.
+        // Consume authenticated route observations first so a fast transfer
+        // cannot lose its already completed peer proof during Close cleanup.
+        let proofs = self.drain_route_proofs()?;
         let events = self.drain_events()?;
         let discovery = self.drain_discovery()?;
         let mut completions = false;
@@ -771,11 +898,19 @@ impl NativeRuntime {
         let retired = self.coordinator.maintain_history()?;
         let controls = self.controls()?;
         let dispatch = self.dispatch()?;
-        if events || discovery || completions || controls || dispatch || retired {
+        if events || proofs || discovery || completions || controls || dispatch || retired {
             return Ok(());
         }
         let result = tokio::select! {
             result = self.events.recv() => match result { Ok(event) => self.observed(event), Err(_) => self.fault() },
+            result = self.route_proofs.recv() => match result {
+                Ok(proof) => { self.observed_route_proof(proof); Ok(()) },
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    self.routes.invalidate_proofs();
+                    Ok(())
+                },
+                Err(broadcast::error::RecvError::Closed) => self.fault(),
+            },
             result = self.discovery.recv() => match result { Ok(info) => self.discovered(info), Err(_) => self.fault() },
             Some((intent, result)) = self.receipts.next(), if !self.receipts.is_empty() => self.receipt(intent, result),
             Some((id, result)) = self.releases.next(), if !self.releases.is_empty() => self.release(id, result),

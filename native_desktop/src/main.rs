@@ -2,6 +2,7 @@ mod card_policy;
 mod card_view;
 mod cli;
 mod desktop_guard;
+mod i18n;
 mod ingress;
 mod lifecycle;
 mod login;
@@ -11,6 +12,7 @@ mod portal;
 #[cfg(test)]
 mod test_bus;
 mod tray;
+mod ui_language;
 
 use gtk::{gio, glib, prelude::*};
 use rqs_lib::service::{
@@ -293,6 +295,8 @@ fn run_gui(
     };
     let login_handle = login.as_ref().map(login::Owner::handle);
     let login_updates = login_handle.as_ref().map(login::Handle::subscribe);
+    // Only the GTK client reads this preference; the transfer daemon remains unchanged.
+    ui_language::initialize();
     let application = gtk::Application::new(
         Some("io.github.morozhenko_apps.RQuickShare.Native"),
         gio::ApplicationFlags::NON_UNIQUE,

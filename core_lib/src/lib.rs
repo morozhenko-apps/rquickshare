@@ -15,6 +15,7 @@ use rand::distr::Alphanumeric;
 use rand::Rng;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc, watch};
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
@@ -85,6 +86,7 @@ pub struct RQS {
     // Discovery token is different than ctoken because he is on his own
     // - can be cancelled while the ctoken is still active
     discovery_ctk: Option<CancellationToken>,
+    discovery_task: Option<JoinHandle<Result<(), anyhow::Error>>>,
 
     visibility: visibility::VisibilityPolicy,
 
@@ -132,6 +134,7 @@ impl RQS {
             tracker: None,
             ctoken: None,
             discovery_ctk: None,
+            discovery_task: None,
             visibility: visibility::VisibilityPolicy::new(visibility),
             ble_sender,
             foreground_sender,
@@ -379,29 +382,67 @@ impl RQS {
         Ok(self.ble_sender.subscribe())
     }
 
-    pub fn discovery(
+    /// Replace an active discovery generation only after its worker and SDK
+    /// have completed shutdown. A failed old generation blocks a new start.
+    pub async fn discovery(
         &mut self,
         sender: broadcast::Sender<EndpointInfo>,
     ) -> Result<(), anyhow::Error> {
+        self.replace_discovery_with(move |token| {
+            let discovery = MDnsDiscovery::new(sender)?;
+            Ok(async move { discovery.run(token).await })
+        })
+        .await
+    }
+
+    // Separating the generation lifecycle from the external mDNS SDK lets
+    // tests exercise the *real* RQS ownership and TaskTracker with a
+    // controlled external worker, without mocking RQS itself.
+    async fn replace_discovery_with<F, Fut>(&mut self, create: F) -> Result<(), anyhow::Error>
+    where
+        F: FnOnce(CancellationToken) -> Result<Fut, anyhow::Error>,
+        Fut: Future<Output = Result<(), anyhow::Error>> + Send + 'static,
+    {
+        if self.tracker.is_none() {
+            return Err(anyhow!("The service wasn't first started"));
+        }
+        self.stop_discovery_and_wait().await?;
+        if self
+            .ctoken
+            .as_ref()
+            .is_none_or(CancellationToken::is_cancelled)
+        {
+            return Err(anyhow!("Core transports stopped; discovery cannot restart"));
+        }
+
+        let token = CancellationToken::new();
+        let future = create(token.clone())?;
         let tracker = self
             .tracker
             .as_ref()
-            .ok_or_else(|| anyhow!("The service wasn't first started"))?;
-
-        let ctk = CancellationToken::new();
-        self.discovery_ctk = Some(ctk.clone());
-
-        let discovery = MDnsDiscovery::new(sender)?;
-        tracker.spawn(async move { discovery.run(ctk.clone()).await });
-
+            .ok_or_else(|| anyhow!("Core tracker unavailable"))?;
+        self.discovery_task = Some(tracker.spawn(future));
+        self.discovery_ctk = Some(token);
         Ok(())
     }
 
+    /// Cancel discovery immediately. Its worker remains tracked and must
+    /// be joined before a new generation is created.
     pub fn stop_discovery(&mut self) {
-        if let Some(discovert_ctk) = &self.discovery_ctk {
-            discovert_ctk.cancel();
-            self.discovery_ctk = None;
+        if let Some(token) = self.discovery_ctk.take() {
+            token.cancel();
         }
+    }
+
+    /// Stop discovery and await *its own* SDK worker, not unrelated Core
+    /// receivers. This is the generation fence exposed to Tauri commands.
+    pub async fn stop_discovery_and_wait(&mut self) -> Result<(), anyhow::Error> {
+        self.stop_discovery();
+        if let Some(task) = self.discovery_task.take() {
+            task.await
+                .map_err(|err| anyhow!("Discovery worker failed to join: {err}"))??;
+        }
+        Ok(())
     }
 
     /// An explicit Temporary command renews its window, including the same mode.
@@ -418,7 +459,9 @@ impl RQS {
     }
 
     pub async fn stop(&mut self) {
-        self.stop_discovery();
+        if let Err(error) = self.stop_discovery_and_wait().await {
+            error!("Discovery shutdown failed: {error:#}");
+        }
 
         if let Some(ctoken) = &self.ctoken {
             ctoken.cancel();

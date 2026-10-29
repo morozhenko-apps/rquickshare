@@ -84,6 +84,22 @@ pub fn native_settings_paths() -> Result<(PathBuf, PathBuf), ProcessError> {
     ))
 }
 
+/// Stored visibility is an editable preference, never startup permission to
+/// advertise. The daemon always starts hidden; only a live, authenticated
+/// user visibility action may enable incoming receive during this generation.
+fn startup_core(settings: StartupSettings) -> Result<RQS, ProcessError> {
+    let mut core = RQS::new(
+        crate::Visibility::Invisible,
+        settings.port,
+        settings.download_path,
+    );
+    core.set_device_name(settings.device_name).map_err(|_| {
+        ProcessError::NativeSettings(super::native_settings::StoreError::InvalidInput)
+    })?;
+    core.set_foreground(false);
+    Ok(core)
+}
+
 pub fn check_native_settings(store: &super::native_settings::Store) -> Result<(), ProcessError> {
     let snapshot = store.load().map_err(ProcessError::NativeSettings)?;
     let values = snapshot.values.ok_or(ProcessError::NativeSettings(
@@ -159,12 +175,8 @@ pub async fn serve_native_settings(
             .unwrap_or(-1);
         let runtime = match prepared {
             Ok((settings, root)) => {
-                let mut core = RQS::new(settings.visibility, settings.port, settings.download_path);
-                core.set_device_name(settings.device_name).map_err(|_| {
-                    ProcessError::NativeSettings(super::native_settings::StoreError::InvalidInput)
-                })?;
+                let core = startup_core(settings)?;
                 core.receive_policy.set_directory(root);
-                core.set_foreground(false);
                 NativeRuntime::new(epoch, Limits::default(), core)
                     .map_err(|rejected| ProcessError::Bus(BusError::Runtime(rejected.error)))
             }
@@ -462,11 +474,7 @@ pub async fn serve(
             return Ok(());
         }
     }
-    let mut core = RQS::new(settings.visibility, settings.port, settings.download_path);
-    core.set_device_name(settings.device_name).map_err(|_| {
-        ProcessError::NativeSettings(super::native_settings::StoreError::InvalidInput)
-    })?;
-    core.set_foreground(false);
+    let core = startup_core(settings)?;
     let mut runtime = match NativeRuntime::new(epoch, Limits::default(), core) {
         Ok(runtime) => runtime,
         Err(_) => {

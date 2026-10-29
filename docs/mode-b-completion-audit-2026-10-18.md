@@ -1,9 +1,89 @@
 # MODE B Stage 12 completion audit — 2026-10-18
 
+## 2026-10-19 MODE A architectural decision implemented — discovery restart B
+
+The user explicitly approved **Option B** for the Core discovery generation lifecycle. The previous architectural STOP under [issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12) is **resolved as a decision**, although exact-source CI and real KDE/Android acceptance remain independent checkpoints. Source implementation code through `4f5705f4`:
+- `RQS::discovery` is async, serially cancels+awaits the old owned `JoinHandle`, checks Core lifetime, and only then creates a new mDNS worker. An old-generation failure blocks admission until surfaced to the caller. New `stop_discovery_and_wait` awaits the worker; existing synchronous cancel remains for Drop.
+- `MDnsDiscovery::run` drains cached endpoint tombstones, aborts pending TCP reachability on cancellation, and awaits SDK shutdown acknowledgement. The channel-order contract has its own deterministic test.
+- All identified production callers were adapted: Tauri `start_discovery/stop_discovery`, `NativeRuntime::start` and CLI `core_bin`. Tauri retains a serial mutex and uses its existing Tokio blocking bridge.
+- Three new owned-worker lifecycle tests and one mDNS cache-retirement broadcast test, plus existing prestart/stop tests. Older green Core **774 passing** on source `0c939903` is evidenced in previous Core CI; final source `4f5705f4` has independent [Preflight 39315807211](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315807211) and [Native GTK 39315807383](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315807383) in-progress at this checkpoint. No unverified full green claim.
+- Full [design, failure chronology, rollback, lifecycle matrix and current test plan](mode-b-p0-discovery-lifecycle-2026-10-19.md), updated [continuation state](current-state.md).
+
+Hardware mDNS SDK event injection and Android interoperability remain open under [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9); other transport/BWU risks remain separately tracked. Current uploaded AGENT SSOT requires one final stable gate and separate known-flaky checks, not a generic ten full-suite repetition. No release or main merge.
+
+## Current SSOT precedence and discovery P0 (2026-10-19)
+
+**Current uploaded AGENT SSOT Stage 11 overrides historical generic "complete-suite 10×" language below.** Run the STABLE suite **once at the final gate**, execute tracked known-FLAKY cases **separately once**, and make bounded targeted reruns only to diagnose/fix failures. The updated SSOT explicitly says **not** to demand 10 successful repetitions of the complete suite, except for a separately binding release workflow. All old test counts and percentage snapshots remain historical facts; their older 10× *requirement* is no longer a generic MODE B completion condition. CI Preflight is not evidence that every Stage 12 artifact is covered.
+
+[Scoped source and branch inventory](mode-b-p0-discovery-lifecycle-2026-10-19.md) documents Tauri `start_discovery`/`stop_discovery`, Core `RQS::discovery`/`stop_discovery`, lifecycle tests, and an architectural STOP FACTOR. A repeated start unconditionally overwrites `discovery_ctk` without cancelling or joining the previous mDNS worker. [P0 issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12) has two durable contract alternatives; [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9) tracks the mDNS SDK/transport testability seam. No architectural decision or production correction has been made.
+
+Two **test-only** Tokio lifecycle tests were added at `b8545375` under `core_lib/src/lifecycle_tests.rs`: (a) rejecting discovery before startup without daemon mutation; (b) cancelling an owned discovery token twice without cancelling the independent Core lifetime or leaking its tracked worker at owner shutdown. These do **not** test duplicate-start workers and do not instantiate real mDNS. [Preflight 39309762791](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762791) and [Native GTK 39309762487](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762487) began for the exact test SHA; final results were not yet observed when this report was written. Update only after completion evidence.
+
+All previous measured line coverage is from earlier `99c26335` and should not be re-labelled current coverage after changes. Overall Stage 12 is still **NO** because real repeated-start behavior, live Android/BlueZ/mDNS acceptance, UI event integration and per-method branch/interaction gaps remain.
+
+
 **Status: NO — repository-wide MODE B testing coverage is NOT complete.**
 **Primary mode: MODE B (Testing).** This is a source/document audit
 of actual evidence, NOT a feature, refactor or relaxation of
 coverage criteria.
+
+## 2026-10-19 P0: Tauri received download path containment, actual symlinks
+
+On exact Tauri test-code SHA `1431de2b`, [Preflight 39302655899](https://github.com/morozhenko-apps/rquickshare/actions/runs/39302655899) **COMPLETED SUCCESS** (all 5 jobs), including **12 Tauri Desktop unit tests PASS, 0 FAIL**, **769 Core Rust PASS** and successful formatter/frontend/both Clippy jobs. The two new test names explicitly appear `ok` in the Tauri job logs.
+
+[Documentation-first N1–N12 test/branch inventory, provenance and scoped completion](mode-b-p0-tauri-reveal-path-containment-2026-10-19.md) covers `cmds/open_download_destination.rs::validate_received_relative_path` (4096/4097 UTF-8 bytes, 255/256-byte individual components, 64/65 component depth, controls/traversal) and `resolve_received_item` with real filesystem symlinks (outside-file, same-prefix sibling directory, inside-file and inside-directory valid links, broken/missing targets). The lexical path cannot obtain a canonical item outside downloads. Only two test methods and documentation were added; no production code change. First CI was cancelled after formatting-only correction and is not counted as green.
+
+Remaining **P0 real-desktop boundary**: `reveal_download_item` does not have a live `AppHandle`/FileManager1-integration test, nor was a concurrent symlink-swap TOCTOU race proven safe. Those are architecture/integration questions outside current test-only scope. Tauri instrumented **23.86% lines** is the older `99c26335` snapshot, not remeasured at `1431de2b`. Full ×10 current-source suite, hardware and all production-method branch map remain OPEN. Global Stage 12: **NO**.
+
+## 2026-10-19 P0: reveal ingress ownership regression suite
+
+Following the instrumented baseline and the first GTK remote filename label suite, the **actual ingress-owned file reveal worker** was tested in [the MODE B P0 plan, exact stage matrix and final D1–D5 evidence](mode-b-p0-reveal-ingress-lifecycle-2026-10-19.md). Test-source SHA `b912108f`, documentation only afterward. The 2 newly added async tests exercise the production `native_desktop/src/ingress.rs::Ingress::reveal_job` and `Ingress::close` with real Tokio tasks, `PreparationGate` ownership and event-ordered cancellation/close; only the external KDE portal future is replaced at its boundary. Assertions include original portal error propagation, exclusive permit until completion, safe readmission after a successful/rejected reveal, dropped GUI reply without premature task shutdown, and shutdown blocking until a cancelled worker joins.
+
+[Native GTK 39268764105](https://github.com/morozhenko-apps/rquickshare/actions/runs/39268764105) **SUCCESS: 84 passed / 0 failed**, both new named methods logged `ok`, formatting/strict lint pass. [Preflight 39268764131](https://github.com/morozhenko-apps/rquickshare/actions/runs/39268764131) **SUCCESS: 5/5 jobs**, Core 769/769, desktop Tauri 10/10, frontend/format/Clippy green. **This does not cover `panel/reveal.rs::reveal_target` itself, and does not alter 10.87% measured line coverage of `panel/reveal.rs` at the older SHA.** Re-run instrumented reports to make any new source-specific coverage claim.
+
+Global MODE B Stage 12 remains **NO**: on-source entire-suite 10× repetition, full instrumented branch mapping, real KDE Portal/BlueZ/Android/mDNS hardware/runtime acceptance, and automated mutation gate remain open. Production code and `master` unchanged.
+
+## 2026-10-19 additional GUI-safe filename projection evidence
+
+After the measured `99c26335` baseline, two Native GTK P0/P1 tests were introduced in `native_desktop/src/panel/rows.rs` (code SHA `291b7733`) with [documentation-first matrix](mode-b-p0-gtk-untrusted-file-labels-2026-10-19.md). [Native GTK 39252238328](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238328) **SUCCESS: 82/82** (both new methods named `ok`). [Preflight 39252238333](https://github.com/morozhenko-apps/rquickshare/actions/runs/39252238333) Core Rust **769/769**, formatter, frontend, and Core Clippy **SUCCESS**. At the recorded checkpoint, the Tauri desktop job remained in progress; full Preflight requires independent final-success observation.
+
+Do not mutate coverage metrics for the new source: instrumented Native GTK **70.75% lines** measures the preceding commit `99c26335`. The strict whole-suite 10×, live KDE/Android/BlueZ acceptance, MDNS discovery test seam and Stage 12 continue to be **OPEN**.
+
+## 2026-10-19 current-source instrumented measurement and GTK follow-up
+
+Manual coverage experiments **both completed SUCCESS** at `dev` commit `99c26335`: [Coverage measurement 39209606436](https://github.com/morozhenko-apps/rquickshare/actions/runs/39209606436) and [Native GTK instrumented coverage 39209632695](https://github.com/morozhenko-apps/rquickshare/actions/runs/39209632695). The complete file-by-file Rust output and methodology are preserved in [the source-matched MODE B coverage baseline](mode-b-coverage-baseline-2026-10-19.md).
+
+| Instrumented component | Line coverage | Function coverage | Region coverage |
+| --- | ---: | ---: | ---: |
+| Core Rust | 90.42% | 86.03% | 87.77% |
+| Native GTK | 70.75% | 65.73% | 68.96% |
+| Tauri Desktop Rust | 23.86% | 19.29% | 24.98% |
+| Frontend V8 | 56.00% | 75.86% | n/a |
+
+Frontend V8 reports 88.04% branch coverage; all three Rust tables report no actual branch instrumentation (zero-count fields), not 100%. Coverage universes/denominators differ and must not be averaged. P0 Core hardware gaps: `hdl/mdns_discovery.rs` 0%, `hdl/ble.rs` 5.59%, `hdl/gatt.rs` 40.55%. GUI gaps: `panel/reveal.rs` 10.87%, `preview.rs` 23.33%; Tauri `cmds/discovery.rs` 0%. The low lines largely reflect lifecycle/hardware rather than trivial missing unit assertions. Real Android/BlueZ/mDNS and runtime testability require independent integration or a separately authorized MODE A seam.
+
+Documentation-first [GTK remote filename/manifest label plan](mode-b-p0-gtk-untrusted-file-labels-2026-10-19.md) has been implemented in `native_desktop/src/panel/rows.rs`, code SHA `86e2bb41` (two pure P0/P1 contracts). Source-exact Preflight and Native GTK have started; outcome and new coverage percentages remain **UNCONFIRMED until separate successful runs**. The latest instrumented percentages are baseline **before** these test additions.
+
+Status remains **NO** for global Stage 12: strict full 10× current-source suite, all branch categories, mutation review, hardware and packaging acceptance are open. The earlier 2026-10-18 paragraphs below are retained as historical exact-source snapshots, not as an assertion that manual coverage was still unrun after 2026-10-19.
+
+## Latest additive client/D-Bus evidence (2026-10-18, post-baseline)
+
+This section updates the **current-source status** without rewriting the historical instrumented baseline recorded below. Latest green **test-code** source is `85faca64`; later `dev` commits through `40dc61c2` are documentation-only.
+
+- [Preflight 39174986191](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986191): **5/5 SUCCESS**, Core library **767/767** stable cases, eight separately filtered risk-sensitive probes, Tauri **10/10**, frontend, formatter and both Clippy jobs green.
+- [Native GTK 39174986234](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986234): **SUCCESS**, **80/80**.
+- [Authenticated forged Settings2/Visibility2 full branch/N1–N12 scoped plan](mode-b-p0-settings-client-adversarial-2026-10-18.md): two new original test methods, **18** D-Bus-encodable invalid typed fields crossed with `Read`/`Reload`/`Set` (**54** negative wire calls) plus three NUL-bearing values explicitly invalid under the production validator but impossible inside D-Bus STRING. The complete failed-run/root-cause/resolution audit is in the linked document.
+- The earlier [forged Visibility2 Read/Set suite](mode-b-p0-forged-visibility-dbus-replies-2026-10-18.md) and [local client / daemon owner replacement suite](mode-b-p0-visibility-client-owner-change-2026-10-18.md) passed independently on their documented source revisions.
+- The **strict full-suite ×10 run** and current-source instrumented per-file coverage are **NOT verified at `85faca64`**. The previous all-green release-gate run and coverage percentages below are historical, **not** a present-source completion gate. `.github/workflows/mode-b.yml` is `workflow_call`-only from the controlled release process; do not bypass the release gate merely to improve a testing status. `coverage.yml` and `native-gtk-coverage.yml` have separate manual diagnostic triggers, but no current diagnostic run is claimed.
+- Global Stage 12 still **NO**: hardware BLE/BlueZ/Android/mDNS, exact exhaustive branch mapping across all production files, automated mutation review, current full ×10 and OS/UI acceptance remain open.
+
+## 2026-10-19 additive P0: authenticated wrong-signature and unrequested-FD replies
+
+Latest scoped code source `4d9da957` (later doc-only commits): [Preflight 39208447151](https://github.com/morozhenko-apps/rquickshare/actions/runs/39208447151) **5/5 SUCCESS**, Core Rust **769 passed**, Tauri desktop **10 passed**; [Native GTK 39208447106](https://github.com/morozhenko-apps/rquickshare/actions/runs/39208447106) **SUCCESS, 80 passed**. The two original test methods in `core_lib/src/service/client/tests/visibility_forged.rs` both appear `ok` in the exact-source Core logs.
+
+[Scoped MODE B Stage 1–12 inventory and D1–D5 for D-Bus signature/FD replies](mode-b-p0-dbus-reply-signature-fd-2026-10-19.md): tests two authenticated same-owner faulty response forms on `Visibility2.Read`, `Visibility2.Set`, `Settings2.Read`, `Settings2.Reload`. **10 actual malformed reply rejections** across 2 independent tests, plus exact retained pending request and second-command refusal after corrupted `Set`. An unexpected FD is returned alongside a valid typed payload value, but raw reply signature remains changed by its extra FD field; no false claim of an isolated raw-message FD-header mutation test. A redundant test-only import triggered the initial strict Clippy failure and was corrected with unchanged assertions.
+
+This evidence expands test inventory, **not** global coverage closure. `mode-b.yml` is a release-controlled `workflow_call` entrypoint; the final full ×10 suite is **NOT** confirmed on `4d9da957`. `coverage.yml` / `native-gtk-coverage.yml` can be manually dispatched for diagnostics, but **no** current-source diagnostic has been run or measured in this update. Hardware BlueZ/mDNS/Android, KDE session behaviors, per-method branch maps, mutation engine and overall Stage 12 remain **NO**.
 
 ## Binding SSOT and interpretation
 

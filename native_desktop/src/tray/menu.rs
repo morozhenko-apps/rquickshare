@@ -61,7 +61,7 @@ impl Action {
         })
     }
     pub fn label(self) -> &'static str {
-        match self {
+        crate::i18n::label(match self {
             Self::Open => "Open card",
             Self::Receive => "Receive files",
             Self::Files => "Send files…",
@@ -81,7 +81,7 @@ impl Action {
             Self::Reconnect => "Reconnect service",
             Self::Hide => "Hide card",
             Self::Quit => "Quit panel",
-        }
+        })
     }
     pub fn name(self) -> Option<&'static str> {
         match self {
@@ -143,6 +143,20 @@ pub struct Handle {
     pub(super) state: watch::Sender<State>,
 }
 impl Handle {
+    /// A language change modifies labels even if no transfer state changed.
+    pub fn refresh_labels(&self) {
+        self.state.send_if_modified(|state| {
+            if state.exhausted {
+                return false;
+            }
+            match state.revision.checked_add(1) {
+                Some(revision) => state.revision = revision,
+                None => state.exhausted = true,
+            }
+            true
+        });
+    }
+
     pub fn publish(&self, projection: Projection) {
         self.state.send_if_modified(|state| {
             if state.exhausted || state.projection == projection {
@@ -192,11 +206,14 @@ fn properties(id: i32, state: State, names: &[String]) -> HashMap<String, OwnedV
         put("children-display", OwnedValue::from(Str::from("submenu")));
     } else if let Some(action) = Action::from_id(id) {
         let label = match action {
-            Action::Open if state.projection.card_visible => "Hide card".to_owned(),
-            Action::Incoming => format!("Incoming requests ({})", state.projection.incoming),
-            Action::Transfers => format!(
-                "History ({})",
-                state.projection.active + state.projection.incoming
+            Action::Open if state.projection.card_visible => Action::Hide.label().to_owned(),
+            Action::Incoming => crate::i18n::tray_count(
+                crate::i18n::TrayCountKind::Incoming,
+                state.projection.incoming,
+            ),
+            Action::Transfers => crate::i18n::tray_count(
+                crate::i18n::TrayCountKind::History,
+                state.projection.active + state.projection.incoming,
             ),
             _ => action.label().to_owned(),
         };

@@ -240,6 +240,83 @@ impl Ingress {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn given_reveal_success_or_portal_error_when_received_then_permit_is_released_only_after_completion(
+    ) {
+        // Arrange: real ingress worker and gate, with only the external portal
+        // future controlled by explicit signals; there is no file handler.
+        let owner = Ingress::new();
+        let permit = owner.gate.try_acquire().unwrap();
+        let (started, observed) = tokio::sync::oneshot::channel();
+        let (release, wait) = tokio::sync::oneshot::channel();
+        let reply = owner.reveal_job(&Handle::current(), permit, async move {
+            started.send(()).unwrap();
+            wait.await.unwrap();
+            Ok(())
+        });
+
+        // Act / Assert: the worker retains exclusive ownership until its
+        // future really completes, even though the response has a receiver.
+        observed.await.unwrap();
+        assert!(owner.subscribe().borrow().busy);
+        assert!(owner.gate.try_acquire().is_none());
+        release.send(()).unwrap();
+        assert_eq!(reply.await.unwrap(), Ok(()));
+        assert!(!owner.subscribe().borrow().busy);
+
+        // After completion the normal preparation gate can be reused, while
+        // a portal protocol rejection must not be mapped into GUI success.
+        let permit = owner.gate.try_acquire().unwrap();
+        let error = owner.reveal_job(&Handle::current(), permit, async {
+            Err(crate::portal::Error::Protocol)
+        });
+        assert_eq!(error.await.unwrap(), Err(crate::portal::Error::Protocol));
+        assert!(!owner.subscribe().borrow().busy);
+        let permit = owner.gate.try_acquire().unwrap();
+        drop(permit);
+        owner.close().await;
+        assert!(owner.gate.try_acquire().is_none());
+    }
+
+    #[tokio::test]
+    async fn given_reveal_receiver_dropped_during_owner_close_then_cancelled_worker_still_joins_before_gate_closes(
+    ) {
+        // Arrange: emulate an abandoned GUI result while the actual ingress
+        // task still owns a single preparation permit and portal future.
+        let owner = Ingress::new();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let worker_cancel = cancel.clone();
+        let permit = owner.gate.try_acquire().unwrap();
+        let (started, observed) = tokio::sync::oneshot::channel();
+        let (release, wait) = tokio::sync::oneshot::channel();
+        let reply = owner.reveal_job(&Handle::current(), permit, async move {
+            started.send(()).unwrap();
+            worker_cancel.cancelled().await;
+            wait.await.unwrap();
+            Err(crate::portal::Error::Cancelled)
+        });
+        observed.await.unwrap();
+        drop(reply);
+
+        // Act: owner shutdown cannot detach the external operation merely
+        // because its GUI receiver disappeared or cancellation was requested.
+        let close = owner.close();
+        tokio::pin!(close);
+        assert!(futures::poll!(&mut close).is_pending());
+        assert!(owner.subscribe().borrow().busy);
+        assert!(owner.gate.try_acquire().is_none());
+        cancel.cancel();
+        assert!(futures::poll!(&mut close).is_pending());
+        assert!(owner.subscribe().borrow().busy);
+        release.send(()).unwrap();
+        close.await;
+
+        // Assert: shutdown joined the worker, cleared busy, and permanently
+        // closed admission; no ghost reveal may start after owner closure.
+        assert!(!owner.subscribe().borrow().busy);
+        assert!(owner.gate.try_acquire().is_none());
+    }
     #[tokio::test]
     async fn given_dropped_image_wait_when_worker_is_cancelled_then_gate_remains_owned_and_shutdown_joins(
     ) {

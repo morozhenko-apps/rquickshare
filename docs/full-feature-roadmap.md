@@ -1,9 +1,14 @@
 # Full Quick Share roadmap
 
-Current implementation, selected distribution/signing bindings and remaining gates:
-[current state](current-state.md). Dated checkpoints below retain historical observations.
+**Live backlog and release gates:** [active-backlog.md](active-backlog.md). Historical implementation evidence: [current state](current-state.md). Dated checkpoints below retain historical observations.
 
 _Last updated: 2026-10-18 for product direction; dated implementation checkpoints retained._
+
+**2026-10-26 compatibility research:** [source audit, capability matrix and ordered
+follow-up queue](quickshare-airdrop-compatibility-audit-2026-10-26.md) covers
+discovery, keepalive, migration, GATT ownership, duplex transfer, off-LAN routes
+and current AirDrop feasibility. It adds evidence and proposed work, not a new
+implemented-feature claim or approval of transport/security architecture.
 
 **Current product contract:** [product-release-strategy.md](product-release-strategy.md).
 rQuickShare targets Linux, Windows and macOS, and full Google Quick Share
@@ -11,6 +16,10 @@ interoperability remains the long-term objective. The intended public product
 tag is `v1.0.0`, subject to release acceptance; this is not a parity claim.
 The current native GTK implementation and Debian package remain Linux-specific,
 and no Windows/macOS native-port acceptance is implied.
+
+**New 2026-10-23 owner requirements before product 1.0.0:** [installed Pixel acceptance, device-route identity decisions and twenty-locale final feature gate](native-pixel-acceptance-identity-locales-2026-10-23.md). Finish remaining sharing/discovery/safety/UI features first. Localize the complete native client into the canonical 20 languages **last among features**, conduct a contextual audit of every locale, then run the final complete test/release gate. Focused regression tests remain mandatory during feature development. This is a 1.0.0 target, not a retroactive blocker for the approved 0.9.0 early candidate. Do not group same-name peers as trusted identity; **owner selected strict authenticated association A (#16), but proof and implementation remain blocked**.
+
+**BWU security backlog decision (2026-10-24):** P0 [#8](https://github.com/morozhenko-apps/rquickshare/issues/8) is **OPEN / DEFERRED, not fixed**. Owner chose **A2.2**: retain the present Google Quick Share-compatible fast BLE→TCP upgrade while researching a cryptographically authenticated TCP ownership proof. Two CI expected-panic diagnostics demonstrate the known untrusted-ID route-consumption risk; green CI is not security acceptance. Do not introduce BLE-only fallback or incompatible wire challenge without a new decision. Revisit after new protocol/hardware proof or explicit owner request, and assess this documented residual risk separately at any security/release gate. [Architecture and decision record](bwu-option-a-admission-design-2026-10-24.md).
 
 Active scope is [essential native sharing](native-essential-priorities.md).
 The user excluded previews and requested only necessary work. The comprehensive
@@ -207,6 +216,7 @@ everyday UI work and physical acceptance separately.
     - Android Quick Share on selected devices can interoperate with AirDrop.
     - Linux support is a separate protocol/transport project (Apple discovery/AWDL/AirDrop), not a normal Quick Share frame extension.
     - Research as a separate transport/dependency workstream within the platform-specific parity matrix. No full-parity claim while applicable Apple paths remain unverified.
+    - The [2026-10-26 audit](quickshare-airdrop-compatibility-audit-2026-10-26.md) distinguishes direct AirDrop from cloud QR, checks public AWDL references and records consent/security/hardware blockers. OpenDrop and archived OWL cannot be shipped unchanged as the production backend.
 
 ### Phase 4 — polish and distribution
 

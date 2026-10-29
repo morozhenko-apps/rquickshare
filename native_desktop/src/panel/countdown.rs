@@ -35,17 +35,11 @@ impl Panel {
         }
         spinner.start();
         let seconds = remaining_seconds(&model, now);
-        self.text(
-            "receive-countdown",
-            &match seconds {
-                Some(seconds) if seconds > 0 => format!(
-                    "Visible to nearby devices · {}:{:02}",
-                    seconds / 60,
-                    seconds % 60
-                ),
-                _ => "Updating visibility…".into(),
-            },
-        );
+        let caption = match seconds {
+            Some(seconds) if seconds > 0 => crate::i18n::visibility_remaining(seconds),
+            _ => crate::i18n::label("Updating visibility…").to_string(),
+        };
+        self.text("receive-countdown", &caption);
         seconds.is_some_and(|seconds| seconds > 0)
     }
     pub(super) fn sync_countdown(self: &Rc<Self>) {

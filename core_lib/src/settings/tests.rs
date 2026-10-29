@@ -3,6 +3,26 @@ use serde_json::json;
 use super::*;
 
 #[test]
+fn given_first_launch_without_saved_visibility_when_settings_are_parsed_then_receive_starts_hidden()
+{
+    let defaults = StartupSettings::default();
+    assert_eq!(defaults.visibility, Visibility::Invisible);
+    assert_eq!(visibility_setting(None), (Visibility::Invisible, false));
+    assert_eq!(
+        StartupSettings::parse(br#"{}"#).unwrap().visibility,
+        Visibility::Invisible
+    );
+    for saved in [
+        Visibility::Visible,
+        Visibility::Invisible,
+        Visibility::Temporarily,
+    ] {
+        let source = serde_json::to_vec(&serde_json::json!({ "visibility": saved as u8 })).unwrap();
+        assert_eq!(StartupSettings::parse(&source).unwrap().visibility, saved);
+    }
+}
+
+#[test]
 fn given_existing_settings_when_parsed_then_valid_preferences_and_fresh_defaults_are_preserved() {
     // Arrange / Act / Assert
     assert_eq!(

@@ -45,6 +45,56 @@ use crate::{location_nearby_connections, sharing_nearby};
 
 type HmacSha256 = Hmac<Sha256>;
 
+// A completed Sharing REJECT must reach the sender before the transport
+// owner retires the session. Google's Nearby Share similarly closes incoming
+// rejected connections after a bounded response-delivery interval.
+const REJECTION_PEER_DRAIN_LIMIT: Duration = Duration::from_secs(2);
+
+/// An error from the established session must not be swallowed as an optional
+/// upgrade failure. The worker unwraps it to preserve terminal error semantics.
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+#[derive(Debug)]
+pub(crate) struct BwuSessionError(pub(crate) anyhow::Error);
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+impl std::fmt::Display for BwuSessionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Established session failed during BWU: {}", self.0)
+    }
+}
+
+#[cfg(all(feature = "experimental", target_os = "linux"))]
+impl std::error::Error for BwuSessionError {}
+
+/// After an encrypted REJECT has been flushed, keep the transport alive until
+/// the peer closes or the bounded grace interval expires. Ignore any further
+/// peer bytes: the terminal consent decision must not admit new payloads.
+/// Managed worker cancellation still interrupts this future on shutdown.
+#[derive(Debug, PartialEq, Eq)]
+enum RejectionDrainOutcome {
+    PeerEof,
+    PeerReadError,
+    Deadline,
+}
+
+async fn drain_rejected_peer<S: AsyncRead + Unpin>(socket: &mut S) -> RejectionDrainOutcome {
+    let mut buffer = [0_u8; 512];
+    match tokio::time::timeout(REJECTION_PEER_DRAIN_LIMIT, async {
+        loop {
+            match tokio::io::AsyncReadExt::read(socket, &mut buffer).await {
+                Ok(0) => break RejectionDrainOutcome::PeerEof,
+                Err(_) => break RejectionDrainOutcome::PeerReadError,
+                Ok(_) => {}
+            }
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => RejectionDrainOutcome::Deadline,
+    }
+}
+
 const MAX_RECEIVED_FILENAME_BYTES: usize = 255;
 const MAX_RECEIVED_PARENT_FOLDER_BYTES: usize = 4096;
 const MAX_RECEIVED_FOLDER_DEPTH: usize = 64;
@@ -492,6 +542,46 @@ pub fn peek_client_introduction(
     Ok(validate_client_introduction(&buffer[4..total]).ok())
 }
 
+#[derive(Debug, Default)]
+struct InboundFileProgressTrace {
+    first_chunk_seen: bool,
+    next_milestone: usize,
+}
+
+impl InboundFileProgressTrace {
+    // Per-session, allocation-free milestone decisions on persisted file bytes.
+    fn observe_committed<F>(&mut self, committed: u64, total: u64, mut emit: F)
+    where
+        F: FnMut(crate::receiver_trace::Event),
+    {
+        use crate::receiver_trace::Event;
+        if committed == 0 {
+            return;
+        }
+        if !self.first_chunk_seen {
+            self.first_chunk_seen = true;
+            emit(Event::InboundFirstFileChunkPersisted);
+        }
+        if total == 0 {
+            return;
+        }
+        const STAGES: [(u128, Event); 3] = [
+            (25, Event::InboundFileProgress25),
+            (50, Event::InboundFileProgress50),
+            (75, Event::InboundFileProgress75),
+        ];
+        let committed = u128::from(committed.min(total));
+        let total = u128::from(total);
+        while let Some(&(percent, event)) = STAGES.get(self.next_milestone) {
+            if committed * 100 < total * percent {
+                break;
+            }
+            self.next_milestone += 1;
+            emit(event);
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct InboundRequest<S = TcpStream> {
     socket: S,
@@ -504,7 +594,12 @@ pub struct InboundRequest<S = TcpStream> {
     previews: crate::preview_payload::PreviewIds,
     bandwidth_upgrade_enabled: bool,
     bwu_pending: bool,
+    #[cfg(all(feature = "experimental", target_os = "linux"))]
+    bwu_peer_failed: bool,
+    file_progress_trace: InboundFileProgressTrace,
     peer_endpoint_id: Option<String>,
+    deferred_upgrade_writes: Option<Vec<OfflineFrame>>,
+    bwu_writer_unavailable: bool,
     receive_directory: crate::receive::Directory,
     receive_root: Option<crate::receive::Root>,
     #[cfg(target_os = "linux")]
@@ -537,7 +632,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             previews: crate::preview_payload::PreviewIds::default(),
             bandwidth_upgrade_enabled: false,
             bwu_pending: false,
+            #[cfg(all(feature = "experimental", target_os = "linux"))]
+            bwu_peer_failed: false,
+            file_progress_trace: InboundFileProgressTrace::default(),
             peer_endpoint_id: None,
+            deferred_upgrade_writes: None,
+            bwu_writer_unavailable: false,
             receive_directory: crate::receive::ReceivePolicy::new(None).snapshot(),
             receive_root: None,
             #[cfg(target_os = "linux")]
@@ -632,14 +732,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
     }
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
-    async fn send_upgrade_path_available(&mut self, port: u16) -> Result<(), anyhow::Error> {
+    async fn send_upgrade_path_available(
+        &mut self,
+        port: u16,
+        ip: [u8; 4],
+    ) -> Result<(), anyhow::Error> {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
             upgrade_path_info::{Medium, WifiLanSocket},
             EventType, UpgradePathInfo,
         };
 
-        let ip = crate::utils::local_lan_ipv4()
-            .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
         info!(
             "BWU: offering WIFI_LAN at {}.{}.{}.{}:{port}",
             ip[0], ip[1], ip[2], ip[3]
@@ -686,13 +788,33 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
     async fn read_encrypted_offline_frame(&mut self) -> Result<OfflineFrame, anyhow::Error> {
-        let frame_data = read_plain_frame_from(&mut self.socket).await?;
+        // A TCP route may arrive after part of the BLE header was consumed.
+        // Resume that same header rather than treating its suffix as a new one.
+        let header = self.frame_header.read(&mut self.socket).await?;
+        let length = u32::from_be_bytes(header) as usize;
+        if length == 0 || length > SANE_FRAME_LENGTH as usize {
+            return Err(anyhow!("Invalid encrypted frame length"));
+        }
+        let mut frame_data = vec![0; length];
+        stream_read_exact(&mut self.socket, &mut frame_data).await?;
         let secure_message = SecureMessage::decode(frame_data.as_slice())?;
         self.decrypt_secure_message(&secure_message).await
     }
 
     pub async fn handle(&mut self) -> Result<(), anyhow::Error> {
+        self.handle_with_interrupt(std::future::pending::<()>())
+            .await
+            .map(|_| ())
+    }
+
+    /// Only interrupt event selection, never a selected frame body or command.
+    /// FrameHeader retains consumed prefix bytes when the interrupt wins.
+    async fn handle_with_interrupt<T>(
+        &mut self,
+        interrupt: impl std::future::Future<Output = T>,
+    ) -> Result<Option<T>, anyhow::Error> {
         tokio::select! {
+            value = interrupt => return Ok(Some(value)),
             command = crate::sessions::consent_command(&mut self.session) => {
                 if let Some(command) = command {
                     let answer = self.session.as_mut().and_then(|session| session.apply(command, &self.state.state));
@@ -703,11 +825,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 match i {
                     Ok(channel_msg) => {
                         if channel_msg.direction == ChannelDirection::LibToFront {
-                            return Ok(());
+                            return Ok(None);
                         }
 
                         if channel_msg.id != self.state.id {
-                            return Ok(());
+                            return Ok(None);
                         }
 
                         debug!("inbound: got: {:?}", channel_msg);
@@ -743,7 +865,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     pub async fn _handle(&mut self, length_buf: [u8; 4]) -> Result<(), anyhow::Error> {
@@ -765,6 +887,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 debug!("Handling State::Initial frame");
                 let frame = location_nearby_connections::OfflineFrame::decode(&*frame_data)?;
                 let rdi = self.process_connection_request(&frame)?;
+                crate::receiver_trace::event(
+                    crate::receiver_trace::Event::InboundConnectionRequestDecoded,
+                );
                 info!("Remote device introduction received");
 
                 // Advance current state
@@ -781,6 +906,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 debug!("Handling State::ReceivedConnectionRequest frame");
                 let msg = Ukey2Message::decode(&*frame_data)?;
                 self.process_ukey2_client_init(&msg).await?;
+                crate::receiver_trace::event(crate::receiver_trace::Event::InboundUkey2ClientInit);
 
                 self.update_state(
                     |e: &mut InnerState| {
@@ -1364,6 +1490,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                 true,
                             )
                             .await;
+                            if let Some(metadata) = self.state.transfer_metadata.as_ref() {
+                                self.file_progress_trace.observe_committed(
+                                    metadata.ack_bytes,
+                                    metadata.total_bytes,
+                                    crate::receiver_trace::event,
+                                );
+                            }
                         }
 
                         if is_final_chunk {
@@ -1404,6 +1537,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                             }
                             self.state.transferred_files.remove(&payload_id);
                             if self.state.transferred_files.is_empty() {
+                                crate::receiver_trace::event(
+                                    crate::receiver_trace::Event::InboundLastFilePublished,
+                                );
                                 info!("Transfer finished");
                                 self.update_state(
                                     |e| {
@@ -1412,6 +1548,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                                     true,
                                 )
                                 .await;
+                                crate::receiver_trace::event(
+                                    crate::receiver_trace::Event::InboundFilesCompleted,
+                                );
                                 self.disconnection().await?;
                                 return Err(anyhow!(crate::errors::AppError::NotAnError));
                             }
@@ -1429,8 +1568,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                 }
             }
             location_nearby_connections::v1_frame::FrameType::KeepAlive => {
-                trace!("Sending keepalive");
-                self.send_keepalive(true).await?;
+                let keepalive = v1_frame
+                    .keep_alive
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Missing keepalive body"))?;
+                if !keepalive.ack() {
+                    self.send_keepalive(true).await?;
+                }
             }
             location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeRetry => {
                 debug!("BWU: peer requested bandwidth-upgrade retry; continuing current transport");
@@ -1441,6 +1585,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
                     .as_ref()
                     .map(|frame| frame.event_type());
                 debug!("BWU: peer negotiation event on current transport: {event:?}");
+                #[cfg(all(feature = "experimental", target_os = "linux"))]
+                if event == Some(location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType::UpgradeFailure) {
+                    self.bwu_peer_failed = true;
+                }
             }
             _ => {
                 error!("Unhandled offline frame encrypted: {:?}", offline);
@@ -1601,6 +1749,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             false,
         )
         .await;
+        crate::receiver_trace::event(crate::receiver_trace::Event::InboundConsentEntered);
 
         if !introduction.file_metadata.is_empty() && introduction.text_metadata.is_empty() {
             trace!("process_introduction: handling file_metadata");
@@ -1783,6 +1932,53 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         Ok(())
     }
 
+    /// Gracefully report a locally cancelled inbound transfer to the sender.
+    /// The session cancellation token interrupts reads; it must not also
+    /// discard the encrypted terminal notification before the peer sees it.
+    /// The existing bounded reject drain is also used here: a flushed frame
+    /// is not necessarily consumed by Android before a transport EOF.
+    pub(crate) async fn send_local_cancel(&mut self) -> Result<(), anyhow::Error> {
+        if crate::sessions::terminal(&self.state.state) || !self.state.encryption_done {
+            return Ok(());
+        }
+
+        if self.deferred_upgrade_writes.is_some() || self.bwu_writer_unavailable {
+            crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelWriteFailed);
+            return Err(anyhow!(
+                "BWU has no writable committed transport for Cancel"
+            ));
+        }
+
+        let cancel = sharing_nearby::Frame {
+            version: Some(sharing_nearby::frame::Version::V1.into()),
+            v1: Some(sharing_nearby::V1Frame {
+                r#type: Some(sharing_nearby::v1_frame::FrameType::Cancel.into()),
+                ..Default::default()
+            }),
+        };
+
+        if let Err(error) = self.send_encrypted_frame(&cancel).await {
+            crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelWriteFailed);
+            return Err(error);
+        }
+        crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelFlushed);
+
+        match drain_rejected_peer(&mut self.socket).await {
+            RejectionDrainOutcome::PeerEof => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelPeerEof);
+            }
+            RejectionDrainOutcome::PeerReadError => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::LocalCancelReadError);
+            }
+            RejectionDrainOutcome::Deadline => {
+                crate::receiver_trace::event(
+                    crate::receiver_trace::Event::LocalCancelDrainDeadline,
+                );
+            }
+        }
+        Ok(())
+    }
+
     async fn disconnection(&mut self) -> Result<(), anyhow::Error> {
         let frame = location_nearby_connections::OfflineFrame {
             version: Some(location_nearby_connections::offline_frame::Version::V1.into()),
@@ -1857,6 +2053,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         };
 
         self.send_encrypted_frame(&frame).await?;
+        if !self.state.transferred_files.is_empty() {
+            crate::receiver_trace::event(crate::receiver_trace::Event::InboundAcceptFlushed);
+        }
 
         self.update_state(
             |e| {
@@ -1873,12 +2072,24 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         if accept {
             return self.accept_transfer().await;
         }
+        crate::receiver_trace::event(crate::receiver_trace::Event::RejectConsent);
         self.update_state(|state| state.state = State::Rejected, true)
             .await;
         self.reject_transfer(Some(
             sharing_nearby::connection_response_frame::Status::Reject,
         ))
         .await?;
+        // Closing the BLE/TCP worker here can race the sender's processing of
+        // the encrypted response; peer EOF or this deadline ends the drain.
+        let result = drain_rejected_peer(&mut self.socket).await;
+        let marker = match result {
+            RejectionDrainOutcome::PeerEof => crate::receiver_trace::Event::RejectPeerEof,
+            RejectionDrainOutcome::PeerReadError => {
+                crate::receiver_trace::Event::RejectPeerReadError
+            }
+            RejectionDrainOutcome::Deadline => crate::receiver_trace::Event::RejectDrainDeadline,
+        };
+        crate::receiver_trace::event(marker);
         Err(anyhow!(crate::errors::AppError::NotAnError))
     }
 
@@ -1904,7 +2115,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }),
         };
 
-        self.send_encrypted_frame(&frame).await?;
+        self.send_encrypted_frame_with_trace(
+            &frame,
+            sreason == sharing_nearby::connection_response_frame::Status::Reject,
+        )
+        .await?;
 
         Ok(())
     }
@@ -2017,6 +2232,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
         &mut self,
         frame: &sharing_nearby::Frame,
     ) -> Result<(), anyhow::Error> {
+        self.send_encrypted_frame_with_trace(frame, false).await
+    }
+
+    /// Trace both encrypted payload chunks only for a deliberate REJECT.
+    /// All other Sharing frames retain their existing wire behavior.
+    async fn send_encrypted_frame_with_trace(
+        &mut self,
+        frame: &sharing_nearby::Frame,
+        trace_reject: bool,
+    ) -> Result<(), anyhow::Error> {
+        if trace_reject {
+            crate::receiver_trace::event(crate::receiver_trace::Event::RejectWriteStart);
+        }
         let frame_data = frame.encode_to_vec();
         let body_size = frame_data.len();
 
@@ -2050,8 +2278,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }),
         };
 
-        // Encrypt and send offline
-        self.encrypt_and_send(&wrapper).await?;
+        // The first flush is not a complete response until LAST_CHUNK arrives.
+        if let Err(error) = self.encrypt_and_send(&wrapper).await {
+            if trace_reject {
+                crate::receiver_trace::event(crate::receiver_trace::Event::RejectWriteFailed);
+            }
+            return Err(error);
+        }
+        if trace_reject {
+            crate::receiver_trace::event(crate::receiver_trace::Event::RejectPayloadFlushed);
+        }
 
         // Send lastChunk
         let transfer = PayloadTransferFrame {
@@ -2076,13 +2312,37 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
             }),
         };
 
-        // Encrypt and send offline
-        self.encrypt_and_send(&wrapper).await?;
+        if let Err(error) = self.encrypt_and_send(&wrapper).await {
+            if trace_reject {
+                crate::receiver_trace::event(crate::receiver_trace::Event::RejectWriteFailed);
+            }
+            return Err(error);
+        }
+        if trace_reject {
+            crate::receiver_trace::event(crate::receiver_trace::Event::RejectLastChunkFlushed);
+        }
 
         Ok(())
     }
 
     async fn encrypt_and_send(&mut self, frame: &OfflineFrame) -> Result<(), anyhow::Error> {
+        // Once LAST_WRITE is committed, only migration control may use BLE.
+        // Application responses retain order and are encrypted on the new channel.
+        if let Some(queued) = self.deferred_upgrade_writes.as_mut() {
+            let migration_control = frame.v1.as_ref().is_some_and(|v1| {
+                v1.r#type() == location_nearby_connections::v1_frame::FrameType::BandwidthUpgradeNegotiation
+            });
+            if !migration_control {
+                let bytes = queued.iter().map(Message::encoded_len).sum::<usize>();
+                if bytes.saturating_add(frame.encoded_len()) > SANE_FRAME_LENGTH as usize {
+                    return Err(anyhow!(
+                        "BWU deferred application writes exceed safety limit"
+                    ));
+                }
+                queued.push(frame.clone());
+                return Ok(());
+            }
+        }
         let d2d_msg = DeviceToDeviceMessage {
             sequence_number: Some(self.get_server_seq_inc().await),
             message: Some(frame.encode_to_vec()),
@@ -2232,59 +2492,120 @@ impl<S: AsyncRead + AsyncWrite + Unpin> InboundRequest<S> {
 
 #[cfg(all(feature = "experimental", target_os = "linux"))]
 impl InboundRequest<crate::hdl::MigratableStream> {
+    async fn wait_for_bwu_socket(
+        &mut self,
+        socket_receiver: tokio::sync::oneshot::Receiver<TcpStream>,
+    ) -> Result<Option<TcpStream>, anyhow::Error> {
+        let route = tokio::time::timeout(Duration::from_secs(15), socket_receiver);
+        tokio::pin!(route);
+        self.bwu_peer_failed = false;
+        loop {
+            match self
+                .handle_with_interrupt(&mut route)
+                .await
+                .map_err(BwuSessionError)?
+            {
+                Some(Ok(Ok(socket))) => {
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpReceived);
+                    return Ok(Some(socket));
+                }
+                Some(Ok(Err(_))) => {
+                    return Err(anyhow!("BWU TCP route closed before a socket arrived"))
+                }
+                Some(Err(_)) => {
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpTimeout);
+                    return Ok(None);
+                }
+                None if self.bwu_peer_failed => {
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuPeerRejected);
+                    return Ok(None);
+                }
+                None => {}
+            }
+        }
+    }
+
     /// Upgrade an established encrypted BLE session to Wi-Fi LAN.
     ///
-    /// Failure before the transport swap leaves the existing BLE stream intact,
-    /// so callers can continue the session on BLE when an upgrade is unavailable.
-    pub async fn do_bandwidth_upgrade(
+    /// Optional upgrade failure leaves the BLE stream intact. Established-session
+    /// errors are returned as BwuSessionError and must terminate the session.
+    pub(super) async fn do_bandwidth_upgrade_at(
         &mut self,
         router: &crate::hdl::BwuRouter,
         tcp_port: u16,
+        ip: [u8; 4],
     ) -> Result<(), anyhow::Error> {
-        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
-        use location_nearby_connections::v1_frame::FrameType;
-
         let bwu_started = Instant::now();
         let expected_endpoint_id = self
             .peer_endpoint_id
             .clone()
             .ok_or_else(|| anyhow!("BWU session has no peer endpoint id"))?;
-        let socket_receiver = router.register(expected_endpoint_id.clone()).await?;
+        let cancellation = self.cancellation();
+        // Preparation is still optional. User cancellation may retire its TCP
+        // candidate, but must not drop a committed migration and lose its writer.
+        let prepared = crate::manager::session::until_stopped(
+            &cancellation,
+            self.prepare_bandwidth_upgrade(
+                router,
+                tcp_port,
+                ip,
+                &expected_endpoint_id,
+                bwu_started,
+            ),
+        )
+        .await;
+        router.cancel(&expected_endpoint_id).await;
+        let Some(tcp) = prepared.ok_or_else(|| {
+            anyhow!(BwuSessionError(anyhow!(
+                crate::errors::AppError::NotAnError
+            )))
+        })??
+        else {
+            return Ok(());
+        };
 
-        if let Err(error) = self.send_upgrade_path_available(tcp_port).await {
-            router.cancel(&expected_endpoint_id).await;
+        // The commit boundary precedes any LAST_WRITE bytes. A failed or dropped
+        // committed future cannot safely write application frames on prior BLE.
+        self.bwu_writer_unavailable = true;
+        self.deferred_upgrade_writes = Some(Vec::new());
+        let result = self.finish_bandwidth_upgrade(tcp, bwu_started).await;
+        self.deferred_upgrade_writes = None;
+        if result.is_ok() {
+            self.bwu_writer_unavailable = false;
+        }
+        result.map_err(|error| anyhow!(BwuSessionError(error)))
+    }
+
+    async fn prepare_bandwidth_upgrade(
+        &mut self,
+        router: &crate::hdl::BwuRouter,
+        tcp_port: u16,
+        ip: [u8; 4],
+        expected_endpoint_id: &str,
+        bwu_started: Instant,
+    ) -> Result<Option<TcpStream>, anyhow::Error> {
+        let socket_receiver = router.register(expected_endpoint_id.to_owned()).await?;
+
+        if let Err(error) = self.send_upgrade_path_available(tcp_port, ip).await {
+            router.cancel(expected_endpoint_id).await;
             return Err(error);
         }
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuOfferSent);
         info!(
             "BWU timing: upgrade offer sent at {} ms for endpoint {expected_endpoint_id}",
             bwu_started.elapsed().as_millis()
         );
 
-        let mut tcp = match tokio::time::timeout(Duration::from_secs(15), socket_receiver).await {
-            Ok(Ok(socket)) => {
-                info!(
-                    "BWU timing: TCP route established at {} ms for endpoint {expected_endpoint_id}",
-                    bwu_started.elapsed().as_millis()
-                );
-                socket
-            }
-            Ok(Err(_)) => {
-                router.cancel(&expected_endpoint_id).await;
-                return Err(anyhow!("BWU TCP route closed before a socket arrived"));
-            }
-            Err(_) => {
-                router.cancel(&expected_endpoint_id).await;
-                warn!(
-                    "BWU timing: no routed TCP connection after {} ms; continuing on BLE",
-                    bwu_started.elapsed().as_millis()
-                );
-                return Ok(());
-            }
+        let routed = self.wait_for_bwu_socket(socket_receiver).await;
+        // Also release registrations on established-session EOF, rejection,
+        // cancellation frames, authentication errors and successful completion.
+        router.cancel(expected_endpoint_id).await;
+        let Some(mut tcp) = routed? else {
+            return Ok(None);
         };
 
         let introduction = read_plain_frame_from(&mut tcp).await?;
         let identity = validate_client_introduction(&introduction)?;
-        let expected_endpoint_id = expected_endpoint_id.as_str();
         if !identity.matches_expected(expected_endpoint_id) {
             return Err(anyhow!(
                 "BWU CLIENT_INTRODUCTION endpoint mismatch: expected {expected_endpoint_id}, got current={} last={:?}",
@@ -2292,6 +2613,8 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                 identity.last_endpoint_id
             ));
         }
+        // Matching an untrusted plaintext ID is not cryptographic channel binding.
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuIntroValidated);
         if identity.endpoint_id != expected_endpoint_id {
             info!(
                 "BWU: accepted dynamic endpoint alias current={} last={:?} for expected {expected_endpoint_id}",
@@ -2311,39 +2634,62 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
         let ack = Self::client_introduction_ack_frame().encode_to_vec();
         send_plain_frame_on(&mut tcp, &ack).await?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuAckSent);
+
+        Ok(Some(tcp))
+    }
+
+    async fn finish_bandwidth_upgrade(
+        &mut self,
+        tcp: TcpStream,
+        bwu_started: Instant,
+    ) -> Result<(), anyhow::Error> {
+        // Existing phase budgets are 5s synchronization + 5s prior close. Bound
+        // their combined ownership, including backpressured control/TCP writes.
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            self.finish_bandwidth_upgrade_inner(tcp, bwu_started),
+        )
+        .await
+        .map_err(|_| anyhow!("BWU committed operation exceeded its phase budgets"))?
+    }
+
+    async fn finish_bandwidth_upgrade_inner(
+        &mut self,
+        tcp: TcpStream,
+        bwu_started: Instant,
+    ) -> Result<(), anyhow::Error> {
+        use location_nearby_connections::bandwidth_upgrade_negotiation_frame::EventType;
+        use location_nearby_connections::v1_frame::FrameType;
 
         self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
             EventType::LastWriteToPriorChannel,
             None,
         ))
         .await?;
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuPriorDrainStarted);
 
         let drain_started = Instant::now();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut peer_last_write = false;
+        let mut peer_safe_to_close = false;
         for _ in 0..16 {
-            let offline = match tokio::time::timeout(
-                Duration::from_secs(5),
-                self.read_encrypted_offline_frame(),
-            )
-            .await
-            {
-                Ok(Ok(frame)) => frame,
-                Ok(Err(error)) => return Err(error),
-                Err(_) => {
-                    warn!(
-                        "BWU timing: prior BLE drain timed out after {} ms ({} ms total)",
-                        drain_started.elapsed().as_millis(),
-                        bwu_started.elapsed().as_millis()
-                    );
-                    break;
-                }
-            };
+            // One phase budget, never restarted by trickle traffic. A canceled
+            // body read is terminal and its partial bytes cannot reach TCP.
+            let offline = tokio::time::timeout_at(deadline, self.read_encrypted_offline_frame())
+                .await
+                .map_err(|_| anyhow!("BWU prior-channel synchronization timed out"))??;
 
             let Some(v1) = offline.v1.as_ref() else {
                 return Err(anyhow!("BWU drain frame has no v1 payload"));
             };
 
             if v1.r#type() != FrameType::BandwidthUpgradeNegotiation {
-                self.process_offline_frame(offline).await?;
+                // User cancellation has already won: drain crypto framing only,
+                // never accept payloads or publish a late Finished transition.
+                if !self.cancellation().is_cancelled() {
+                    self.process_offline_frame(offline).await?;
+                }
                 continue;
             }
 
@@ -2354,6 +2700,7 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
             match event {
                 Some(EventType::LastWriteToPriorChannel) => {
+                    peer_last_write = true;
                     debug!("BWU: peer sent LAST_WRITE; replying SAFE_TO_CLOSE");
                     self.encrypt_and_send(&Self::bandwidth_upgrade_frame(
                         EventType::SafeToClosePriorChannel,
@@ -2362,12 +2709,16 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                     .await?;
                 }
                 Some(EventType::SafeToClosePriorChannel) => {
+                    peer_safe_to_close = true;
+                    crate::receiver_trace::event(crate::receiver_trace::Event::BwuPriorSafeToClose);
                     debug!(
                         "BWU timing: peer marked prior channel safe to close after {} ms drain ({} ms total)",
                         drain_started.elapsed().as_millis(),
                         bwu_started.elapsed().as_millis()
                     );
-                    break;
+                }
+                Some(EventType::UpgradeFailure) => {
+                    return Err(anyhow!("BWU peer rejected a committed migration"));
                 }
                 Some(other) => {
                     debug!("BWU: ignoring drain event {other:?}");
@@ -2376,6 +2727,13 @@ impl InboundRequest<crate::hdl::MigratableStream> {
                     return Err(anyhow!("BWU negotiation frame has no event type"));
                 }
             }
+            if peer_last_write && peer_safe_to_close {
+                break;
+            }
+        }
+
+        if !(peer_last_write && peer_safe_to_close) {
+            return Err(anyhow!("BWU prior-channel synchronization incomplete"));
         }
 
         let disconnection = OfflineFrame {
@@ -2392,9 +2750,20 @@ impl InboundRequest<crate::hdl::MigratableStream> {
 
         // This final prior-channel DISCONNECTION is plaintext by protocol design.
         self.send_frame(disconnection.encode_to_vec()).await?;
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Give the peer a condition-based opportunity to read our SAFE_TO_CLOSE.
+        // This is optional cleanup after synchronized safety, not a fallback gate.
+        let _ = tokio::time::timeout(
+            Duration::from_secs(5),
+            read_plain_frame_from(&mut self.socket),
+        )
+        .await;
 
         self.socket = crate::hdl::MigratableStream::Tcp(tcp);
+        self.frame_header = super::frame_header::FrameHeader::default();
+        for frame in self.deferred_upgrade_writes.take().unwrap_or_default() {
+            self.encrypt_and_send(&frame).await?;
+        }
+        crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpSwitched);
         info!(
             "BWU timing: migrated inbound session from BLE to Wi-Fi LAN in {} ms total",
             bwu_started.elapsed().as_millis()
@@ -2403,9 +2772,346 @@ impl InboundRequest<crate::hdl::MigratableStream> {
     }
 }
 
+#[cfg(all(test, feature = "experimental", target_os = "linux"))]
+mod bwu_wait_tests;
+
+#[cfg(all(test, feature = "experimental", target_os = "linux"))]
+mod bwu_cancel_tests;
+
 #[cfg(test)]
 mod security_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn given_explicit_inbound_reject_when_peer_reads_encrypted_response_then_terminal_waits_for_peer_close(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        let (socket, peer_socket) = tokio::io::duplex(8192);
+        let (sender, _receiver) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "declined-fixture".into(), sender.clone());
+        let mut peer = InboundRequest::new(peer_socket, "sender-fixture".into(), sender);
+        request.state.state = State::WaitingForUserConsent;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+        peer.state.decrypt_key = Some(vec![0x11; 32]);
+        peer.state.recv_hmac_key = Some(vec![0x22; 32]);
+
+        let responder = tokio::spawn(async move {
+            let result = request.apply_consent(false).await;
+            (result, request.state.state)
+        });
+
+        // Read the exact framed, encrypted response on the real in-memory
+        // stream; no mock of the frame encoder or protocol parser.
+        let mut length = [0_u8; 4];
+        peer.socket.read_exact(&mut length).await.unwrap();
+        let count = u32::from_be_bytes(length) as usize;
+        assert!(count > 0 && count <= SANE_FRAME_LENGTH as usize);
+        let mut bytes = vec![0_u8; count];
+        peer.socket.read_exact(&mut bytes).await.unwrap();
+        let encrypted = SecureMessage::decode(bytes.as_slice()).unwrap();
+        let response = peer.decrypt_secure_message(&encrypted).await.unwrap();
+        let v1 = response.v1.unwrap();
+        assert_eq!(
+            v1.r#type(),
+            location_nearby_connections::v1_frame::FrameType::PayloadTransfer
+        );
+        let first = v1.payload_transfer.unwrap();
+        let header = first.payload_header.unwrap();
+        let first_chunk = first.payload_chunk.unwrap();
+        assert_eq!(first_chunk.offset(), 0);
+        assert_eq!(first_chunk.flags(), 0);
+        let sharing = sharing_nearby::Frame::decode(first_chunk.body.as_deref().unwrap()).unwrap();
+        assert_eq!(header.total_size(), first_chunk.body().len() as i64);
+        let message = sharing.v1.unwrap();
+        assert_eq!(
+            message.r#type(),
+            sharing_nearby::v1_frame::FrameType::Response
+        );
+        assert_eq!(
+            message.connection_response.unwrap().status(),
+            sharing_nearby::connection_response_frame::Status::Reject
+        );
+
+        // The sender cannot process a fully completed bytes payload until
+        // it also receives the independently encrypted LAST_CHUNK frame.
+        peer.socket.read_exact(&mut length).await.unwrap();
+        let count = u32::from_be_bytes(length) as usize;
+        assert!(count > 0 && count <= SANE_FRAME_LENGTH as usize);
+        let mut bytes = vec![0_u8; count];
+        peer.socket.read_exact(&mut bytes).await.unwrap();
+        let last = SecureMessage::decode(bytes.as_slice()).unwrap();
+        let end = peer.decrypt_secure_message(&last).await.unwrap();
+        let transfer = end.v1.unwrap().payload_transfer.unwrap();
+        let last_header = transfer.payload_header.unwrap();
+        let last_chunk = transfer.payload_chunk.unwrap();
+        assert_eq!(last_header.id, header.id);
+        assert_eq!(last_header.total_size, header.total_size);
+        assert_eq!(last_chunk.offset(), header.total_size());
+        assert_eq!(last_chunk.flags(), 1);
+        assert!(last_chunk.body().is_empty());
+
+        // The actual response is visible, but closing was not yet initiated:
+        // no immediate EOF is allowed to race the sender's UI decision.
+        assert!(!responder.is_finished());
+        drop(peer);
+
+        let (result, state) = tokio::time::timeout(Duration::from_millis(300), responder)
+            .await
+            .expect("rejection did not retire promptly after remote close")
+            .unwrap();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .downcast_ref::<crate::errors::AppError>()
+            .is_some());
+        assert_eq!(state, State::Rejected);
+    }
+
+    #[tokio::test]
+    async fn given_kde_cancel_mid_file_when_peer_reads_then_sender_gets_complete_encrypted_cancel_before_eof(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        let (socket, peer_socket) = tokio::io::duplex(8192);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request =
+            InboundRequest::new(socket, "receiver-cancel-fixture".into(), sender.clone());
+        let mut peer = InboundRequest::new(peer_socket, "pixel-fixture".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+        peer.state.decrypt_key = Some(vec![0x11; 32]);
+        peer.state.recv_hmac_key = Some(vec![0x22; 32]);
+
+        let worker = tokio::spawn(async move {
+            let result = request.send_local_cancel().await;
+            request.record_termination(State::Cancelled);
+            (result, request.state.state)
+        });
+
+        let mut len = [0_u8; 4];
+        peer.socket.read_exact(&mut len).await.unwrap();
+        let size = u32::from_be_bytes(len) as usize;
+        assert!(size > 0 && size <= SANE_FRAME_LENGTH as usize);
+        let mut raw = vec![0_u8; size];
+        peer.socket.read_exact(&mut raw).await.unwrap();
+        let secure = SecureMessage::decode(raw.as_slice()).unwrap();
+        let start = peer.decrypt_secure_message(&secure).await.unwrap();
+        let transfer = start.v1.unwrap().payload_transfer.unwrap();
+        let header = transfer.payload_header.unwrap();
+        let first = transfer.payload_chunk.unwrap();
+        assert_eq!(first.offset(), 0);
+        assert_eq!(first.flags(), 0);
+        let sharing = sharing_nearby::Frame::decode(first.body()).unwrap();
+        assert_eq!(
+            sharing.v1.unwrap().r#type(),
+            sharing_nearby::v1_frame::FrameType::Cancel
+        );
+
+        peer.socket.read_exact(&mut len).await.unwrap();
+        let size = u32::from_be_bytes(len) as usize;
+        assert!(size > 0 && size <= SANE_FRAME_LENGTH as usize);
+        raw.resize(size, 0);
+        peer.socket.read_exact(&mut raw).await.unwrap();
+        let secure = SecureMessage::decode(raw.as_slice()).unwrap();
+        let end = peer.decrypt_secure_message(&secure).await.unwrap();
+        let transfer = end.v1.unwrap().payload_transfer.unwrap();
+        let last = transfer.payload_chunk.unwrap();
+        assert_eq!(transfer.payload_header.unwrap().id, header.id);
+        assert_eq!(last.offset(), header.total_size());
+        assert_eq!(last.flags(), 1);
+        assert!(last.body().is_empty());
+
+        assert!(
+            !worker.is_finished(),
+            "sender must have time to process Cancel before disconnect"
+        );
+        drop(peer);
+        let (outcome, state) = tokio::time::timeout(Duration::from_secs(3), worker)
+            .await
+            .expect("cancel worker did not retire after peer EOF")
+            .unwrap();
+        outcome.unwrap();
+        assert_eq!(state, State::Cancelled);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn given_no_authenticated_active_transfer_when_kde_cancel_is_requested_then_no_wire_bytes_are_sent(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        for (state, encrypted) in [
+            (State::Initial, false),
+            (State::WaitingForUserConsent, false),
+            (State::ReceivingFiles, false),
+            (State::Finished, true),
+            (State::Rejected, true),
+            (State::Cancelled, true),
+            (State::Disconnected, true),
+        ] {
+            let (socket, mut peer) = tokio::io::duplex(512);
+            let (sender, _events) = tokio::sync::broadcast::channel(8);
+            let mut request = InboundRequest::new(socket, "cancel-boundary".into(), sender);
+            request.state.state = state.clone();
+            request.state.encryption_done = encrypted;
+            request.send_local_cancel().await.unwrap();
+            assert_eq!(request.state.state, state);
+            assert_eq!(request.state.server_seq, 0);
+
+            let mut byte = [0u8; 1];
+            assert!(
+                tokio::time::timeout(Duration::from_millis(1), peer.read(&mut byte))
+                    .await
+                    .is_err(),
+                "a skipped Cancel must not publish any wire bytes: {state:?}"
+            );
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn given_authenticated_kde_cancel_when_sender_keeps_socket_open_then_bounded_grace_retires(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        let (socket, mut peer) = tokio::io::duplex(8192);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "silent-peer".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+
+        let worker = tokio::spawn(async move { request.send_local_cancel().await });
+        let mut length = [0u8; 4];
+        for _ in 0..2 {
+            peer.read_exact(&mut length).await.unwrap();
+            let len = u32::from_be_bytes(length) as usize;
+            assert!(len > 0 && len <= SANE_FRAME_LENGTH as usize);
+            let mut data = vec![0u8; len];
+            peer.read_exact(&mut data).await.unwrap();
+            assert!(SecureMessage::decode(data.as_slice()).is_ok());
+        }
+        assert!(
+            !worker.is_finished(),
+            "Cancel must not race a premature EOF"
+        );
+
+        tokio::time::advance(REJECTION_PEER_DRAIN_LIMIT).await;
+        worker.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn given_sender_socket_closed_before_local_cancel_when_writing_then_flush_fails_without_completion(
+    ) {
+        let (socket, peer) = tokio::io::duplex(8192);
+        drop(peer);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "closed-peer".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+
+        assert!(request.send_local_cancel().await.is_err());
+        assert_eq!(request.state.state, State::ReceivingFiles);
+        assert_ne!(request.state.state, State::Finished);
+    }
+
+    #[tokio::test]
+    async fn given_peer_disconnect_after_first_cancel_chunk_when_last_chunk_is_written_then_no_false_delivery_is_reported(
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        // A one-byte duplex buffer forces the writer to await the peer while
+        // transmitting the independently authenticated LAST_CHUNK.
+        let (socket, peer_socket) = tokio::io::duplex(1);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "cancel-mid-frame".into(), sender.clone());
+        let mut peer = InboundRequest::new(peer_socket, "phone".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+        request.state.encrypt_key = Some(vec![0x11; 32]);
+        request.state.send_hmac_key = Some(vec![0x22; 32]);
+        peer.state.decrypt_key = Some(vec![0x11; 32]);
+        peer.state.recv_hmac_key = Some(vec![0x22; 32]);
+
+        let worker = tokio::spawn(async move {
+            let result = request.send_local_cancel().await;
+            (result, request.state.state)
+        });
+
+        let mut length = [0u8; 4];
+        peer.socket.read_exact(&mut length).await.unwrap();
+        let size = u32::from_be_bytes(length) as usize;
+        assert!(size > 0 && size <= SANE_FRAME_LENGTH as usize);
+        let mut bytes = vec![0u8; size];
+        peer.socket.read_exact(&mut bytes).await.unwrap();
+        let encrypted = SecureMessage::decode(bytes.as_slice()).unwrap();
+        let frame = peer.decrypt_secure_message(&encrypted).await.unwrap();
+        let chunk = frame.v1.unwrap().payload_transfer.unwrap();
+        let sharing = sharing_nearby::Frame::decode(chunk.payload_chunk.unwrap().body()).unwrap();
+        assert_eq!(
+            sharing.v1.unwrap().r#type(),
+            sharing_nearby::v1_frame::FrameType::Cancel
+        );
+
+        // Never consume any bytes of the second secure message, so its full
+        // LAST_CHUNK cannot flush into the one-byte pipe after this close.
+        drop(peer);
+        let (result, state) = worker.await.unwrap();
+        assert!(
+            result.is_err(),
+            "partial Cancel must not be called delivered"
+        );
+        assert_eq!(state, State::ReceivingFiles);
+    }
+
+    #[tokio::test]
+    async fn given_missing_encryption_material_when_local_cancel_attempts_write_then_send_fails_closed(
+    ) {
+        let (socket, _peer) = tokio::io::duplex(8192);
+        let (sender, _events) = tokio::sync::broadcast::channel(8);
+        let mut request = InboundRequest::new(socket, "missing-key".into(), sender);
+        request.state.state = State::ReceivingFiles;
+        request.state.encryption_done = true;
+
+        assert!(request.send_local_cancel().await.is_err());
+        assert_eq!(request.state.state, State::ReceivingFiles);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn given_silent_or_chatty_peer_after_reject_when_grace_deadline_expires_then_drain_is_bounded(
+    ) {
+        use tokio::io::AsyncWriteExt;
+
+        let (mut local, mut peer) = tokio::io::duplex(128);
+        let draining = tokio::spawn(async move { drain_rejected_peer(&mut local).await });
+        tokio::task::yield_now().await;
+        assert!(!draining.is_finished(), "must retain socket during grace");
+
+        peer.write_all(b"late post-rejection bytes").await.unwrap();
+        tokio::task::yield_now().await;
+        assert!(
+            !draining.is_finished(),
+            "unexpected bytes must not end grace"
+        );
+        tokio::time::advance(Duration::from_secs(2)).await;
+        assert_eq!(draining.await.unwrap(), RejectionDrainOutcome::Deadline);
+        // The first drain is bounded even while the peer stays connected.
+        drop(peer);
+
+        let (mut local, peer) = tokio::io::duplex(32);
+        let draining = tokio::spawn(async move { drain_rejected_peer(&mut local).await });
+        tokio::task::yield_now().await;
+        assert!(!draining.is_finished());
+        drop(peer);
+        // EOF retires immediately without waiting for a wall-clock delay.
+        assert_eq!(draining.await.unwrap(), RejectionDrainOutcome::PeerEof);
+    }
 
     #[tokio::test]
     async fn given_interrupted_frame_header_when_control_is_handled_then_inbound_resumes_exactly() {
@@ -4348,7 +5054,7 @@ mod security_tests {
     }
 
     #[cfg(all(feature = "experimental", target_os = "linux"))]
-    fn valid_bwu_client_intro_fixture() -> OfflineFrame {
+    pub(super) fn valid_bwu_client_intro_fixture() -> OfflineFrame {
         use location_nearby_connections::bandwidth_upgrade_negotiation_frame::{
             ClientIntroduction, EventType,
         };
@@ -4674,3 +5380,108 @@ mod managed_migration_tests {
         .expect("managed migration deadlocked");
     }
 }
+
+#[cfg(test)]
+mod inbound_file_progress_trace_tests {
+    use super::InboundFileProgressTrace;
+    use crate::receiver_trace::Event;
+
+    fn record(trace: &mut InboundFileProgressTrace, committed: u64, total: u64) -> Vec<Event> {
+        let mut events = Vec::new();
+        trace.observe_committed(committed, total, |event| events.push(event));
+        events
+    }
+
+    #[test]
+    fn given_empty_and_zero_total_when_observed_then_no_fake_percentage_emitted() {
+        let mut trace = InboundFileProgressTrace::default();
+        assert!(record(&mut trace, 0, 0).is_empty());
+        assert!(record(&mut trace, 0, 100).is_empty());
+        assert_eq!(
+            record(&mut trace, 1, 0),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert!(record(&mut trace, u64::MAX, 0).is_empty());
+    }
+
+    #[test]
+    fn given_cumulative_multifile_progress_when_crossing_exact_boundaries_then_one_event_per_stage()
+    {
+        let mut trace = InboundFileProgressTrace::default();
+        assert_eq!(
+            record(&mut trace, 1, 100),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert!(record(&mut trace, 24, 100).is_empty());
+        assert_eq!(
+            record(&mut trace, 25, 100),
+            vec![Event::InboundFileProgress25]
+        );
+        assert!(record(&mut trace, 49, 100).is_empty());
+        assert_eq!(
+            record(&mut trace, 50, 100),
+            vec![Event::InboundFileProgress50]
+        );
+        assert!(record(&mut trace, 74, 100).is_empty());
+        assert_eq!(
+            record(&mut trace, 75, 100),
+            vec![Event::InboundFileProgress75]
+        );
+        assert!(record(&mut trace, 100, 100).is_empty());
+        assert!(record(&mut trace, 100, 100).is_empty());
+    }
+
+    #[test]
+    fn given_one_chunk_crossing_all_stages_when_repeated_then_all_only_once() {
+        let mut trace = InboundFileProgressTrace::default();
+        assert_eq!(
+            record(&mut trace, 2, 2),
+            vec![
+                Event::InboundFirstFileChunkPersisted,
+                Event::InboundFileProgress25,
+                Event::InboundFileProgress50,
+                Event::InboundFileProgress75,
+            ]
+        );
+        assert!(record(&mut trace, 2, 2).is_empty());
+        assert!(record(&mut trace, 3, 2).is_empty());
+    }
+
+    #[test]
+    fn given_maximum_u64_counter_when_thresholds_checked_then_u128_math_does_not_overflow() {
+        let mut trace = InboundFileProgressTrace::default();
+        let total = u64::MAX;
+        assert_eq!(
+            record(&mut trace, total / 4, total),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert_eq!(
+            record(&mut trace, total / 4 + 1, total),
+            vec![Event::InboundFileProgress25]
+        );
+        assert_eq!(
+            record(&mut trace, total / 2 + 1, total),
+            vec![Event::InboundFileProgress50]
+        );
+        assert_eq!(
+            record(&mut trace, (u128::from(total) * 3 / 4) as u64 + 1, total),
+            vec![Event::InboundFileProgress75]
+        );
+        assert!(record(&mut trace, total, total).is_empty());
+    }
+
+    #[test]
+    fn given_independent_sessions_when_observed_then_first_stage_resets_per_session() {
+        let mut first = InboundFileProgressTrace::default();
+        let mut second = InboundFileProgressTrace::default();
+        assert_eq!(record(&mut first, 100, 100).len(), 4);
+        assert_eq!(
+            record(&mut second, 1, 100),
+            vec![Event::InboundFirstFileChunkPersisted]
+        );
+        assert!(record(&mut first, 100, 100).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod keepalive_tests;

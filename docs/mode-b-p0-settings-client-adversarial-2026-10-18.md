@@ -1,0 +1,75 @@
+# MODE B P0: Authenticated forged Settings2 view and visibility receipt contracts (2026-10-18)
+
+## Stage 1. Repository scan and scope
+Read `agent.md`, `docs/mode-b-completion-audit-2026-10-18.md`, `core_lib/src/service/{settings_service.rs,client.rs,client/settings.rs,client/visibility.rs,client/tests/visibility_forged.rs}`, `core_lib/src/identity.rs` and `.github/workflows/{mode-b.yml,coverage.yml}`. Baseline `fa5f549b`; last source-tested code `4b814f6a` has Preflight and Native GTK SUCCESS (765 core library tests, 80 native GTK).
+Mode B, tests and docs only. The existing adversarial test-only manager/operations/visibility interfaces form a **real private D-Bus** authenticated by ordinary `NativeClient::connect`. Extend that fixture with an `Settings2` interface, whose `Read` and `Reload` responses share the same injected `SettingsView` used by `Visibility2.Set`. No production/mocks of the client, no product-policy changes or release/master actions.
+
+## Stage 2. Risk and invariants
+P0: a same-UID, properly owned daemon may still send forged or corrupted typed settings. `read_settings` and `reload_settings` must refuse invalid `SettingsView` replies as `ClientError::Protocol`; a subsequent valid response must work without a poisoned cache. `set_visibility` must retain the exact original pending intent after a **structurally decodable but invalid** `SettingsView`; no later malformed receipt may clear it; only an explicit retry with a valid envelope and matching request may complete it. Requests and tokens must not appear in `Debug`.
+
+## Stage 3. Exhaustive scoped test inventory
+| Production artifact | Branches / risk | Level | Planned tests |
+| --- | --- | --- | --- |
+| `client/settings.rs::checked_settings` | reject wrongly typed semantic fields; valid envelope | real D-Bus contract P0 | shared field matrix, 2 tests |
+| `client/settings.rs::{read_settings,reload_settings}` | reject invalid Read and Reload; accept repaired response | real D-Bus integration P0 | 1 named test |
+| `client/visibility.rs::{set_visibility,retry_visibility,has_pending_visibility}` | corrupted successful `Set` result must retain exact pending, valid later retry clears | real D-Bus integration P0 | 1 named test |
+| `client.rs::{connect,wire}` | real broker-authenticated unique owner, exact method dispatch | fixture exercised | counted with above |
+| `settings_service.rs::SettingsView::valid` | reject every scalar bound and canonical name, token, directory, request combination | existing production validator through D-Bus | shared table of **18** wire-representable + **3** NUL-unrepresentable invalid field variants |
+| Invalid D-Bus *signature*, reply with attached FD, wrong owner/UID, transport closure in-flight | separate protocol risks | full fake daemon transport, not yet implemented | OPEN, not falsely counted |
+
+## Stage 4. Branch map
+`checked_settings`: fds nonempty -> Protocol (OPEN); tuple deserialize error -> Protocol (OPEN); `!view.valid(epoch)` -> Protocol (planned); valid -> Ok (planned).
+`valid(epoch)`: epoch exact; source <=2; visibility <=2; -1 <= port <=65535; card_mode <=1; both names valid; name_status <=3 and if !=0, resolved_name nonempty; directory bytes <=12288 and no NUL; error <=4; applied_live_revision <= revision; token empty only if !available/error==1 otherwise lowercase 64 hex; last_request empty or lowercase 32 hex. Each planned invalid field has an independent mutation target. `set_visibility`: exact pending on Protocol, even on repeated malformed replies; accept corrected matching receipt once. Existing test `given_authenticated_success_reply_with_foreign_request...` already covers valid SettingsView with foreign last_request and need not be duplicated.
+
+## Stages 5–6. Positive / N1–N12 and interaction matrix
+| Flow | Positive | N1 | N2 | N3 | N4 | N5 | N6 | N7 | N8 | N9 | N10 | N11 | N12 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Settings Read/Reload | valid recovery | bad name/token/request/epoch | -2/-1/65535/65536 port; 12288/12289 dir | private broker path, no real network | repeat bad Read+Reload and recover | single mutable client, NA race | malformed semantic fields | exact epoch and canonical IDs | Unicode control/name check | no GUI, NA | reject forged visible/configured fields | no payments, NA | no file operations, NA |
+| Visibility Set receipt | matched retry succeeds | invalid receipt fields | max scalar and overlimit | real local bus; no link errors injected | repeated Protocol leaves exact pending | second command already blocked in previous suite | corrupted typed response | no authority based on malformed receipt | Unicode in fields | explicit retry | redact token/request; no lost original | NA payments | no real writes, NA |
+
+Interactions: **18 D-Bus-serializable malformed field variants × both `Read` and `Reload` routes**; same malformed fields × pending visibility `Set` reply; then corrected reply. Three distinct authenticated D-Bus method paths tested, each relevant branch touched with real transport. No sleeps or random time-dependent expectations.
+
+## Stages 7–8. Counts and production-file coverage map
+Two new named async tests plus test-only `Settings2` interface and table helper, **18** wire-representable malformed variants each applied to both read routes (36 errors) and Set route (18 errors), plus **3** NUL-invalid string cases asserted directly against the production validator. New production file coverage: `core_lib/src/service/client/settings.rs` checked settings validation, read and reload; `core_lib/src/service/client/visibility.rs` retained pending on Protocol; `core_lib/src/service/settings_service.rs` SettingsView validation field branches. No source or new assertions for hardware BlueZ, UI, filesystem or relaunch.
+
+## Stages 9–10. Implementation and mutation review
+Implement only two test methods in `core_lib/src/service/client/tests/visibility_forged.rs` plus test-only Settings2 fake service; use `assert!(!view.valid(EPOCH))` for each malformed input *and* assert actual client returns `ClientError::Protocol`, unchanged pending state and exact wire Set call count. Mutations targeted: remove any single validator conjunct; modify <=/>= boundary; allow uppercase token/request; ignore broken name; return stale request; clear pending on Protocol. Some other tests already cover foreign last_request and unreadable store; do not repeat. Mutation review is planned analysis, not automated score.
+
+## Stages 11–12. Execution and completion
+Require exact-source Preflight (Core tests, formatting, Clippy, frontend, Tauri) + Native GTK. Measure line/function/region coverage separately when an on-demand run is available. `mode-b.yml` is **workflow_call only**, guarded for release validation; do not bypass its authorized entrypoint in testing mode. Strict full 10× on final current test source and actual hardware acceptance are still OPEN. Global Stage 12 remains NO. Rollback test file and document only; no master merge.
+
+
+## Stage 11 first execution: protocol-feasibility correction before code fix
+
+- First exact-source [Preflight 39174485470](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174485470) compiled and ran both new methods but Core Rust failed **765 passed / 2 failed**. The first failure in each method was the `device-name-nul` case: actual client reported `Err(DaemonChanged)`, not `Err(Protocol)`.
+- **Root cause is test design, not evidence of an accepted corrupt setting:** D-Bus `STRING` is required to contain valid UTF-8 without embedded NUL. The fake method cannot transmit a response with NUL inside its string fields; the ensuing transport/owner failure is not a semantic validator return and cannot be asserted to be `Protocol`. The sibling `resolved-name-nul` and `directory-nul` variants have the same protocol-level impossibility.
+- **Corrected test matrix, without weakening any applicable assertion:** put three NUL-bearing values in a separate **direct `SettingsView::valid` rejection** category (N1/N6/N7; no D-Bus wire claim), keep the remaining **18 fully D-Bus-serializable malformed variants** in the genuine authenticated `Read`, `Reload` and `Set` route tests (54 failed-response assertions), and retain exact pending/last-request checks. If an encodable malformed response produces `DaemonChanged` rather than `Protocol`, treat it as a new red failure, not a generic acceptable error.
+- Original scoped inventory total remains 21 invalid field variants: 18 D-Bus-wire cases + 3 D-Bus-type-unencodable cases. No product change or new public API. Implementation must follow this plan correction and be rerun on a new SHA.
+
+
+## Second source run: exact fixture-count mismatch
+
+- On `cb579a1b`, [Preflight 39174746938](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174746938) reports **766 passed / 1 failed** (8 separately filtered). All 18 serializable invalid `Set` receipts were rejected and kept pending; the corrected `Read/Reload` test passed. The sole `Set` test failure was the final fixture call-count assertion: actual **19** versus stale expected **22**, because three wire-unencodable NUL inputs have correctly moved to direct `valid()` checks. Thus the assertion itself no longer matches the documented number of actual D-Bus calls.
+- Planned correction: use exact **18 rejected wire Set calls + 1 valid explicit retry = 19** and preserve the per-iteration `index + 1` assertions, exact error `ClientError::Protocol`, request preservation and the final success-state checks. This is not weakening a domain invariant; it repairs a test-instrumentation count after the earlier documented change to test scope.
+
+
+## Stage 9–11 final code checkpoint and D1–D5 scoped handoff
+
+**D1 — Scan and execution.** Current production test surface is `client/settings.rs`, `client/visibility.rs`, `settings_service.rs::SettingsView::valid`, with authenticated `zbus` calls through the unchanged `client.rs::wire`. Only an existing test-only file was changed, `core_lib/src/service/client/tests/visibility_forged.rs`. Document written before code; implementation source `3a0d1c28`, protocol-representability correction `cb579a1b`, final fixture count correction `85faca64`. Invoke locally with `cd core_lib && cargo test --all-features --lib visibility_forged`; full Core: `cargo test --all-features`; CI Preflight and Native GTK on `dev`.
+
+**D2 — Non-additive category counts for two new named methods.** Positive: **2** methods (Read/Reload recovery, corrected Set retry). N1: **2** (malformed content plus 3 validator-only NUL cases); N2: **2** (port, directory boundaries); N3: **0 additional injected network-failure cases** (real D-Bus delivery is used, existing transport-failure tests elsewhere); N4: **1** (retain and recover exact Set retry); N5: **0** (both operations use a single mutably borrowed NativeClient, race scenarios belong to another test); N6: **2** (corrupted typed replies); N7: **2** (authenticated same-owner reply, epoch/token/request rejection); N8: **2** (invalid UTF-8-directional Unicode name guard, not timezone/DST); N9: **0**, no UI interruption tested here; N10: **0 new redaction assertions**, previous debug redaction tests remain; N11: **not applicable**, no payments/entitlements; N12: **not applicable**, no real file writes in this fixture. Counts are *method-category memberships* and overlap; they must not be summed into 2 or interpreted as 100% repository coverage.
+
+**D3 — Code and complete scoped scenarios.** Exactly **2 new async tests** plus a test-only `Settings2` fake service implementing `Read`/`Reload` and a shared `corrupted_settings` generator. **18** D-Bus-serializable malformed settings fields independently cause Protocol on each of **Read**, **Reload** and **Set** (**54 wire-level negative checks**); **3** NUL-invalid fields are directly asserted against production `SettingsView::valid`, because D-Bus STRING forbids embedded NUL. Valid reply is accepted after all invalid Read/Reload cases, and final explicit matching Set retry clears pending after 18 Protocol responses. The per-iteration wire call counter also asserts one and only one Set dispatch per user attempt.
+
+**D4 — Remaining testability work.** Pure typed field checks are now tested with real D-Bus and no production seam. Additional wrong-signature/FD-attached reply tests need a raw-message adversarial server fixture (test infrastructure risk: complexity and zbus handling). `mdns_discovery.rs` event/reachability seam is already tracked in issue #9; physical BlueZ/Android remains a separate integration gate. Do not implement MODE A changes under testing mode.
+
+**D5 — Execution and acceptance.** Source-exact [Preflight 39174986191](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986191) Core Rust **SUCCESS**, **767 passed / 0 failed**, 8 separately filtered risk-sensitive tests, with both new names individually `ok`. Two integration binaries each have 4 passes; rustfmt, frontend, Core Clippy **SUCCESS**. Source-exact [Native GTK 39174986234](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986234) **SUCCESS**, 80/80. Tauri Clippy/desktop test was still in progress at this checkpoint; do not label the whole Preflight green without its completed conclusion. This is a routine quick CI source gate, not ten successive entire-suite passes; strict global Stage 11 after new tests and Stage 12 remain **OPEN**.
+
+
+## Final scoped completion gate
+
+- Exact test source **`85faca64`** (only scoped test changes since previous known-green code) has completed [Preflight 39174986191](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986191): **SUCCESS** in all **5/5 jobs**. Core 767 passed, 0 failed, 0 ignored; both new test methods explicitly `ok`; Tauri desktop 10 passed; frontend tests, Rust formatting and both Clippy jobs SUCCESS.
+- Same exact source has completed [Native GTK 39174986234](https://github.com/morozhenko-apps/rquickshare/actions/runs/39174986234): **SUCCESS**, 80 passed / 0 failed.
+- The two initial Core failures were **test-fixture errors**, not production regressions: (1) encoding prohibited D-Bus NUL strings as semantic reply tests; (2) stale Set-call count after the protocol split. Both failures and fixes have exact source/run evidence above, and the final source passes without weakened applicable assertions.
+- Scoped Stage 1–11 **quick-CI evidence is GREEN**, but Stage 11's distinct **10× full-suite** stability requirement is **NOT MET** on `85faca64`, and Stage 12 repository-wide coverage/physical acceptance is **NO**. Routine quick Preflight's eight segregated repeated risk probes do not make the entire suite 10×.
+- No production, packaging, release, `mode-b.yml` entrypoint, hardware or `master` modifications.

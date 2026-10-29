@@ -37,6 +37,18 @@ button.quick-action.receive-active {
   animation: receive-pulse 1.8s ease-in-out infinite;
 }
 
+/* An unseen inbound consent highlights Devices without an unbounded flash.
+   GTK disables the animation class when desktop animations are disabled. */
+button.quick-action.devices-attention {
+  background-image: none;
+  background-color: mix(@theme_bg_color, @warning_color, 0.15);
+  color: @theme_fg_color;
+  border-color: mix(@theme_bg_color, @warning_color, 0.42);
+}
+button.quick-action.devices-pulse {
+  animation: receive-pulse 1.8s ease-in-out 4;
+}
+
 /* The primary drawer is one flat list, including transient incoming peer rows. */
 .rqs-card-body .device-row { padding: 8px 0; border: none; border-radius: 0; }
 
@@ -62,3 +74,19 @@ button.selection-curtain {
   padding: 4px 6px;
   border-right: 1px solid alpha(currentColor, 0.22);
 }
+
+/* Single-page native About, with RepoTicker-like centered hierarchy. */
+.rqs-about-name { font-size: 19px; font-weight: 600; margin-top: 2px; }
+.rqs-about-muted { font-size: 13px; color: @theme_fg_color; }
+button.rqs-about-website {
+  font-size: 13px;
+  color: @theme_fg_color;
+  background-image: none;
+  background-color: alpha(@theme_selected_bg_color, 0.13);
+  border: 1px solid alpha(@theme_fg_color, 0.17);
+  border-radius: 7px;
+  padding: 6px 11px;
+  margin: 4px 0 1px;
+  text-decoration: none;
+}
+button.rqs-about-website:hover { background-color: alpha(@theme_selected_bg_color, 0.22); }

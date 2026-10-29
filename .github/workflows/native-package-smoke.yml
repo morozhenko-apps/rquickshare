@@ -1,6 +1,6 @@
 name: Native Linux package smoke
 
-# Package acceptance is manual or validated release-only, not dev preflight.
+# Deliberate candidate-only gate. The CI cadence policy forbids dev push triggers.
 on:
   workflow_dispatch:
 
@@ -12,44 +12,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  native_download:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: infra/native-download/package-lock.json
-      - name: Install isolated APT test prerequisites
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dpkg-dev gnupg gpgv python3
-      - name: Validate read-only download Worker (local bindings, no credentials)
-        working-directory: infra/native-download
-        run: |
-          set -eu
-          npm ci --ignore-scripts --no-audit --no-fund
-          npm run types
-          git diff --exit-code -- worker-configuration.d.ts
-          npm run check
-          npm test
-          npm run dry-run
-
   native_debian:
-    runs-on: ubuntu-24.04
-    # Declare the target ABI explicitly; host-built 26.04 binaries are not 24.04 packages.
-    container: ubuntu:26.04
-    env:
-      HOME: /root
+    runs-on: ubuntu-26.04
+    # Build and test directly on the target ABI; no nested Docker namespace restriction.
     steps:
       - name: Install native build and isolated-check prerequisites
         run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates git curl build-essential pkg-config dpkg-dev python3 python3-venv \
             protobuf-compiler libdbus-1-dev libudev-dev libgtk-4-dev \
             libgtk4-layer-shell-dev libfontconfig-dev libseccomp-dev bubblewrap glycin-loaders \
             dbus-daemon dbus-x11 xvfb xauth desktop-file-utils gnupg gpgv
 
+      - name: Require real unprivileged Bubblewrap sandbox on native Ubuntu 26.04
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /etc/os-release
+          test "$VERSION_ID" = "26.04"
+          test "$(id -u)" -ne 0
+          # The real Glycin loader needs user, PID and mount namespaces.
+          bwrap --die-with-parent --unshare-user --unshare-pid \
+            --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
       - uses: actions/checkout@v5
 
       - name: Install isolated publication contract-test dependencies (no credentials)
@@ -84,8 +69,13 @@ jobs:
           cargo +nightly fmt --manifest-path native_desktop/Cargo.toml -- --check
           cargo +stable test --locked --manifest-path core_lib/Cargo.toml
           cargo +stable clippy --locked --manifest-path core_lib/Cargo.toml --all-targets -- -D warnings
-          "$RUNNER_TEMP/native-publication-python/bin/python" -m unittest discover -s scripts/tests -p 'test_native_*.py' -v
+          # Test-only GPG homes need short Unix socket paths for gpg-agent.
+          # Keep Rust's workspace TMPDIR for disk capacity, but isolate Python fixtures.
+          TMPDIR="$RUNNER_TEMP" "$RUNNER_TEMP/native-publication-python/bin/python" -m unittest discover -s scripts/tests -p 'test_native_*.py' -v
+          # Freedesktop validates the launcher. Dolphin Type=Service uses KDE's
+          # distinct MimeType/Actions contract, checked strictly by native_deb.
           desktop-file-validate native_desktop/packaging/share/applications/io.github.morozhenko_apps.RQuickShare.desktop
+          python3 -c 'import sys; sys.path.insert(0, "scripts"); import native_deb; native_deb.validate_assets()'
 
       - name: Isolated GTK and native lint gate
         shell: bash

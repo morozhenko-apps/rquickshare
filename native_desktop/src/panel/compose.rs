@@ -53,7 +53,11 @@ pub(super) struct Composer {
     paste: gtk::Button,
     prepare: gtk::Button,
     status: gtk::Label,
+    status_source: Cell<&'static str>,
     heading: gtk::Label,
+    heading_source: Cell<&'static str>,
+    prepare_source: Cell<&'static str>,
+    cancel_button: gtk::Button,
     permit: RefCell<Option<PreparationPermit>>,
     task: RefCell<Option<glib::JoinHandle<()>>>,
     busy: Cell<bool>,
@@ -73,7 +77,7 @@ impl Composer {
         prepared: impl Fn(Option<rqs_lib::service::client::Selection>) + 'static,
     ) -> Rc<Self> {
         let window = gtk::Window::builder()
-            .title("Send text")
+            .title(crate::i18n::label("Send text"))
             .default_width(480)
             .default_height(360)
             .build();
@@ -85,7 +89,9 @@ impl Composer {
         root.set_margin_bottom(16);
         root.set_margin_start(16);
         root.set_margin_end(16);
-        let heading = label("Write or paste text, then prepare it and choose recipients.");
+        let heading = label(crate::i18n::label(
+            "Write or paste text, then prepare it and choose recipients.",
+        ));
         heading.set_selectable(false);
         root.append(&heading);
         let buffer = gtk::TextBuffer::new(None::<&gtk::TextTagTable>);
@@ -99,13 +105,15 @@ impl Composer {
             .child(&editor)
             .build();
         root.append(&scroll);
-        let status = label("Clipboard is read only when you paste. Nothing is sent yet.");
+        let status = label(crate::i18n::label(
+            "Clipboard is read only when you paste. Nothing is sent yet.",
+        ));
         status.set_selectable(false);
         root.append(&status);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let paste = gtk::Button::with_label("Paste clipboard");
-        let prepare = gtk::Button::with_label("Prepare text");
-        let cancel = gtk::Button::with_label("Cancel");
+        let paste = gtk::Button::with_label(crate::i18n::label("Paste clipboard"));
+        let prepare = gtk::Button::with_label(crate::i18n::label("Prepare text"));
+        let cancel = gtk::Button::with_label(crate::i18n::label("Cancel"));
         buttons.append(&paste);
         buttons.append(&prepare);
         buttons.append(&cancel);
@@ -118,7 +126,13 @@ impl Composer {
             paste,
             prepare,
             status,
+            status_source: Cell::new("Clipboard is read only when you paste. Nothing is sent yet."),
             heading,
+            heading_source: Cell::new(
+                "Write or paste text, then prepare it and choose recipients.",
+            ),
+            prepare_source: Cell::new("Prepare text"),
+            cancel_button: cancel.clone(),
             permit: RefCell::new(Some(permit)),
             task: RefCell::new(None),
             busy: Cell::new(false),
@@ -136,9 +150,7 @@ impl Composer {
             if !insertion_allowed(current, text) {
                 buffer.stop_signal_emission_by_name("insert-text");
                 if let Some(composer) = weak.upgrade() {
-                    composer
-                        .status
-                        .set_text("Text must be UTF-8 without NUL and at most 128 KiB.");
+                    composer.set_status("Text must be UTF-8 without NUL and at most 128 KiB.");
                 }
             }
         });
@@ -201,6 +213,21 @@ impl Composer {
         self.prepare
             .set_sensitive(ready && self.buffer.char_count() != 0);
     }
+    fn set_status(&self, source: &'static str) {
+        self.status_source.set(source);
+        self.status.set_text(crate::i18n::label(source));
+    }
+    pub(super) fn retranslate(&self) {
+        self.window.set_title(Some(crate::i18n::label("Send text")));
+        self.heading
+            .set_text(crate::i18n::label(self.heading_source.get()));
+        self.paste.set_label(crate::i18n::label("Paste clipboard"));
+        self.prepare
+            .set_label(crate::i18n::label(self.prepare_source.get()));
+        self.cancel_button.set_label(crate::i18n::label("Cancel"));
+        self.status
+            .set_text(crate::i18n::label(self.status_source.get()));
+    }
     fn body(&self) -> Option<NativeText> {
         NativeText::new(
             self.buffer
@@ -227,11 +254,11 @@ impl Composer {
                 match result {
                     Ok(text) => {
                         composer.buffer.set_text(text.text());
-                        composer.status.set_text(
+                        composer.set_status(
                             "Text captured. Review it, then prepare and choose recipients.",
                         );
                     }
-                    Err(()) => composer.status.set_text(
+                    Err(()) => composer.set_status(
                         "No supported text was captured. Use 1–128 KiB of UTF-8 text without NUL.",
                     ),
                 }
@@ -247,13 +274,13 @@ impl Composer {
             return;
         }
         let Some(text) = self.body() else {
-            self.status.set_text("Enter 1–128 KiB of text without NUL.");
+            self.set_status("Enter 1–128 KiB of text without NUL.");
             return;
         };
         let completion = match (self.submit)(text) {
             Ok(completion) => completion,
             Err(_) => {
-                self.status.set_text(
+                self.set_status(
                     "Preparation was not queued. Review the current source and connection.",
                 );
                 return;
@@ -406,13 +433,14 @@ impl Panel {
             },
         );
         composer
-            .prepare
-            .set_label(if direct { "Send" } else { "Prepare text" });
+            .prepare_source
+            .set(if direct { "Send" } else { "Prepare text" });
         if direct {
             composer
-                .heading
-                .set_text("Write or paste text, then send it to the selected device.");
+                .heading_source
+                .set("Write or paste text, then send it to the selected device.");
         }
+        composer.retranslate();
         self.watch_idle_widget(&composer.window);
         composer.window.set_transient_for(Some(&self.window));
         self.mark_manual();

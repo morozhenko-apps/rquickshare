@@ -1,0 +1,120 @@
+# MODE B P0 — Discovery command ownership and cancellation (2026-10-19)
+
+## 1. Environment, source baseline and repository scan
+Environment: remote GitHub connector with write access to `dev`, no attached user Ubuntu GUI/BlueZ, local repository shell or live Android network. Baseline `e734477e63a3296b29711e64aae76eb8cdf3a6d7`. [Last Preflight 39302655899](https://github.com/morozhenko-apps/rquickshare/actions/runs/39302655899): all five jobs SUCCESS; Core Rust 769/769 and Tauri Desktop 12/12. Read `app/main/src-tauri/src/{main.rs,cmds/discovery.rs}`, `core_lib/src/{lib.rs,lifecycle_tests.rs,hdl/mdns_discovery.rs}`, recent MODE B audit and uploaded updated universal AGENT SSOT.
+
+`start_discovery` and `stop_discovery` are thin Tauri `State<AppState>` wrappers around `RQS::discovery` and `RQS::stop_discovery`. Core discovery creates real `mdns_sd::ServiceDaemon` and reaches real sockets; event-loop and reachability dependency boundaries are already tracked under [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9). MODE B **cannot** add a fake `RQS` or alter production code to make this command testable.
+
+## 2. Risk analysis and invariant, architectural STOP
+Source-level P0 concern in `core_lib/src/lib.rs::RQS::discovery`: after checking `tracker.is_some()`, it creates a new `CancellationToken`, unconditionally sets `self.discovery_ctk=Some(token.clone())`, creates a new `MDnsDiscovery`, and tracks a new worker. It does **not** cancel or return an error for a previous discovery generation. Consequently, a second invocation can orphan the first generation's cancellation token; `stop_discovery` only cancels the most recently stored token, allowing multiple tracked workers to continue until global shutdown. The code-path risk is established; a real multi-device reproduction is **not** claimed.
+
+The desired repeated-`start_discovery` contract is **an architectural STOP**: choose between rejecting duplicates/maintaining the first generation, or explicitly replacing it with a cancel-and-join lifecycle; neither should be silently chosen under MODE B. Both alternatives must keep one active discovery owner, preserve sender/subscriber semantics and prevent stale generation events. No MODE A fix or failing test weakened to claim success in this slice. A linked issue will track this.
+
+## 3. Exhaustive IN-SCOPE test inventory and production-file map
+| Source / method branch | Priority | Level | Test plan |
+| --- | --- | --- | --- |
+| `RQS::discovery`: `tracker=None` => `The service wasn't first started`, no mDNS daemon or token installed | P0 | isolated core unit; no radio | 1 Given/When/Then method |
+| `RQS::stop_discovery`: active token cancels, reference removed, second stop idempotent, core service + independent workers remain active | P0 | Tokio lifecycle integration; real tracker+tokens | 1 Given/When/Then method |
+| `RQS::stop`: afterwards full owner shutdown joins surviving core tasks | P0 | same test, exact owner gate | 1 existing test strengthened in new method |
+| `RQS::discovery`: repeated start, stop/restart, stale workers and sender replacement | P0 | mDNS SDK test seam or real network | **BLOCKED** pending architecture choice and issue #9, no CI coverage claimed |
+| Tauri `cmds::start_discovery/stop_discovery` `tauri::State<AppState>` injection and UI listener cardinality | P0 | real AppHandle E2E | OPEN, requires fixture/contract and choice above |
+
+Production files `core_lib/src/lib.rs` and `app/main/src-tauri/src/cmds/discovery.rs` remain unchanged. Test-only addition: `core_lib/src/lifecycle_tests.rs`. Exactly **two** independently named tests planned, no new test-only production DI.
+
+## 4. Branch map
+- pre-start request -> error before constructing `MDnsDiscovery`, no `tracker`/`discovery_ctk`/lifetime mutation; repeated attempt remains an error.
+- active synthetic discovery lifetime *representing token-owning state, not SDK service* -> `stop_discovery` cancels exactly this token, clears ownership; duplicate stop has no effect; does not cancel `self.ctoken`; does not close tracker or visibility policy.
+- independent worker (real tracked Tokio task) observes cancellation; global `stop()` cancels general lifetime, closes/joins work and permits clean independent start.
+- repeated real `discovery()` while active **unresolved**; never assert existing defective behavior as desired.
+
+## 5–6. Positive/N1–N12 and interaction inventory
+| Flow | Positive | N1 | N2 | N3 | N4 | N5 | N6 | N7 | N8 | N9 | N10 | N11 | N12 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Prestart reject | valid result is rejection before start | missing tracker | repeated 0/1/2 calls | N/A: no SDK reached | repeated rejection | N/A: no task | N/A | no synthetic start / token | N/A | no UI | no endpoint events | N/A | N/A |
+| Stop lifecycle | owned token cancellation, core still alive | absent token | one/two stops | real Tokio channel, no network | idempotent stop / full shutdown | cancellation worker and caller independently | N/A | no stray stopped service | no wall-time | no GUI | no broadcast endpoint leaked by test | N/A | N/A |
+
+No clocks, sleeps, brute-force CI loops or fabricated device handles. Interaction: prior startup {none, real core tracker} × discovery ownership {none, owned token} × stop calls {0,1,2} × global lifetime {active, stopped}. N categories marked not applicable have no business meaning for these methods.
+
+## 7–10. Coverage, execution and mutation review
+Exactly two deterministic test methods, explicit source-level error, `CancellationToken::is_cancelled`, `tracker.is_closed`, `tracker.is_empty`, internal option clearing, `watch` visibility unchanged. Use `tokio::sync::oneshot` to acknowledge actual tracked worker execution, no sleeps. Mutation hypotheses: skip tracker precondition (would initialize a network daemon), fail to clear `discovery_ctk`, cancel general `ctoken` instead of discovery, stop tracking workers, or treat subsequent `stop_discovery` as an error. Real repeated start mutation **cannot** be killed by these limited scenarios and remains blocked.
+
+## 11–12. Final execution & completion, updated SSOT
+Current uploaded AGENT SSOT Stage 11: final **STABLE suite once**, known **FLAKY once separately**, targeted bounded reruns on failure. It explicitly states **do not require ten consecutive complete-suite successes** except separately required CI/release checks. Historical completion-audit references to 10x are old requirements, not a current generic gate. Once code is ready, use GitHub Preflight exact-source, confirm stable Core and other jobs and any separately configured flaky jobs; **no repeated polling**, if the CI is not completed record exact next check. Docs and test code must be separate commits. Scope is PARTIAL unless the two tests pass; even after pass, repeat-start contract, mDNS integration and full repo-wide Stage 12 remain OPEN. No production changes or main merge.
+
+## Stage 9 — implementation and source-exact validation entry
+
+- Docs-first plan commit: `62aee485`.
+- Architectural repeated-start problem recorded as [P0 issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12). Two viable design choices and recommended safe contract are captured there. **STOP on the affected production correction** until a user design decision. No claim that the duplicate worker is reproduced on hardware, or that these tests cover its resolution.
+- Test-only commit `b8545375053bb132bff4d30db744df819df125fc` adds **two** named async tests to existing `core_lib/src/lifecycle_tests.rs`:
+  1. `given_core_not_started_when_discovery_requested_then_no_browser_or_token_is_created`: two successive calls to real `RQS::discovery` reject before the mDNS constructor, preserve `tracker`, global lifetime and discovery ownership, then stopping remains harmless.
+  2. `given_owned_discovery_when_stopped_twice_then_core_lifetime_survives_until_owner_shutdown`: real `RQS` lifecycle, task tracker and cancellation tokens, synchronized Tokio worker barriers, exact token cancellation and idempotent second stop, survival of core visibility/tracker and proper final Core shutdown/join. This does **not** instantiate a real mDNS worker and is not a substitute for duplicate-start/SDK event tests.
+- As of the first source check, [Preflight 39309762791](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762791) and [Native GTK 39309762487](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762487) were **in progress** on exact test-code SHA `b8545375`. Results not inferred. Do not poll: use completion event or a single later status check. Production, installed binary, `master` and release unchanged.
+- Stage 10 manual mutations: bypass `tracker` precondition, drop cancellation instead of invoking it, leave `discovery_ctk` populated, cancel global token from `stop_discovery`, prematurely close tracker. Duplicate-generation mutations remain untested and **blocked by issue #12/#9**.
+- Stage 11 updated SSOT validation: one stable gate, separate existing known-flaky group, bounded targeted reruns only on actual defects. Historic 10× wording in previous audits does not override the uploaded AGENT Stage 11 or independently mandatory release workflows. Stage 12 is globally OPEN.
+
+
+## Read-only frontend interaction review
+
+`app/main/src/composables/ContentStatus.vue::ensureDiscovery` and `app/main/src/components/HomePage.vue` both conditionally invoke `start_discovery` when the frontend-local `discoveryRunning` flag is false. `ensureDiscovery` updates that flag **after awaiting** the IPC invocation; simultaneous UI triggers can therefore both observe false and invoke the command. This is a source-level duplicate-start interleaving, not a measured end-user reproduction. The Tauri `AppState::dch_sender` is shared and each call clones the **same broadcast sender**, supporting the idempotent-single-worker option but not resolving how endpoint cache replay after UI remount should work. Do not rely on disabling a button as the sole concurrency boundary. The CORE owner must enforce single-flight semantics once the architecture decision is made.
+
+
+## Stage 11 — first source run and formatting-only retry
+
+- On original test SHA `b8545375`, [Core stable job in Preflight 39309762791](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762791) **SUCCESS**, **771 passed, 0 failed, 0 ignored; 8 filtered risk-sensitive tests** (plus two 4/4 integration binaries). Both newly added `lifecycle_tests::given_*discovery*` methods explicitly printed `ok`. Core Clippy, desktop Clippy and frontend jobs also succeeded. The overall workflow was **FAILURE** due solely to one test-only `rustfmt` function-signature line-wrap discrepancy, not a failed domain test; [Native GTK 39309762487](https://github.com/morozhenko-apps/rquickshare/actions/runs/39309762487) was **SUCCESS** on that original test source.
+- Corrected the exact rustfmt diff at test-only SHA **`330be284f1e25da3657422245f4e4927f2820c25`**. No assertions or production logic changed. Exact-source retry [Preflight 39310323610](https://github.com/morozhenko-apps/rquickshare/actions/runs/39310323610) and [Native GTK 39310323463](https://github.com/morozhenko-apps/rquickshare/actions/runs/39310323463) started; **neither is claimed passed until GitHub concludes it**.
+- Scoped MODE B remains **PARTIAL** until exact-SHA stable gate and separate risk/flaky status checked; full `RQS::discovery` repeat-start/SDK integration is architecturally blocked at [issue #12](https://github.com/morozhenko-apps/rquickshare/issues/12) / [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9). The test-only rollback is removing two lifecycle tests; no product change.
+
+
+## 2026-10-19 — user decision and MODE A architecture (Option B)
+
+The user explicitly selected **Option B: cancel, join, then restart with generation fencing**. Switch this task to MODE A (feature/refactor with backward-compatible user intent). This design supersedes the previous STOP on issue #12; other independent MODE B and physical acceptance gaps remain. Production behavior change is authorized only for discovery lifecycle and Tauri command adaptation.
+
+### Architecture contract and planned source changes
+
+1. `core_lib/src/lib.rs::RQS` gains **owned discovery JoinHandle** next to the existing `discovery_ctk`. Make `RQS::discovery` an `async fn`. Verify Core started before any side effects. Cancel the previous generation, await its **specific worker**, ensure no prior generation may publish once the new generation begins, then initialize the new `MDnsDiscovery`, token and owned tracked worker. No dropped fire-and-forget handles between generations; on task failure record a diagnostic and continue a fresh generation only after the old worker has terminated. Preserve the shared broadcast sender in `AppState`.
+2. Keep `RQS::stop_discovery` synchronous **cancel-only** for destructor compatibility, but do **not** discard the previous worker handle. Add an explicit asynchronous `RQS::stop_discovery_and_wait` for Tauri and owner shutdown; the worker can be joined after cancellation. Retain `RQS::stop` full-tracker join and repeated stop idempotency. A full shutdown must cancel discovery even if the owner is dropped before an explicit await.
+3. `core_lib/src/hdl/mdns_discovery.rs::MDnsDiscovery::run` should honor cancellation before processing further SDK events and during an outstanding TCP reachability connection, close the mDNS SDK daemon and await its completion, and emit removal for previously advertised cache entries on exit. **Actual end-to-end worker completion**, not a mere CancellationToken status, is the old-generation fence. Emitting removal prevents stale endpoint display in an existing UI subscriber before a re-scan.
+4. `app/main/src-tauri/src/cmds/discovery.rs`: both Tauri commands use async Core operations with a **single serialized RQS mutex owner**, but never hold `std::sync::MutexGuard` across an outer `await` in a Tauri-command future. Use the existing multithreaded Tokio `block_in_place(|| tauri::async_runtime::block_on(...))` bridge already used for `kill_app` in `main.rs`. The stop IPC returns only after its worker has joined. This avoids changing every other synchronous Core command and the public AppState mutex architecture. Core async API change is internal to this repository; check call sites before committing.
+5. Frontend UI-local `discoveryRunning` flag still prevents ordinary duplicate invokes but cannot be the authoritative concurrency guard. The new Core serialized actor is decisive. Do not add sleeps or fake button locks. The existing UI treats a fresh remount as new, so explicit restart triggers fresh discovery and endpoint eviction.
+6. Tests: real Core owned task and cancellation barriers, sequential A→B start and stopped owner, idempotent stop and stop/restart, pre-start error still fails without mDNS initialization. Test MDnsDiscovery event/SDK interplay through actual SDK where deterministic and possible; [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9) remains for injection of `ServiceEvent` and reachability. Do not claim hardware acceptance or all-level 100% coverage.
+7. Final validation only after implementation/tests: **one STABLE Preflight** with actual Core/Tauri/format/frontend/Clippy, plus Native GTK if CI triggers. Known-FLAKY category stays separate as configured; use targeted reruns only when diagnosing a detected failure. Document source-exact CI and runtime limitations.
+
+### Failure and rollback semantics
+
+- If former worker returns an error or panics after cancellation, report failure in logs; ensure it is joined before replacing. If `MDnsDiscovery::new` fails after shutting down previous worker, the session remains stopped and no stale token/handle is installed. `stop_discovery_and_wait` is idempotent and does not cancel the rest of Core. Full `RQS::stop` also cancels the Core lifetime and joins all tracked tasks.
+- A bounded API change to `RQS::discovery` must be propagated to all call sites and tests, never concealed by detached background spawns. Production docs, this plan and issue #12 updated before code commit. Rollback code and tests in one or more isolated commits, doc changes separately.
+
+
+## First CI failure root cause: internal NativeRuntime caller and formatting
+
+[Preflight 39313912422](https://github.com/morozhenko-apps/rquickshare/actions/runs/39313912422) on intermediate code source `a1d18272` had red Core Rust and Core Clippy due to `core_lib/src/service/runtime.rs::NativeRuntime::start` calling the now-asynchronous `self.core.discovery(startup.discovery_sender)` without awaiting. This internal runtime is a second production caller in addition to the Tauri command and must be updated as part of Option B compatibility; the existing `Drop` cancel-only call is intentionally unchanged. A test-only `oneshot::Receiver::is_closed` compile mistake was independently corrected before the next test source (`a6486437`) by using `try_recv() == Empty` to prove the second worker did not start. Rust format also reported deterministic whitespace/multiline differences in `core_lib/src/lib.rs` and two long test assertions. Corrections must be targeted to these causes, without fake assertions, production behavior rollback or disabling checks. The first red run does **not** constitute a tested behavior defect.
+
+
+## 2026-10-19 MODE A implementation checkpoint — exact source `540b1cee`
+
+**D1 / changed source.** Option B was approved by the user. Production `core_lib/src/lib.rs` owns an explicit `JoinHandle<Result<(), anyhow::Error>>`, token, and `replace_discovery_with` generation owner; repeated `RQS::discovery` is asynchronous and blocks new admissions until previous worker/SDK shutdown finishes. `stop_discovery()` remains cancellation-only for destructor compatibility, and `stop_discovery_and_wait()` is the explicit join barrier. `RQS::stop()` joins discovery before stopping other tracked workers. A prior worker shutdown error prevents admission of a replacement generation; the next caller can retry after the old handle is consumed.
+
+Production `core_lib/src/hdl/mdns_discovery.rs` now ensures an awaited `ServiceDaemon::shutdown`, cancels reachability TCP connects during generation shutdown, biases the event loop toward cancellation, and emits tombstones for cached endpoints before completing. Production `app/main/src-tauri/src/cmds/discovery.rs` serializes both start and stop using its existing `AppState.rqs` mutex and the existing multithreaded Tauri Tokio `block_in_place + block_on` bridge, without holding `MutexGuard` over an outer `await`. A second production call site was identified in `core_lib/src/service/runtime.rs::NativeRuntime::start()` and now awaits the Core discovery API.
+
+**D2/D3 tests.** `core_lib/src/lifecycle_tests.rs` adds three named event-synchronized Tokio lifecycle tests using the real RQS owner, tracked worker tasks, oneshot barriers, and only external SDK worker futures controlled by contract. They cover (1) cancelled A cannot be replaced by B until A actually acknowledges shutdown, (2) A shutdown error prevents B creation, and (3) stop→idempotent stop→restart→global shutdown. Two previous discovery-owner tests remain and were adapted to async API. No artificial sleeps, mocked RQS logic, real Bluetooth calls, or simulated successful production SDK responses.
+
+**D4 limitations.** SDK event/reachability injection and physical Android ↔ KDE mDNS remain tracked in [issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9). Actual frontend overlapping invokes are safe at the Core ownership gate but the UI-local `discoveryRunning` flag still does not itself coalesce concurrent `start_discovery` calls. This does not invalidate Core single-flight ownership, but frontend interaction testing is a separate UI concern. Timed-out SDK shutdown would make a restart remain pending rather than detach the unsafe former worker; there are deliberately no magic short timeouts.
+
+**D5 revision history.** Plan first in `0b511be`; implementation `ecd2e692`, adapting an existing test `a1d18272`, strengthening the old-generation barrier assertion in `a6486437`, adapting `NativeRuntime` and exact `rustfmt` at `540b1cee`. Intermediate red CI revealed missing `.await` at `NativeRuntime::start` and deterministic formatting problems; fixed at their source, with no domain assertion weakened. Final exact-source [Preflight 39314514605](https://github.com/morozhenko-apps/rquickshare/actions/runs/39314514605) and [Native GTK 39314514674](https://github.com/morozhenko-apps/rquickshare/actions/runs/39314514674) are pending/active at this checkpoint: **do not claim PASS yet**. Current AGENT SSOT specifies one STABLE final gate, separately tracked known-flaky tests, and no general ×10 requirement. Overall device acceptance and MODE B Stage 12 remain separate.
+
+Rollback: revert the implementation commit(s) and associated documentation separately; do not revert only the public API half without restoring all callers.
+
+
+## Exact core-bin call-site correction
+The interim [Preflight 39314514605](https://github.com/morozhenko-apps/rquickshare/actions/runs/39314514605) found one more `RQS::discovery` caller in `core_lib/src/bin.rs::main` (compiled as bin `core_bin`): it still applied `?` to the new async `Future`. Changed the call to `rqs.discovery(discovery_channel.0).await?` in `0c939903`. This is required for the chosen async join contract; it does not change CLI user behavior. No unit assertion has been weakened. That earlier run also confirmed `rustfmt` and frontend SUCCESS but overall status was not green; final CI must use source at or after `0c939903`.
+
+
+## Additional P0 cache retirement invariant before final gate
+Core `MDnsDiscovery::run` withdraws every published endpoint on generation exit. To make this observable without a live mDNS SDK/browser, extract a small internal cache-retirement helper that consumes the exact `HashMap<String,EndpointInfo>` cache and publishes tombstones through the unchanged production `broadcast::Sender`. Add one table-driven `#[tokio::test]` or synchronous `#[test]` to `core_lib/src/hdl/mdns_discovery.rs` verifying two distinct identities are retired exactly once, all records have the default non-present fields, and a newly published endpoint is queued only after the retirements; do not assume HashMap iteration order. The helper may not hide errors or change sender schema. This closes the deterministic replay-order sub-contract, **not** SDK event injection [#9] or real Android acceptance.
+
+
+## Additional final-gate test infrastructure root cause
+
+The source at `9d2e062e` passed prior-version Native GTK but [Preflight 39315261021](https://github.com/morozhenko-apps/rquickshare/actions/runs/39315261021) reported (1) a single exact rustfmt line break in the mDNS cache-retirement test name and (2) `clippy::items_after_test_module` because the new test module was inserted above `pub struct MDnsDiscovery`. Corrected the exact line break at `560f2a37` and moved the test module **below the production implementation** at `4f5705f4`, retaining the same test contents. Neither requires suppressing Clippy or altering product behavior. This root cause is test placement, not mDNS runtime logic.
+
+Final implementation/test source for validation: `4f5705f4f888c3c2c6781d8999dc96a6b3d6f491`. No subsequent executable edits planned. The earlier `0c939903` Core job confirmed **774 stable tests passed** with all three generation-lifetime test method names `ok`; the new mDNS cache-retirement test is additional and must be confirmed in the final source run, not counted as already passed.

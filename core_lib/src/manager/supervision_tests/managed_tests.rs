@@ -91,7 +91,7 @@ async fn native_consent(accept: bool) {
         if accept {
             State::Finished
         } else {
-            State::Disconnected
+            State::Rejected
         }
     );
     control

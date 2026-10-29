@@ -83,6 +83,38 @@ pub fn gen_mdns_name(endpoint_id: [u8; 4]) -> String {
     URL_SAFE_NO_PAD.encode(&name_b)
 }
 
+/// An advertiser-controlled, short-lived Nearby Connections endpoint hint.
+/// Never use it as a verified peer, selected Send route or account identity.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(crate) struct UnverifiedEndpointHint([u8; 4]);
+
+impl std::fmt::Debug for UnverifiedEndpointHint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("UnverifiedEndpointHint([redacted])")
+    }
+}
+
+/// Inverse of our own Google-compatible mDNS instance name generator.
+/// This only checks the advertising syntax, never authenticates its author.
+pub(crate) fn parse_mdns_endpoint_id(fullname: &str) -> Option<UnverifiedEndpointHint> {
+    const SUFFIX: &str = "_FC9F5ED42C8A._tcp.local.";
+    let (instance, suffix) = fullname.split_once('.')?;
+    if !suffix.eq_ignore_ascii_case(SUFFIX) || instance.len() != 14 {
+        return None;
+    }
+    let payload = URL_SAFE_NO_PAD.decode(instance).ok()?;
+    if payload.len() != 10
+        || payload[0] != 0x23
+        || payload[5..8] != [0xFC, 0x9F, 0x5E]
+        || payload[8..10] != [0, 0]
+        || !payload[1..5].iter().all(u8::is_ascii_alphanumeric)
+    {
+        return None;
+    }
+    let endpoint: [u8; 4] = payload[1..5].try_into().ok()?;
+    Some(UnverifiedEndpointHint(endpoint))
+}
+
 pub fn gen_mdns_endpoint_info(device_type: u8, device_name: &str) -> String {
     let mut record = Vec::new();
 
@@ -269,7 +301,14 @@ where
         let std::net::IpAddr::V4(ip) = address else {
             continue;
         };
-        if ip.is_loopback() || ip.is_link_local() {
+        // BWU advertises a TCP unicast destination, never an unspecified,
+        // multicast, or limited-broadcast address.
+        if ip.is_loopback()
+            || ip.is_link_local()
+            || ip.is_unspecified()
+            || ip.is_multicast()
+            || ip.is_broadcast()
+        {
             continue;
         }
 
@@ -312,6 +351,77 @@ mod tests {
         payload.extend_from_slice(&[0_u8; 16]);
         payload.extend_from_slice(suffix);
         URL_SAFE_NO_PAD.encode(payload)
+    }
+
+    fn fullname(id: [u8; 4]) -> String {
+        format!("{}._FC9F5ED42C8A._tcp.local.", gen_mdns_name(id))
+    }
+
+    #[test]
+    fn given_genuine_google_mdns_instances_when_decoded_then_only_temporary_endpoint_hint_matches()
+    {
+        for id in [*b"A1b2", *b"9876", *b"aBcD", *b"Z0Z9"] {
+            let hint = parse_mdns_endpoint_id(&fullname(id)).expect("valid instance");
+            assert_eq!(hint, UnverifiedEndpointHint(id));
+            assert_eq!(format!("{hint:?}"), "UnverifiedEndpointHint([redacted])");
+        }
+        // Equal display names are not evidence, and distinct short-lived IDs
+        // never become a shared verified-device key.
+        assert_ne!(
+            parse_mdns_endpoint_id(&fullname(*b"AAAA")),
+            parse_mdns_endpoint_id(&fullname(*b"BBBB"))
+        );
+        // DNS service type comparison may ignore ASCII case, but the
+        // base64 instance must remain byte-exact and case-sensitive.
+        let mixed = format!("{}._fc9f5ed42c8a._TCP.LOCAL.", gen_mdns_name(*b"Ax9Z"));
+        assert_eq!(
+            parse_mdns_endpoint_id(&mixed),
+            Some(UnverifiedEndpointHint(*b"Ax9Z"))
+        );
+    }
+
+    #[test]
+    fn given_malformed_mdns_advertiser_claims_when_decoded_then_none_can_become_a_hint() {
+        let valid = fullname(*b"AB12");
+        let instance = gen_mdns_name(*b"AB12");
+        for malformed in [
+            "".to_owned(),
+            "AB12".to_owned(),
+            "notbase64._FC9F5ED42C8A._tcp.local.".to_owned(),
+            format!("{instance}._unrelated._tcp.local."),
+            format!("{instance}._FC9F5ED42C8A._udp.local."),
+            format!("{instance}._FC9F5ED42C8A._tcp.local.evil."),
+            format!("other.{valid}"),
+            format!("{instance}=._FC9F5ED42C8A._tcp.local."),
+            format!("%{instance}._FC9F5ED42C8A._tcp.local."),
+            format!("{}._FC9F5ED42C8A._tcp.local.", gen_mdns_name(*b"A+12")),
+        ] {
+            assert!(
+                parse_mdns_endpoint_id(&malformed).is_none(),
+                "accepted invalid instance syntax"
+            );
+        }
+        for (offset, replacement) in [
+            (0, 0x22_u8),
+            (5, 0x00_u8),
+            (6, 0xFF_u8),
+            (7, 0x5F_u8),
+            (8, 0x01_u8),
+            (9, 0x01_u8),
+            (2, 0x00_u8),
+        ] {
+            let mut wire = URL_SAFE_NO_PAD.decode(&instance).unwrap();
+            wire[offset] = replacement;
+            let wrong = format!("{}._FC9F5ED42C8A._tcp.local.", URL_SAFE_NO_PAD.encode(wire));
+            assert!(parse_mdns_endpoint_id(&wrong).is_none());
+        }
+        for length in [0_usize, 1, 4, 9, 11, 32] {
+            let wrong = format!(
+                "{}._FC9F5ED42C8A._tcp.local.",
+                URL_SAFE_NO_PAD.encode(vec![0x23; length])
+            );
+            assert!(parse_mdns_endpoint_id(&wrong).is_none());
+        }
     }
 
     #[test]
@@ -540,6 +650,164 @@ mod tests {
         for name in ["Docker0", "Wg0", "TAILSCALE0", "Warp0"] {
             assert!(is_virtual_interface(name));
         }
+    }
+
+    #[test]
+    fn given_special_non_unicast_ipv4_when_selecting_then_no_tcp_destination_is_advertised() {
+        let unusable = [
+            "0.0.0.0",
+            "224.0.0.0",
+            "224.0.0.1",
+            "239.255.255.255",
+            "255.255.255.255",
+        ];
+        for address in unusable {
+            let parsed = address.parse::<std::net::IpAddr>().unwrap();
+            assert_eq!(
+                select_lan_ipv4([("wlan0".to_owned(), parsed)]),
+                None,
+                "address={address}"
+            );
+        }
+
+        assert_eq!(
+            select_lan_ipv4(
+                unusable
+                    .iter()
+                    .map(|ip| ("wlan0".to_owned(), ip.parse().unwrap()))
+            ),
+            None,
+            "no special address may be treated as a fallback"
+        );
+    }
+
+    #[test]
+    fn given_special_ipv4_before_or_after_eligible_fallback_when_selecting_then_valid_unicast_wins()
+    {
+        for special in [
+            "0.0.0.0",
+            "224.0.0.0",
+            "224.0.0.1",
+            "239.255.255.255",
+            "255.255.255.255",
+        ] {
+            let invalid = special.parse::<std::net::IpAddr>().unwrap();
+            let public = "203.0.113.10".parse::<std::net::IpAddr>().unwrap();
+            let later = "198.51.100.20".parse::<std::net::IpAddr>().unwrap();
+            for addresses in [[invalid, public, later], [public, invalid, later]] {
+                assert_eq!(
+                    select_lan_ipv4(addresses.into_iter().map(|ip| ("eth0".to_owned(), ip))),
+                    Some([203, 0, 113, 10]),
+                    "special={special}, order={addresses:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn given_invalid_ipv4_and_private_lan_when_selecting_then_private_preference_is_preserved() {
+        let selected = select_lan_ipv4([
+            ("eth0".to_owned(), "224.1.2.3".parse().unwrap()),
+            ("eth1".to_owned(), "198.51.100.9".parse().unwrap()),
+            ("wlan0".to_owned(), "192.168.42.7".parse().unwrap()),
+            ("eth2".to_owned(), "255.255.255.255".parse().unwrap()),
+            ("eth3".to_owned(), "10.0.0.7".parse().unwrap()),
+        ]);
+        assert_eq!(selected, Some([192, 168, 42, 7]));
+    }
+
+    #[test]
+    fn given_each_rfc1918_lan_class_when_public_precedes_private_then_private_endpoint_wins() {
+        // Arrange: the phone must see the physical LAN, not an earlier WAN IP.
+        for private in [
+            "10.0.0.1",
+            "10.255.255.254",
+            "172.16.0.1",
+            "172.31.255.254",
+            "192.168.0.1",
+            "192.168.255.254",
+        ] {
+            let expected = private.parse::<std::net::Ipv4Addr>().unwrap().octets();
+            let selected = select_lan_ipv4([
+                ("eth0".into(), "203.0.113.10".parse().unwrap()),
+                ("wlan0".into(), private.parse().unwrap()),
+                ("eth1".into(), "198.51.100.20".parse().unwrap()),
+            ]);
+            assert_eq!(selected, Some(expected), "private={private}");
+        }
+    }
+
+    #[test]
+    fn given_reordered_lan_candidates_when_selecting_then_first_eligible_private_or_public_wins() {
+        // Arrange: the fallback may be seen before or after a private address.
+        let cases = [
+            (
+                vec![
+                    ("eth0", "203.0.113.10"),
+                    ("wlan0", "192.168.1.20"),
+                    ("eth1", "10.1.2.3"),
+                ],
+                [192, 168, 1, 20],
+            ),
+            (
+                vec![
+                    ("wlan0", "10.1.2.3"),
+                    ("eth0", "203.0.113.10"),
+                    ("eth1", "192.168.1.20"),
+                ],
+                [10, 1, 2, 3],
+            ),
+            (
+                vec![("eth0", "203.0.113.10"), ("eth1", "198.51.100.20")],
+                [203, 0, 113, 10],
+            ),
+            (
+                vec![("eth1", "198.51.100.20"), ("eth0", "203.0.113.10")],
+                [198, 51, 100, 20],
+            ),
+        ];
+
+        for (interfaces, expected) in cases {
+            let selected =
+                select_lan_ipv4(interfaces.iter().map(|(name, ip)| {
+                    ((*name).to_owned(), ip.parse::<std::net::IpAddr>().unwrap())
+                }));
+            assert_eq!(selected, Some(expected), "interfaces={interfaces:?}");
+        }
+        assert_eq!(select_lan_ipv4(Vec::new()), None);
+    }
+
+    #[test]
+    fn given_virtual_or_unroutable_lan_candidates_when_selecting_then_no_tunnel_is_advertised() {
+        // Arrange: even a private IP on a known tunnel must lose to physical WAN.
+        for virtual_name in [
+            "docker0",
+            "VETH1234",
+            "br-1234",
+            "virbr0",
+            "TUN0",
+            "tap2",
+            "WG0",
+            "TAILSCALE0",
+            "warp0",
+        ] {
+            let selected = select_lan_ipv4([
+                (virtual_name.to_owned(), "10.1.2.3".parse().unwrap()),
+                ("eth0".to_owned(), "203.0.113.10".parse().unwrap()),
+            ]);
+            assert_eq!(selected, Some([203, 0, 113, 10]), "{virtual_name}");
+        }
+
+        // Act/Assert: no public fallback should be fabricated from IPv6,
+        // link-local, loopback or only virtual IPv4 interfaces.
+        let invalid = [
+            ("lo".to_owned(), "127.0.0.1".parse().unwrap()),
+            ("eth0".to_owned(), "169.254.1.1".parse().unwrap()),
+            ("wlan0".to_owned(), "2001:db8::2".parse().unwrap()),
+            ("docker0".to_owned(), "172.17.0.1".parse().unwrap()),
+            ("wg0".to_owned(), "10.1.2.3".parse().unwrap()),
+        ];
+        assert_eq!(select_lan_ipv4(invalid), None);
     }
 
     #[test]

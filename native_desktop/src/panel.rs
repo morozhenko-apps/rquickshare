@@ -15,12 +15,15 @@ use rqs_lib::service::client::{
 use rqs_lib::service::{Direction, Lifecycle, Phase};
 use std::{
     cell::{Cell, RefCell},
+    collections::BTreeSet,
     rc::Rc,
     sync::Arc,
 };
 use tokio::runtime::Handle;
 
+mod about;
 mod backdrop;
+mod chrome;
 mod compose;
 mod countdown;
 mod idle;
@@ -38,6 +41,64 @@ mod surface;
 mod text;
 mod transfers;
 mod tray;
+
+/// A session-scoped projection of authoritative awaiting-consent requests.
+#[derive(Default)]
+struct DeviceAttention {
+    epoch: Option<u128>,
+    pending: BTreeSet<(String, u64)>,
+    reviewed: BTreeSet<(String, u64)>,
+    latest: Option<String>,
+}
+
+impl DeviceAttention {
+    fn observe(
+        &mut self,
+        epoch: Option<u128>,
+        requests: impl IntoIterator<Item = (String, u64)>,
+        focus_allowed: bool,
+    ) -> Option<String> {
+        if self.epoch != epoch {
+            self.epoch = epoch;
+            self.pending.clear();
+            self.reviewed.clear();
+            self.latest = None;
+        }
+        let current: BTreeSet<_> = requests.into_iter().collect();
+        let arrived = current.difference(&self.pending).last().cloned();
+        self.pending = current;
+        self.reviewed.retain(|key| self.pending.contains(key));
+        if let Some((id, _)) = arrived {
+            self.latest = Some(id.clone());
+            if focus_allowed {
+                self.review_pending();
+                return Some(id);
+            }
+        }
+        if self
+            .latest
+            .as_ref()
+            .is_some_and(|id| !self.pending.iter().any(|key| &key.0 == id))
+        {
+            self.latest = self.pending.iter().next_back().map(|key| key.0.clone());
+        }
+        None
+    }
+
+    fn has_unreviewed(&self) -> bool {
+        self.pending.iter().any(|key| !self.reviewed.contains(key))
+    }
+
+    fn review_pending(&mut self) -> Option<String> {
+        let target = self
+            .latest
+            .clone()
+            .filter(|id| self.pending.iter().any(|key| &key.0 == id))
+            .or_else(|| self.pending.iter().next_back().map(|key| key.0.clone()));
+        self.reviewed.extend(self.pending.iter().cloned());
+        target
+    }
+}
 
 #[derive(Default)]
 struct Model {
@@ -58,6 +119,7 @@ struct Model {
     safety_active: bool,
     automatic: bool,
     automatic_focus: Option<String>,
+    attention: DeviceAttention,
     manual_requested: bool,
     preview: bool,
     position_pinned: bool,
@@ -77,7 +139,7 @@ pub struct Panel {
     actions: gio::SimpleActionGroup,
     context: gtk::PopoverMenu,
     settings: RefCell<Option<gtk::Window>>,
-    about: RefCell<Option<gtk::AboutDialog>>,
+    about: RefCell<Option<Rc<about::About>>>,
     settings_owner: RefCell<Option<Rc<settings::Editor>>>,
     text_review: RefCell<Option<Rc<text::Review>>>,
     transfers: RefCell<Option<Rc<transfers::Window>>>,
@@ -140,12 +202,18 @@ fn details_card_mode_with_files(
 ) -> gtk::Box {
     let row = card();
     match details.status {
-        DetailsStatus::Unavailable => row.append(&label("Waiting for sender and payload details")),
-        DetailsStatus::Unsupported => row.append(&label(
+        DetailsStatus::Unavailable => row.append(&label(crate::i18n::label(
+            "Waiting for sender and payload details",
+        ))),
+        DetailsStatus::Unsupported => row.append(&label(crate::i18n::label(
             "This payload cannot be reviewed safely. Decline or cancel it.",
-        )),
+        ))),
         DetailsStatus::Ready => {
-            let sender = label(&format!("{} · advertised device", details.sender));
+            let sender = label(&format!(
+                "{} · {}",
+                crate::i18n::isolate_untrusted(&details.sender),
+                crate::i18n::label("advertised device")
+            ));
             if !full {
                 sender.set_wrap(false);
                 sender.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -153,45 +221,42 @@ fn details_card_mode_with_files(
             }
             sender.set_widget_name("detail-peer");
             row.append(&sender);
-            if !details.pin.is_empty() {
-                let pin = label(&format!("Code: {}", details.pin));
+            let code = crate::i18n::pin_code(&details.pin);
+            if !code.is_empty() {
+                let pin = label(&code);
                 pin.set_widget_name("detail-code");
                 pin.add_css_class("verification-code");
                 row.append(&pin);
-                row.append(&label(
+                row.append(&label(crate::i18n::label(
                     "Check this code on the sending device before accepting.",
-                ));
+                )));
             }
             if details.kind != rqs_lib::sessions::details::PayloadKind::Files {
+                let kind = if details.kind == rqs_lib::sessions::details::PayloadKind::Url {
+                    "Link"
+                } else {
+                    "Text"
+                };
                 let summary = label(&format!(
-                    "{} · {} bytes",
-                    if details.kind == rqs_lib::sessions::details::PayloadKind::Url {
-                        "Link"
-                    } else {
-                        "Text"
-                    },
-                    details.total_bytes
+                    "{} · {}",
+                    crate::i18n::label(kind),
+                    crate::i18n::byte_count(details.total_bytes)
                 ));
                 summary.set_widget_name("detail-summary");
                 row.append(&summary);
                 return row;
             }
             let summary = label(&format!(
-                "{} {} · {} bytes",
-                details.files.len(),
-                if details.files.len() == 1 {
-                    "file"
-                } else {
-                    "files"
-                },
-                details.total_bytes
+                "{} · {}",
+                crate::i18n::file_count(details.files.len()),
+                crate::i18n::byte_count(details.total_bytes)
             ));
             summary.set_widget_name("detail-summary");
             row.append(&summary);
             if !full {
                 return row;
             }
-            let expander = gtk::Expander::new(Some("Review all files"));
+            let expander = gtk::Expander::new(Some(crate::i18n::label("Review all files")));
             expander.set_widget_name("detail-manifest");
             let files = details.files.clone();
             // File widgets are materialized only while expanded, bounded by the manifest limit.
@@ -200,7 +265,11 @@ fn details_card_mode_with_files(
                     let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
                     for (index, file) in files.iter().enumerate() {
                         let row = gtk::Box::new(gtk::Orientation::Vertical, 4);
-                        row.append(&label(&format!("{} · {} bytes", file.name, file.size)));
+                        row.append(&label(&format!(
+                            "{} · {}",
+                            crate::i18n::isolate_untrusted(&file.name),
+                            crate::i18n::byte_count(file.size)
+                        )));
                         if let Some(action) = &action {
                             action(&row, index as u32);
                         }
@@ -239,15 +308,19 @@ fn saved_files_card(
     action: Option<Rc<FileAction>>,
 ) -> gtk::Box {
     let row = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    row.append(&label(&format!("Saved {} of {} files", files.len(), total)));
+    row.append(&label(&crate::i18n::saved_files_tally(files.len(), total)));
     if full && !files.is_empty() {
-        let saved = gtk::Expander::new(Some("Saved files"));
+        let saved = gtk::Expander::new(Some(crate::i18n::label("Saved files")));
         saved.connect_expanded_notify(move |saved| {
             if saved.is_expanded() {
                 let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
                 for (index, file) in files.iter().enumerate() {
                     let item = gtk::Box::new(gtk::Orientation::Vertical, 4);
-                    item.append(&label(&format!("{} · {} bytes", file.name, file.size)));
+                    item.append(&label(&format!(
+                        "{} · {}",
+                        crate::i18n::isolate_untrusted(&file.name),
+                        crate::i18n::byte_count(file.size)
+                    )));
                     if let Some(action) = &action {
                         action(&item, index as u32);
                     }
@@ -270,16 +343,9 @@ fn source_summary(
 ) -> String {
     use rqs_lib::sessions::details::PayloadKind;
     match kind {
-        PayloadKind::Files => format!("{} files prepared · choose a device", file_count),
-        PayloadKind::Text | PayloadKind::Url => format!(
-            "{} prepared · {} bytes · choose a device",
-            if kind == PayloadKind::Url {
-                "Link"
-            } else {
-                "Text"
-            },
-            byte_count
-        ),
+        PayloadKind::Files => crate::i18n::prepared_files(file_count),
+        PayloadKind::Text => crate::i18n::prepared_content(false, byte_count),
+        PayloadKind::Url => crate::i18n::prepared_content(true, byte_count),
     }
 }
 
@@ -348,6 +414,7 @@ impl Panel {
         layer: bool,
     ) -> Rc<Self> {
         let builder = gtk::Builder::from_string(include_str!("../ui/panel.ui"));
+        crate::i18n::localize_panel(&builder);
         let window: gtk::Window = builder.object("panel").expect("panel widget");
         window.set_application(Some(application));
         window.set_icon_name(Some(crate::tray::ICON_NAME));
@@ -365,7 +432,7 @@ impl Panel {
             &provider,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
-        let reconnect_button = gtk::Button::with_label("Retry connection");
+        let reconnect_button = gtk::Button::with_label(crate::i18n::label("Retry connection"));
         reconnect_button.set_action_name(Some("panel.reconnect"));
         builder
             .object::<gtk::Box>("recovery")
@@ -382,7 +449,15 @@ impl Panel {
         overlay.set_widget_name("controls-overlay");
         let backdrop = backdrop::Backdrop::new(&compact);
         overlay.set_child(Some(&backdrop));
-        let curtain = gtk::Button::with_label("Choose target devices\nClear prepared files");
+        let curtain = gtk::Button::with_label(&format!(
+            "{}\n{}",
+            crate::i18n::label("Choose target devices"),
+            crate::i18n::label("Clear prepared files")
+        ));
+        curtain.update_property(&[
+            gtk::accessible::Property::Label(crate::i18n::label("Clear prepared files")),
+            gtk::accessible::Property::Description(crate::i18n::label("Choose target devices")),
+        ]);
         curtain.set_widget_name("selection-curtain");
         curtain.set_action_name(Some("panel.discard"));
         curtain.add_css_class("selection-curtain");
@@ -563,7 +638,7 @@ impl Panel {
             self.close_image();
             self.close_reveal();
         }
-        {
+        let focus = {
             let mut model = self.model.borrow_mut();
             model.state = state;
             if !model.state.disconnected {
@@ -576,7 +651,46 @@ impl Panel {
                     );
                 }
             }
-        }
+            let epoch = model
+                .state
+                .view
+                .as_ref()
+                .filter(|view| !model.state.disconnected && view.synchronized)
+                .map(|view| view.epoch);
+            let pending = model
+                .state
+                .view
+                .as_ref()
+                .filter(|view| epoch == Some(view.epoch))
+                .map(|view| {
+                    view.transfers
+                        .iter()
+                        .filter(|transfer| {
+                            transfer.direction == Direction::Inbound
+                                && transfer.phase == Phase::AwaitingConsent
+                        })
+                        .map(|transfer| {
+                            (
+                                transfer.transfer.id().to_owned(),
+                                transfer.consent_revision.unwrap_or_default(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let user_busy = model.waiting
+                || model.input_active
+                || model.dialog.is_some()
+                || gtk::prelude::GtkWindowExt::focus(&self.window).is_some_and(|focus| {
+                    matches!(focus.widget_name().as_str(), "accept" | "decline")
+                });
+            let focus_allowed = model.drawer == Drawer::Open
+                && !model.preview
+                && self.window.is_visible()
+                && (!model.safety_active || model.safety.manual_allowed())
+                && !user_busy;
+            model.attention.observe(epoch, pending, focus_allowed)
+        };
         if let Some(editor) = self.settings_owner.borrow().as_ref() {
             editor.refresh();
         }
@@ -586,6 +700,12 @@ impl Panel {
         self.refresh_reveal();
         self.render();
         self.apply_presentation();
+        if let Some(id) = focus {
+            if self.window.is_visible() && self.drawer() == Drawer::Open {
+                self.pages.set_visible_child_name("nearby");
+                self.focus_transfer(&id);
+            }
+        }
     }
     pub fn bind_desktop(&self, desktop: DesktopHandle) {
         self.desktop.replace(Some(desktop));
@@ -673,7 +793,7 @@ impl Panel {
     }
     pub fn notice(&self, text: &'static str) {
         self.model.borrow_mut().notice = Some(text);
-        self.text("status", text);
+        self.text("status", crate::i18n::label(text));
         self.builder
             .object::<gtk::Label>("status")
             .unwrap()
@@ -710,7 +830,7 @@ impl Panel {
             settings.destroy();
         }
         if let Some(about) = self.about.borrow_mut().take() {
-            about.destroy();
+            about.window.destroy();
         }
         if let Some(window) = self.transfers.borrow_mut().take() {
             window.close();
@@ -899,6 +1019,45 @@ impl Panel {
             });
         }
     }
+    /// Repaint presentation only; retain the controller, daemon, consent and transfer owners.
+    pub(super) fn retranslate(self: &Rc<Self>) {
+        crate::i18n::localize_panel(&self.builder);
+        self.reconnect_button
+            .set_label(crate::i18n::label("Retry connection"));
+        self.curtain.set_label(&format!(
+            "{}\n{}",
+            crate::i18n::label("Choose target devices"),
+            crate::i18n::label("Clear prepared files")
+        ));
+        self.curtain.update_property(&[
+            gtk::accessible::Property::Label(crate::i18n::label("Clear prepared files")),
+            gtk::accessible::Property::Description(crate::i18n::label("Choose target devices")),
+        ]);
+        self.refresh_localized_menus();
+        if let Some(history) = self.transfers.borrow().as_ref() {
+            history.retranslate();
+        }
+        if let Some(review) = self.text_review.borrow().as_ref() {
+            review.retranslate();
+        }
+        if let Some(composer) = self.composer.borrow().as_ref() {
+            composer.retranslate();
+        }
+        if let Some(image) = self.image.borrow().as_ref() {
+            image.retranslate();
+        }
+        if let Some(about) = self.about.borrow().as_ref() {
+            about.retranslate();
+        }
+        if let Some(handle) = self.tray_menu.borrow().as_ref() {
+            handle.refresh_labels();
+        }
+        // GTK row controls and tooltips are localized when first constructed.
+        // Rebuild only their presentation cache; Core transfers and consent remain owned.
+        self.rows.borrow_mut().clear();
+        self.render();
+    }
+
     pub fn render(self: &Rc<Self>) {
         self.schedule_results();
         // Publish after readiness/action updates using an immutable model projection.
@@ -919,11 +1078,25 @@ impl Panel {
         self.box_widget("device-drawer").set_visible(full);
         self.pages.set_visible(full);
         self.box_widget("compact").set_visible(true);
-        self.button("quick-devices").set_tooltip_text(Some(if full {
+        let devices = self.button("quick-devices");
+        devices.set_tooltip_text(Some(crate::i18n::label(if full {
             "Hide devices and transfers"
         } else {
             "Show devices and transfers"
-        }));
+        })));
+        let attention = !preview && !full && model.attention.has_unreviewed();
+        if attention {
+            devices.add_css_class("devices-attention");
+        } else {
+            devices.remove_css_class("devices-attention");
+        }
+        let animations = gtk::Settings::default()
+            .is_some_and(|settings| settings.property::<bool>("gtk-enable-animations"));
+        if attention && animations {
+            devices.add_css_class("devices-pulse");
+        } else {
+            devices.remove_css_class("devices-pulse");
+        }
         let ready = !preview
             && (!model.safety_active || model.safety.manual_allowed())
             && controls_ready(
@@ -954,6 +1127,7 @@ impl Panel {
         } else {
             "Review an incoming request or become visible for one minute"
         };
+        let description = crate::i18n::label(description);
         receive.set_tooltip_text(Some(description));
         receive.update_property(&[gtk::accessible::Property::Description(description)]);
         let visibility_action = self
@@ -993,6 +1167,7 @@ impl Panel {
             .state
             .view
             .as_ref()
+            .filter(|view| !model.state.disconnected && view.synchronized)
             .map(|view| {
                 view.transfers
                     .iter()
@@ -1003,12 +1178,14 @@ impl Panel {
                     .count()
             })
             .unwrap_or(0);
+        self.text("quick-receive-label", crate::i18n::label("Receive"));
+        let devices_label = crate::i18n::label("Devices");
         self.text(
-            "quick-receive-label",
+            "quick-devices-label",
             &if waiting_requests == 0 {
-                "Receive".into()
+                devices_label.into()
             } else {
-                format!("Receive ({waiting_requests})")
+                format!("{devices_label} ({waiting_requests})")
             },
         );
         for (name, enabled) in [
@@ -1042,7 +1219,8 @@ impl Panel {
         self.button("discard").set_sensitive(ready && selected);
         self.button("files").set_visible(selected && can_add);
         self.button("folder").set_visible(false);
-        self.button("files").set_label("Add files…");
+        self.button("files")
+            .set_label(crate::i18n::label("Add files…"));
         self.button("discard").set_visible(selected);
         for (name, enabled) in [
             ("files", ready && can_add),
@@ -1177,7 +1355,7 @@ impl Panel {
         } else {
             error_message(None)
         };
-        self.text("status", status);
+        self.text("status", crate::i18n::label(status));
         self.builder
             .object::<gtk::Label>("status")
             .unwrap()
@@ -1190,11 +1368,13 @@ impl Panel {
             self.rows.borrow_mut().clear();
             for id in ["nearby", "incoming", "transfers"] {
                 clear(&self.box_widget(id));
-                self.box_widget(id).append(&label(if preview {
+                let caption = if preview {
                     "Preview only"
                 } else {
                     "Waiting for complete service state"
-                }));
+                };
+                self.box_widget(id)
+                    .append(&label(crate::i18n::label(caption)));
             }
             if let Some(page) = model.preview_page.as_deref() {
                 self.render_preview(page);
@@ -1251,7 +1431,7 @@ impl Panel {
         let row = details_card_mode(&transfer.details, full);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         for (title, accept) in [("Decline", false), ("Accept", true)] {
-            let button = gtk::Button::with_label(title);
+            let button = gtk::Button::with_label(crate::i18n::label(title));
             button.set_widget_name(if accept { "accept" } else { "decline" });
             button.set_sensitive(
                 ready
@@ -1304,39 +1484,40 @@ impl Panel {
                 full,
                 self.file_action(transfer, full),
             ));
-            row.append(&label(if transfer.completed_files.is_empty() {
+            let saved_notice = if transfer.completed_files.is_empty() {
                 "No complete files were saved. Ask the sender to send again."
             } else {
                 "Completed files were kept. Ask the sender to resend the remaining files."
-            }));
+            };
+            row.append(&label(crate::i18n::label(saved_notice)));
         }
         if let Some(recipient) = &transfer.recipient {
-            row.prepend(&label(&format!("Recipient: {recipient}")));
+            row.prepend(&label(&crate::i18n::transfer_recipient(recipient)));
         }
-        let phase = label(phase_text(transfer.phase));
+        let phase = label(crate::i18n::transfer_phase(phase_text(transfer.phase)));
         phase.set_widget_name("phase");
         row.append(&phase);
         if transfer.details.status == DetailsStatus::Ready {
-            let progress = label(&format!(
-                "{} / {} bytes locally {}",
+            let kind = if transfer.direction == Direction::Inbound {
+                if transfer.details.kind == rqs_lib::sessions::details::PayloadKind::Files {
+                    crate::i18n::ProgressKind::Written
+                } else {
+                    crate::i18n::ProgressKind::Received
+                }
+            } else {
+                crate::i18n::ProgressKind::Sent
+            };
+            let progress = label(&crate::i18n::transfer_progress(
                 transfer.details.transferred_bytes,
                 transfer.details.total_bytes,
-                if transfer.direction == Direction::Inbound {
-                    if transfer.details.kind == rqs_lib::sessions::details::PayloadKind::Files {
-                        "written"
-                    } else {
-                        "received"
-                    }
-                } else {
-                    "sent"
-                }
+                kind,
             ));
             progress.set_widget_name("progress");
             row.append(&progress);
         }
         if full && transfer.direction == Direction::Inbound && transfer.phase == Phase::Finished {
             if let Some(revision) = transfer.content_revision {
-                let review = gtk::Button::with_label("Review text");
+                let review = gtk::Button::with_label(crate::i18n::label("Review text"));
                 review.set_widget_name("review-text");
                 review.set_sensitive(ready);
                 let weak = Rc::downgrade(self);
@@ -1352,7 +1533,7 @@ impl Panel {
             }
         }
         if full && transfer.reveal_revision.is_some() {
-            let cancel = gtk::Button::with_label("Cancel folder request");
+            let cancel = gtk::Button::with_label(crate::i18n::label("Cancel folder request"));
             cancel.set_widget_name("cancel-reveal");
             cancel.set_visible(self.revealing(&transfer.transfer));
             let weak = Rc::downgrade(self);
@@ -1366,7 +1547,7 @@ impl Panel {
             row.append(&cancel);
         }
         if !transfer.phase.is_terminal() {
-            let cancel = gtk::Button::with_label("Cancel");
+            let cancel = gtk::Button::with_label(crate::i18n::label("Cancel"));
             cancel.set_widget_name("cancel");
             cancel.set_sensitive(
                 ready
@@ -1545,7 +1726,7 @@ impl Panel {
         }
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         for title in ["Decline", "Accept"] {
-            let button = gtk::Button::with_label(title);
+            let button = gtk::Button::with_label(crate::i18n::label(title));
             button.set_sensitive(false);
             actions.append(&button);
         }
@@ -1556,7 +1737,7 @@ impl Panel {
             clear(&nearby);
             let review = gtk::Box::new(gtk::Orientation::Horizontal, 8);
             for (name, title) in [("decline", "Decline"), ("accept", "Accept")] {
-                let button = gtk::Button::with_label(title);
+                let button = gtk::Button::with_label(crate::i18n::label(title));
                 button.set_widget_name(name);
                 button.set_sensitive(false);
                 review.append(&button);
@@ -1573,8 +1754,15 @@ impl Panel {
                     next = child.next_sibling();
                     if child.widget_name() == "row-summary" {
                         let summary = child.downcast::<gtk::Label>().unwrap();
-                        summary.set_text("PDF · Code: 4821");
-                        summary.set_tooltip_text(Some("Check this code on the sending device before accepting.\nExample.pdf · 12345 bytes"));
+                        summary.set_text(&format!("PDF · {}", crate::i18n::pin_code("4821")));
+                        summary.set_tooltip_text(Some(&format!(
+                            "{}\n{} · {}",
+                            crate::i18n::label(
+                                "Check this code on the sending device before accepting."
+                            ),
+                            crate::i18n::isolate_untrusted("Example.pdf"),
+                            crate::i18n::byte_count(12345),
+                        )));
                     }
                 }
             }
@@ -1583,14 +1771,19 @@ impl Panel {
 
         let transfers = self.box_widget("transfers");
         clear(&transfers);
-        for (recipient, status) in [
-            ("Example phone", "2048 / 12345 bytes locally sent"),
-            ("Example laptop", "Queued"),
+        for (recipient, progress) in [
+            ("Example phone", Some((2048, 12345))),
+            ("Example laptop", None),
         ] {
             let row = card();
-            row.append(&label(&format!("Recipient: {recipient}")));
-            row.append(&label(status));
-            let cancel = gtk::Button::with_label("Cancel");
+            row.append(&label(&crate::i18n::transfer_recipient(recipient)));
+            let status = if let Some((transferred, total)) = progress {
+                crate::i18n::transfer_progress(transferred, total, crate::i18n::ProgressKind::Sent)
+            } else {
+                crate::i18n::transfer_phase("Queued").to_string()
+            };
+            row.append(&label(&status));
+            let cancel = gtk::Button::with_label(crate::i18n::label("Cancel"));
             cancel.set_sensitive(false);
             row.append(&cancel);
             transfers.append(&row);

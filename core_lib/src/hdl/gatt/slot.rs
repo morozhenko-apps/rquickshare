@@ -162,6 +162,62 @@ mod tests {
     }
 
     #[test]
+    fn given_invalid_coherent_offsets_when_epoch_rotates_then_peer_snapshot_is_not_consumed_or_spliced(
+    ) {
+        // Arrange: a coherent long read pins the original epoch for one peer.
+        let mut slot = SlotValue::new(b"abcdef".to_vec(), true);
+        assert_eq!(slot.read(peer(1), 0).unwrap(), b"abcdef");
+        slot.install(b"XYZ".to_vec());
+
+        // Act / Assert: malformed continuation offsets cannot consume the
+        // snapshot or expose bytes from the newly installed advertisement.
+        for offset in [7, 8, usize::MAX] {
+            assert_eq!(slot.read(peer(1), offset), None);
+            assert_eq!(slot.read(peer(2), offset), None);
+            assert_eq!(slot.reads.len(), 1);
+            assert_eq!(slot.read(peer(1), 1).unwrap(), b"bcdef");
+        }
+        assert_eq!(slot.read(peer(1), 6).unwrap(), b"");
+        assert_eq!(slot.read(peer(1), 1), None);
+        assert_eq!(slot.read(peer(1), 0).unwrap(), b"XYZ");
+        assert_eq!(slot.read(peer(1), 1).unwrap(), b"YZ");
+    }
+
+    #[test]
+    fn given_full_coherent_slot_cache_when_existing_owner_restarts_then_other_peer_leases_survive()
+    {
+        // Arrange: every lease initially pins the old advertisement.
+        let mut slot = SlotValue::new(b"previous".to_vec(), true);
+        for index in 0..READ_LIMIT {
+            assert_eq!(slot.read(peer(index as u8), 0).unwrap(), b"previous");
+        }
+        assert_eq!(slot.reads.len(), READ_LIMIT);
+        slot.install(b"current".to_vec());
+
+        // Act: refreshing an existing owner must not evict an unrelated peer.
+        for _ in 0..64 {
+            assert_eq!(slot.read(peer(7), 0).unwrap(), b"current");
+            assert_eq!(slot.reads.len(), READ_LIMIT);
+        }
+
+        // Assert: all other owners retain the original epoch.
+        for index in 0..READ_LIMIT {
+            let expected = if index == 7 {
+                &b"urrent"[..]
+            } else {
+                &b"revious"[..]
+            };
+            assert_eq!(slot.read(peer(index as u8), 1).unwrap(), expected);
+        }
+        assert_eq!(slot.reads.len(), READ_LIMIT);
+        assert_eq!(slot.read(peer(32), 0).unwrap(), b"current");
+        assert_eq!(slot.reads.len(), READ_LIMIT);
+        assert_eq!(slot.read(peer(0), 1), None);
+        assert_eq!(slot.read(peer(7), 1).unwrap(), b"urrent");
+        assert_eq!(slot.read(peer(31), 1).unwrap(), b"revious");
+    }
+
+    #[test]
     fn given_long_read_when_name_changes_then_continuation_uses_original_bytes() {
         let mut slot = SlotValue::new(b"Original name".to_vec(), true);
         assert_eq!(slot.read(peer(1), 0).unwrap(), b"Original name");

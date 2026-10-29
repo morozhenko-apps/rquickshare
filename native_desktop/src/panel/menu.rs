@@ -9,12 +9,17 @@ impl Panel {
         let weak = Rc::downgrade(self);
         devices.connect_activate(move |_, _| {
             if let Some(panel) = weak.upgrade() {
-                let drawer = panel.drawer();
-                panel.set_drawer(if drawer == Drawer::Closed {
-                    Drawer::Open
+                if panel.drawer() == Drawer::Closed {
+                    let target = panel.model.borrow_mut().attention.review_pending();
+                    panel.set_drawer(Drawer::Open);
+                    panel.pages.set_visible_child_name("nearby");
+                    panel.render();
+                    if let Some(id) = target {
+                        panel.focus_transfer(&id);
+                    }
                 } else {
-                    Drawer::Closed
-                });
+                    panel.set_drawer(Drawer::Closed);
+                }
             }
         });
         self.actions.add_action(&devices);
@@ -92,29 +97,11 @@ impl Panel {
                         panel.set_drawer(Drawer::Open);
                         panel.pages.set_visible_child_name("nearby");
                         panel.render();
-                        let ids = panel
-                            .model
-                            .borrow()
-                            .state
-                            .view
-                            .as_ref()
-                            .map(|view| {
-                                view.transfers
-                                    .iter()
-                                    .filter(|transfer| {
-                                        if name == "incoming" {
-                                            transfer.direction == Direction::Inbound
-                                                && transfer.phase == Phase::AwaitingConsent
-                                        } else {
-                                            !transfer.phase.is_terminal()
-                                        }
-                                    })
-                                    .map(|transfer| transfer.transfer.id().to_owned())
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
-                        if name != "nearby" {
-                            for id in ids {
+                        if name == "incoming" {
+                            // One authoritative consent target avoids competing GTK
+                            // focus/scroll callbacks for other pending requests.
+                            let target = panel.model.borrow_mut().attention.review_pending();
+                            if let Some(id) = target {
                                 panel.focus_transfer(&id);
                             }
                         }
@@ -160,49 +147,10 @@ impl Panel {
                 }
             });
         });
-        let menu = gio::Menu::new();
-        let visibility = gio::Menu::new();
-        for (title, target) in [
-            ("Visible", "visible"),
-            ("Hidden", "hidden"),
-            ("Visible for one minute", "temporary"),
-        ] {
-            visibility.append(Some(title), Some(&format!("panel.visibility::{target}")));
-        }
-        let navigation = gio::Menu::new();
-        for (name, title) in [
-            ("receive", "Receive files"),
-            ("send", "Send files…"),
-            ("transfers", "History"),
-        ] {
-            navigation.append(Some(title), Some(&format!("panel.{name}")));
-        }
-        menu.append_section(None, &navigation);
-        menu.append_section(Some("Discovery visibility"), &visibility);
-        let secondary = gio::Menu::new();
-        for (name, title) in [
-            ("settings", "Settings…"),
-            ("about", "About rQuickShare"),
-            ("hide", "Hide card"),
-            ("quit", "Quit panel"),
-        ] {
-            secondary.append(Some(title), Some(&format!("panel.{name}")));
-        }
-        menu.append_section(None, &secondary);
-        let sending = gio::Menu::new();
-        for (name, title) in [
-            ("files", "Files…"),
-            ("folder", "Folder…"),
-            ("send-text", "Text or link…"),
-            ("send-clipboard", "Clipboard"),
-        ] {
-            sending.append(Some(title), Some(&format!("panel.{name}")));
-        }
-        self.sending.set_menu_model(Some(&sending));
+        self.refresh_localized_menus();
         self.sending.set_parent(&self.button("quick-send"));
         self.sending.set_position(gtk::PositionType::Top);
         self.configure_movement();
-        self.context.set_menu_model(Some(&menu));
         self.context.set_parent(&self.box_widget("root"));
         let gesture = gtk::GestureClick::new();
         gesture.set_button(3);
@@ -330,6 +278,64 @@ impl Panel {
             .set_state(&(drawer == Drawer::Open).to_variant());
         self.render();
     }
+    pub(super) fn refresh_localized_menus(&self) {
+        let menu = gio::Menu::new();
+        let visibility = gio::Menu::new();
+        for (title, target) in [
+            ("Visible", "visible"),
+            ("Hidden", "hidden"),
+            ("Visible for one minute", "temporary"),
+        ] {
+            visibility.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.visibility::{target}")),
+            );
+        }
+        let navigation = gio::Menu::new();
+        for (name, title) in [
+            ("receive", "Receive files"),
+            ("send", "Send files…"),
+            ("transfers", "History"),
+        ] {
+            navigation.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
+        }
+        menu.append_section(None, &navigation);
+        menu.append_section(
+            Some(crate::i18n::label("Discovery visibility")),
+            &visibility,
+        );
+        let secondary = gio::Menu::new();
+        for (name, title) in [
+            ("settings", "Settings…"),
+            ("about", "Tray About"),
+            ("hide", "Hide card"),
+            ("quit", "Tray Quit"),
+        ] {
+            secondary.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
+        }
+        menu.append_section(None, &secondary);
+        let sending = gio::Menu::new();
+        for (name, title) in [
+            ("files", "Files…"),
+            ("folder", "Folder…"),
+            ("send-text", "Text or link…"),
+            ("send-clipboard", "Clipboard"),
+        ] {
+            sending.append(
+                Some(crate::i18n::label(title)),
+                Some(&format!("panel.{name}")),
+            );
+        }
+        self.sending.set_menu_model(Some(&sending));
+        self.context.set_menu_model(Some(&menu));
+    }
+
     fn show_settings(self: &Rc<Self>) {
         {
             let model = self.model.borrow();
@@ -356,25 +362,79 @@ impl Panel {
         }
         self.mark_manual();
         if let Some(about) = self.about.borrow().as_ref() {
-            about.present();
+            about.retranslate();
+            about.window.present();
             return;
         }
-        let about = gtk::AboutDialog::builder()
-            .transient_for(&self.window)
-            .application(&self.window.application().unwrap())
-            .program_name("rQuickShare")
-            .version(env!("CARGO_PKG_VERSION"))
-            .comments(
-                "Independent fork of Martichou/rquickshare. Send and receive nearby files and text",
-            )
-            .logo_icon_name(crate::tray::ICON_NAME)
-            .license_type(gtk::License::Gpl30Only)
-            .website("https://github.com/morozhenko-apps/rquickshare")
-            .website_label("Project website")
-            .build();
-        about.set_hide_on_close(true);
-        self.watch_idle_widget(&about);
+        let about = Rc::new(super::about::About::new(&self.window));
+        self.watch_idle_widget(&about.window);
         self.about.replace(Some(about.clone()));
-        about.present();
+        about.window.present();
+    }
+}
+
+#[cfg(test)]
+mod incoming_navigation_tests {
+    use super::*;
+
+    #[test]
+    fn given_new_consent_with_lower_lexical_id_when_incoming_is_opened_then_latest_sender_is_selected(
+    ) {
+        // Arrival order, not lexical order, selects the single review target.
+        let mut attention = DeviceAttention::default();
+        assert_eq!(
+            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
+            None
+        );
+        assert_eq!(
+            attention.observe(
+                Some(17),
+                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+                false,
+            ),
+            None
+        );
+
+        assert_eq!(attention.review_pending().as_deref(), Some("aa-sender"));
+        assert!(!attention.has_unreviewed());
+    }
+
+    #[test]
+    fn given_same_pending_snapshot_after_review_when_replayed_then_focus_does_not_retrigger() {
+        let mut attention = DeviceAttention::default();
+        assert_eq!(
+            attention.observe(Some(17), [("sender".into(), 1)], false),
+            None
+        );
+        assert_eq!(attention.review_pending().as_deref(), Some("sender"));
+
+        assert_eq!(
+            attention.observe(Some(17), [("sender".into(), 1)], true),
+            None
+        );
+        assert!(!attention.has_unreviewed());
+    }
+
+    #[test]
+    fn given_latest_consent_withdrawn_when_incoming_is_opened_then_remaining_sender_is_selected() {
+        let mut attention = DeviceAttention::default();
+        assert_eq!(
+            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
+            None
+        );
+        assert_eq!(
+            attention.observe(
+                Some(17),
+                [("zz-sender".into(), 1), ("aa-sender".into(), 1)],
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            attention.observe(Some(17), [("zz-sender".into(), 1)], false),
+            None
+        );
+
+        assert_eq!(attention.review_pending().as_deref(), Some("zz-sender"));
     }
 }

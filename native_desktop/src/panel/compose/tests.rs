@@ -97,6 +97,32 @@ pub(in crate::panel) fn verify_composer_smoke(panel: &Rc<Panel>, application: &g
     composer.editor.emit_by_name::<()>("paste-clipboard", &[]);
     finish(&composer);
     assert_eq!(composer.body().unwrap().text(), "edited");
+    // Locale repaint must not touch unsent text, ownership or clipboard.
+    let source_before = composer.status_source.get();
+    let clipboard_before = glib::MainContext::default()
+        .block_on(clipboard.read_text_future())
+        .unwrap()
+        .unwrap();
+    composer.retranslate();
+    assert_eq!(composer.body().unwrap().text(), "edited");
+    assert_eq!(composer.status_source.get(), source_before);
+    assert_eq!(composer.status.text(), crate::i18n::label(source_before));
+    assert_eq!(
+        composer.window.title().as_deref(),
+        Some(crate::i18n::label("Send text"))
+    );
+    assert_eq!(
+        composer.prepare.label().as_deref(),
+        Some(crate::i18n::label("Prepare text"))
+    );
+    assert_eq!(
+        glib::MainContext::default()
+            .block_on(clipboard.read_text_future())
+            .unwrap()
+            .unwrap(),
+        clipboard_before
+    );
+    assert_eq!(attempts.get(), 1);
     for value in ["x".repeat(MAX_TEXT_BYTES + 1), "".to_owned()] {
         clipboard.set_text(&value);
         composer.paste.emit_clicked();
@@ -140,18 +166,35 @@ pub(in crate::panel) fn verify_composer_smoke(panel: &Rc<Panel>, application: &g
 #[test]
 fn given_prepared_source_metadata_when_summarized_then_text_is_never_mislabeled_as_files_or_exposes_body(
 ) {
-    // Arrange / Act / Assert
+    // The visible summary describes local preparation, never a sent payload.
     use rqs_lib::sessions::details::PayloadKind;
-    assert_eq!(
-        source_summary(PayloadKind::Text, 0, 12),
-        "Text prepared · 12 bytes · choose a device"
-    );
-    assert_eq!(
-        source_summary(PayloadKind::Url, 0, 7),
-        "Link prepared · 7 bytes · choose a device"
-    );
-    assert_eq!(
-        source_summary(PayloadKind::Files, 3, 7),
-        "3 files prepared · choose a device"
-    );
+    let text = source_summary(PayloadKind::Text, u32::MAX, 12);
+    let link = source_summary(PayloadKind::Url, u32::MAX, 7);
+    let files = source_summary(PayloadKind::Files, 3, u64::MAX);
+    assert_eq!(text, crate::i18n::prepared_content(false, 12));
+    assert_eq!(link, crate::i18n::prepared_content(true, 7));
+    assert_eq!(files, crate::i18n::prepared_files(3));
+    assert!(text.starts_with(crate::i18n::label("Text")));
+    assert!(link.starts_with(crate::i18n::label("Link")));
+    assert!(files.starts_with(&crate::i18n::file_count(3)));
+    assert!(text.contains(&crate::i18n::byte_count(12)));
+    assert!(link.contains(&crate::i18n::byte_count(7)));
+    assert!(!text.contains(&crate::i18n::file_count(u32::MAX as usize)));
+    assert_ne!(text, link);
+    for count in [0, 1, 2, u32::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Files, count, 0),
+            crate::i18n::prepared_files(count)
+        );
+    }
+    for bytes in [0, 1, 1024, u64::MAX] {
+        assert_eq!(
+            source_summary(PayloadKind::Text, 0, bytes),
+            crate::i18n::prepared_content(false, bytes)
+        );
+        assert_eq!(
+            source_summary(PayloadKind::Url, 0, bytes),
+            crate::i18n::prepared_content(true, bytes)
+        );
+    }
 }

@@ -21,6 +21,7 @@ pub(crate) struct Fixture {
 pub(crate) fn fixture() -> Fixture {
     let (sender, receiver) = ManagedSender::channel().unwrap();
     let events = sender.sessions().subscribe_fresh().unwrap();
+    let route_proofs = sender.sessions().subscribe_route_proofs_fresh().unwrap();
     let (discovery, observed) = broadcast::channel(128);
     Fixture {
         runtime: NativeRuntime::assemble(
@@ -28,6 +29,7 @@ pub(crate) fn fixture() -> Fixture {
             Coordinator::new(123, Limits::default()).unwrap(),
             sender,
             events,
+            route_proofs,
             observed,
         ),
         receiver,
@@ -185,7 +187,13 @@ fn given_existing_discovery_when_name_or_route_changes_then_shared_revision_chan
         runtime.snapshot(client).unwrap().revision,
         second.revision + 1
     );
-    assert_eq!(runtime.routes[&id].addr.port(), 4321);
+    let replaced_id = runtime.endpoints()[0].id.clone();
+    assert_ne!(
+        replaced_id, id,
+        "new socket requires a fresh route identity"
+    );
+    assert!(!runtime.routes.contains_key(&id));
+    assert_eq!(runtime.routes[&replaced_id].addr.port(), 4321);
     info.present = Some(false);
     runtime.discovered(info.clone()).unwrap();
     let removed = runtime.snapshot(client).unwrap();
@@ -193,6 +201,468 @@ fn given_existing_discovery_when_name_or_route_changes_then_shared_revision_chan
     assert!(runtime.routes.is_empty() && runtime.coordinator.endpoints.is_empty());
     runtime.discovered(info).unwrap();
     assert_eq!(runtime.snapshot(client).unwrap().revision, removed.revision);
+}
+
+#[test]
+fn given_duplicate_named_routes_when_minimal_mdns_tombstone_arrives_then_only_matching_route_is_retired(
+) {
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    let client = runtime.connect().unwrap();
+    runtime.discovered(advertisement("peer-a.local.")).unwrap();
+    runtime.discovered(advertisement("peer-b.local.")).unwrap();
+    let first = runtime.endpoints();
+    assert_eq!(first.len(), 2);
+    assert_eq!(first[0].name, first[1].name);
+    let first_id = first[0].id.clone();
+    let second_id = first[1].id.clone();
+
+    // A real mDNS tombstone carries no name, IP or port. Its cached fullname
+    // must still revoke the exact matching route, never a same-named neighbor.
+    let removed = EndpointInfo {
+        fullname: "peer-a.local.".into(),
+        id: "127.0.0.1:1234".into(),
+        present: Some(false),
+        ..Default::default()
+    };
+    let revision_before = runtime.snapshot(client).unwrap().revision;
+    runtime.discovered(removed.clone()).unwrap();
+    let remaining = runtime.endpoints();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].id, second_id);
+    assert!(!runtime.routes.contains_key(&first_id));
+    assert!(runtime.routes.contains_key(&second_id));
+    assert!(runtime.snapshot(client).unwrap().revision > revision_before);
+
+    // Duplicate or unknown tombstones must not withdraw another device.
+    runtime.discovered(removed).unwrap();
+    runtime
+        .discovered(EndpointInfo {
+            fullname: "unknown.local.".into(),
+            present: Some(false),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(runtime.endpoints(), remaining);
+
+    // Re-admission creates a new addressable endpoint without stealing the
+    // unchanged route id of the other physical advertisement.
+    runtime.discovered(advertisement("peer-a.local.")).unwrap();
+    let current = runtime.endpoints();
+    assert_eq!(current.len(), 2);
+    assert!(current.iter().any(|endpoint| endpoint.id == second_id));
+    assert!(current.iter().all(|endpoint| endpoint.id != first_id));
+}
+
+#[tokio::test]
+async fn given_two_independently_verified_routes_for_one_peer_when_sending_then_core_chooses_one_measured_best(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    let mut slow = advertisement("slow");
+    slow.ip = Some("192.0.2.10".into());
+    let mut fast = advertisement("fast");
+    fast.ip = Some("192.0.2.11".into());
+    runtime.discovered(slow).unwrap();
+    runtime.discovered(fast).unwrap();
+    let endpoints = runtime.endpoints();
+    assert_eq!(endpoints.len(), 2);
+    let (slow_id, fast_id) = (endpoints[0].id.clone(), endpoints[1].id.clone());
+
+    // Synthetic *independently verified* exact-route claims test routing
+    // policy only. Current real Android sessions provide no such claims.
+    let credential = VerifiedPeerCredential::test_fixture([3; 32]);
+    let expires = Instant::now() + Duration::from_secs(120);
+    runtime.routes.bind_test_authenticated_route(
+        &slow_id,
+        credential.clone(),
+        Duration::from_millis(70),
+        expires,
+    );
+    runtime.routes.bind_test_authenticated_route(
+        &fast_id,
+        credential.clone(),
+        Duration::from_millis(10),
+        expires,
+    );
+
+    let client = runtime.connect().unwrap();
+    let selected = runtime.create_selection(client, selection()).unwrap();
+    runtime
+        .send_selection(client, selected, &slow_id, "verified-route-1")
+        .unwrap();
+    assert!(runtime.dispatch().unwrap());
+    let job = fixture.receiver.recv().await.unwrap();
+    assert_eq!(job.info.addr, "192.0.2.11:1234");
+    assert_eq!(
+        job.session.as_ref().unwrap().expected_verified_peer(),
+        Some(&credential)
+    );
+    assert!(fixture.receiver.try_recv().is_err());
+
+    // A new mDNS route generation cannot inherit the old cryptographic
+    // association; even an identical label cannot preserve its authority.
+    let mut replacement = advertisement("fast");
+    replacement.ip = Some("192.0.2.99".into());
+    runtime.discovered(replacement).unwrap();
+    let newcomer = runtime
+        .routes
+        .iter()
+        .find(|(_, route)| route.addr.ip().to_string() == "192.0.2.99")
+        .unwrap()
+        .0
+        .clone();
+    assert_ne!(newcomer, fast_id);
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&slow_id, Instant::now())
+            .unwrap()
+            .0,
+        slow_id
+    );
+
+    finish(job, State::Finished);
+    runtime.step().await.unwrap();
+}
+
+#[tokio::test]
+async fn given_real_managed_session_proofs_when_received_then_runtime_binds_only_its_original_exact_route(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    for (name, address) in [("slow", "192.0.2.10"), ("fast", "192.0.2.11")] {
+        let mut ad = advertisement(name);
+        ad.ip = Some(address.into());
+        runtime.discovered(ad).unwrap();
+    }
+    let routes = runtime.endpoints();
+    let peer = VerifiedPeerCredential::test_fixture([42; 32]);
+    let client = runtime.connect().unwrap();
+    for (index, latency) in [80_u64, 12_u64].into_iter().enumerate() {
+        let selected = runtime.create_selection(client, selection()).unwrap();
+        runtime
+            .send_selection(
+                client,
+                selected,
+                &routes[index].id,
+                &format!("verified-session-{index}"),
+            )
+            .unwrap();
+        assert!(runtime.dispatch().unwrap());
+        let job = fx.receiver.recv().await.unwrap();
+        assert_eq!(
+            job.info.addr,
+            if index == 0 {
+                "192.0.2.10:1234"
+            } else {
+                "192.0.2.11:1234"
+            }
+        );
+        job.session
+            .as_ref()
+            .unwrap()
+            .record_authenticated_route(peer.clone(), Duration::from_millis(latency));
+        assert!(runtime.drain_route_proofs().unwrap());
+        finish(job, State::Finished);
+        runtime.step().await.unwrap();
+    }
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&routes[0].id, Instant::now())
+            .unwrap()
+            .0,
+        routes[1].id
+    );
+}
+
+#[tokio::test]
+async fn given_short_verified_transfer_closes_before_runtime_wakeup_then_prior_successful_proof_is_still_owned(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let id = runtime.endpoints()[0].id.clone();
+    let client = runtime.connect().unwrap();
+    let selected = runtime.create_selection(client, selection()).unwrap();
+    runtime
+        .send_selection(client, selected, &id, "fast-verified-terminal")
+        .unwrap();
+    assert!(runtime.dispatch().unwrap());
+    let job = fx.receiver.recv().await.unwrap();
+    let credential = VerifiedPeerCredential::test_fixture([17; 32]);
+    job.session
+        .as_ref()
+        .unwrap()
+        .record_authenticated_route(credential.clone(), Duration::from_millis(8));
+    finish(job, State::Finished);
+    // Already-emitted proof and terminal session events are both buffered.
+    // An independent channel must not lose the authenticated observation
+    // merely because terminal cleanup is processed first.
+    runtime.step().await.unwrap();
+    assert_eq!(
+        runtime.routes.expected_peer(&id, Instant::now()),
+        Some(credential)
+    );
+}
+
+#[tokio::test]
+async fn given_proof_then_failed_terminal_before_owner_wakeup_when_consumed_then_route_remains_unverified(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    for (index, terminal) in [State::Rejected, State::Cancelled, State::Disconnected]
+        .into_iter()
+        .enumerate()
+    {
+        let mut fx = fixture();
+        let runtime = &mut fx.runtime;
+        runtime.discovered(advertisement("peer")).unwrap();
+        let route = runtime.endpoints()[0].id.clone();
+        let client = runtime.connect().unwrap();
+        let selected = runtime.create_selection(client, selection()).unwrap();
+        runtime
+            .send_selection(client, selected, &route, &format!("failed-proof-{index}"))
+            .unwrap();
+        assert!(runtime.dispatch().unwrap());
+        let job = fx.receiver.recv().await.unwrap();
+        job.session.as_ref().unwrap().record_authenticated_route(
+            VerifiedPeerCredential::test_fixture([29; 32]),
+            Duration::from_millis(8),
+        );
+        finish(job, terminal);
+        // Auth and terminal events may both be queued. A failed connection
+        // cannot confer a trusted alias on any other discovery route.
+        runtime.step().await.unwrap();
+        assert!(runtime
+            .routes
+            .expected_peer(&route, Instant::now())
+            .is_none());
+    }
+}
+
+#[tokio::test]
+async fn given_route_address_rotates_before_proof_arrives_then_old_session_cannot_certify_replacement(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let old_id = runtime.endpoints()[0].id.clone();
+    let client = runtime.connect().unwrap();
+    let selected = runtime.create_selection(client, selection()).unwrap();
+    runtime
+        .send_selection(client, selected, &old_id, "stale-authenticated-proof")
+        .unwrap();
+    assert!(runtime.dispatch().unwrap());
+    let job = fx.receiver.recv().await.unwrap();
+    job.session.as_ref().unwrap().record_authenticated_route(
+        VerifiedPeerCredential::test_fixture([11; 32]),
+        Duration::from_millis(3),
+    );
+
+    let mut changed = advertisement("peer");
+    changed.ip = Some("192.0.2.111".into());
+    runtime.discovered(changed).unwrap();
+    let new_id = runtime.endpoints()[0].id.clone();
+    assert_ne!(new_id, old_id);
+    assert!(runtime.drain_route_proofs().unwrap());
+    assert!(runtime.routes.get(&old_id).is_none());
+    assert_eq!(
+        runtime.routes.preferred(&new_id, Instant::now()).unwrap().0,
+        new_id
+    );
+    assert_eq!(job.info.addr, "127.0.0.1:1234");
+    finish(job, State::Finished);
+    runtime.step().await.unwrap();
+}
+
+#[tokio::test]
+async fn given_verified_route_evidence_is_revoked_while_queue_is_full_then_pending_send_fails_without_anonymous_fallback(
+) {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let endpoint = runtime.endpoints()[0].id.clone();
+    runtime.routes.bind_test_authenticated_route(
+        &endpoint,
+        VerifiedPeerCredential::test_fixture([21; 32]),
+        Duration::from_millis(5),
+        Instant::now() + Duration::from_secs(60),
+    );
+    let client = runtime.connect().unwrap();
+    fill_transport(runtime);
+    let transfer = send(runtime, client, "bounded-expected-peer");
+    assert!(!runtime.dispatch().unwrap());
+    assert!(runtime.pending.is_some());
+
+    // Simulate peer-proof loss (e.g. a lagged authenticated event channel).
+    // A queued Send must not be silently downgraded even if the same mDNS
+    // address is still advertised and the caller has not closed the window.
+    runtime.routes.invalidate_proofs();
+    assert!(runtime.dispatch().unwrap());
+    assert!(runtime.pending.is_none());
+    assert_eq!(view(runtime, client, transfer).phase, Phase::Failed);
+    let mut jobs = 0;
+    while let Ok(job) = fx.receiver.try_recv() {
+        jobs += 1;
+        job.release();
+    }
+    assert_eq!(jobs, 10);
+}
+
+#[test]
+fn given_lagged_authenticated_proof_events_when_runtime_drains_then_all_alias_proofs_are_revoked() {
+    use std::time::{Duration, Instant};
+
+    use crate::peer_authentication::VerifiedPeerCredential;
+
+    let mut fx = fixture();
+    let runtime = &mut fx.runtime;
+    runtime.discovered(advertisement("a")).unwrap();
+    runtime.discovered(advertisement("b")).unwrap();
+    let routes = runtime.endpoints();
+    let peer = VerifiedPeerCredential::test_fixture([55; 32]);
+    let expiry = Instant::now() + Duration::from_secs(60);
+    runtime.routes.bind_test_authenticated_route(
+        &routes[0].id,
+        peer.clone(),
+        Duration::from_millis(100),
+        expiry,
+    );
+    runtime.routes.bind_test_authenticated_route(
+        &routes[1].id,
+        peer.clone(),
+        Duration::from_millis(5),
+        expiry,
+    );
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&routes[0].id, Instant::now())
+            .unwrap()
+            .0,
+        routes[1].id
+    );
+
+    let lease = runtime
+        .sender
+        .sessions()
+        .open(
+            crate::channel::TransferType::Outbound,
+            None,
+            CancellationToken::new(),
+        )
+        .unwrap();
+    // The private channel has 128 bounded slots. Overflowing before owner
+    // processing is a loss of security evidence, not permission to guess.
+    for _ in 0..129 {
+        lease.record_authenticated_route(peer.clone(), Duration::from_millis(1));
+    }
+    assert!(runtime.drain_route_proofs().unwrap());
+    assert_eq!(
+        runtime
+            .routes
+            .preferred(&routes[0].id, Instant::now())
+            .unwrap()
+            .0,
+        routes[0].id
+    );
+}
+
+#[tokio::test]
+async fn given_conflicting_peers_with_same_unverified_hint_when_sending_then_only_one_exact_route_is_contacted(
+) {
+    use crate::utils::gen_mdns_name;
+
+    let mut fixture = fixture();
+    let client = fixture.runtime.connect().unwrap();
+    let endpoint = gen_mdns_name(*b"AB12");
+    let mut first = advertisement(&format!("{endpoint}._FC9F5ED42C8A._tcp.local."));
+    first.name = Some("First phone".into());
+    first.ip = Some("192.0.2.10".into());
+    first.port = Some("4567".into());
+    let mut conflicting = advertisement(&format!("{endpoint}._fc9f5ed42c8a._TCP.LOCAL."));
+    // Worst case: even a matching label AND four-byte ID are not positive
+    // identity evidence when independently advertised sockets disagree.
+    conflicting.name = Some("First phone".into());
+    conflicting.ip = Some("192.0.2.11".into());
+    conflicting.port = Some("4568".into());
+
+    fixture.runtime.discovered(first).unwrap();
+    fixture.runtime.discovered(conflicting).unwrap();
+    let routes = fixture.runtime.endpoints();
+    assert_eq!(routes.len(), 2);
+    assert_ne!(routes[0].id, routes[1].id);
+    assert_eq!(routes[0].name, routes[1].name);
+
+    // The untrusted 4-byte advertising ID alone cannot silently select,
+    // redirect, multicast, or reuse consent across different sockets.
+    for (index, expected_address) in ["192.0.2.10:4567", "192.0.2.11:4568"]
+        .into_iter()
+        .enumerate()
+    {
+        let selection = fixture
+            .runtime
+            .create_selection(client, selection())
+            .unwrap();
+        fixture
+            .runtime
+            .send_selection(
+                client,
+                selection,
+                &routes[index].id,
+                &format!("explicit-recipient-{index}"),
+            )
+            .unwrap();
+        assert!(fixture.runtime.dispatch().unwrap());
+        let job = fixture.receiver.recv().await.unwrap();
+        assert_eq!(job.info.addr, expected_address);
+        assert!(
+            fixture.receiver.try_recv().is_err(),
+            "one user transfer must never fan out to another advertised peer"
+        );
+        finish(job, State::Finished);
+        fixture.runtime.step().await.unwrap();
+    }
+}
+
+#[test]
+fn given_empty_fullname_tombstone_when_received_then_live_routes_remain_unmodified() {
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    runtime.discovered(advertisement("live.local.")).unwrap();
+    let before = runtime.endpoints();
+    runtime
+        .discovered(EndpointInfo {
+            id: "127.0.0.1:1234".into(),
+            present: Some(false),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(runtime.endpoints(), before);
 }
 
 #[test]
@@ -344,14 +814,15 @@ fn given_unusable_discovery_when_updated_then_only_bounded_numeric_routes_are_ex
     updated.ip = Some("::1".into());
     updated.name = Some("Updated".into());
     runtime.discovered(updated).unwrap();
-    assert_eq!(runtime.endpoints()[0].id, first.id);
-    assert_eq!(runtime.routes[&first.id].addr.to_string(), "[::1]:1234");
+    let replacement = runtime.endpoints()[0].id.clone();
+    assert_ne!(replacement, first.id);
+    assert_eq!(runtime.routes[&replacement].addr.to_string(), "[::1]:1234");
     let mut removed = advertisement("peer");
     removed.present = Some(false);
     runtime.discovered(removed).unwrap();
     assert!(runtime.endpoints().is_empty());
     runtime.discovered(advertisement("peer")).unwrap();
-    assert_ne!(runtime.endpoints()[0].id, first.id);
+    assert_ne!(runtime.endpoints()[0].id, replacement);
 }
 
 #[tokio::test]
@@ -477,6 +948,90 @@ async fn given_pending_backpressure_when_capacity_returns_then_same_payload_is_s
     }
     assert_eq!(ids.len(), 10);
     assert_eq!(ids.iter().filter(|entry| **entry == id).count(), 1);
+    runtime.step().await.unwrap();
+    assert_eq!(view(runtime, client, transfer).phase, Phase::Finished);
+}
+
+#[tokio::test]
+async fn given_untrusted_mdns_address_change_when_send_is_queued_or_pending_then_old_recipient_is_never_redirected(
+) {
+    for full in [false, true] {
+        let mut fixture = fixture();
+        let runtime = &mut fixture.runtime;
+        runtime.discovered(advertisement("peer")).unwrap();
+        let original = runtime.endpoints()[0].id.clone();
+        let client = runtime.connect().unwrap();
+        if full {
+            fill_transport(runtime);
+        }
+        let transfer = send(runtime, client, "route-generation");
+        if full {
+            assert!(!runtime.dispatch().unwrap());
+            assert!(runtime.pending.is_some());
+        }
+
+        // Same untrusted fullname, different socket: may be a changed network
+        // route OR a different host replaying the old advertisement.
+        let mut moved = advertisement("peer");
+        moved.ip = Some("192.0.2.99".into());
+        moved.port = Some("5678".into());
+        fixture.discovery.send(moved).unwrap();
+        runtime.step().await.unwrap();
+
+        let routes = runtime.endpoints();
+        assert_eq!(routes.len(), 1);
+        assert_ne!(routes[0].id, original);
+        assert!(!runtime.routes.contains_key(&original));
+        assert_eq!(
+            runtime.routes[&routes[0].id].addr.to_string(),
+            "192.0.2.99:5678"
+        );
+        assert_eq!(view(runtime, client, transfer).phase, Phase::Failed);
+        assert!(runtime.pending.is_none());
+
+        // Exactly zero payload jobs may be sent to the newly advertised peer
+        // on behalf of the OLD selection, including with pending backpressure.
+        let mut jobs = 0;
+        while let Ok(job) = fixture.receiver.try_recv() {
+            jobs += 1;
+            job.release();
+        }
+        assert_eq!(jobs, if full { 10 } else { 0 });
+        assert_eq!(
+            runtime.snapshot(client).unwrap().resources.reserved_handles,
+            0
+        );
+    }
+}
+
+#[tokio::test]
+async fn given_new_mdns_socket_after_a_transfer_is_dispatched_then_active_session_stays_on_the_original_recipient(
+) {
+    let mut fixture = fixture();
+    let runtime = &mut fixture.runtime;
+    runtime.discovered(advertisement("peer")).unwrap();
+    let old_endpoint = runtime.endpoints()[0].id.clone();
+    let client = runtime.connect().unwrap();
+    let transfer = send(runtime, client, "active-recipient");
+    assert!(runtime.dispatch().unwrap());
+    let job = fixture.receiver.recv().await.unwrap();
+    assert_eq!(job.info.addr, "127.0.0.1:1234");
+
+    let mut changed = advertisement("peer");
+    changed.ip = Some("192.0.2.200".into());
+    runtime.discovered(changed).unwrap();
+
+    let fresh = runtime.endpoints();
+    assert_eq!(fresh.len(), 1);
+    assert_ne!(fresh[0].id, old_endpoint);
+    assert_eq!(
+        runtime.routes[&fresh[0].id].addr.to_string(),
+        "192.0.2.200:1234"
+    );
+    assert_eq!(job.info.addr, "127.0.0.1:1234");
+    assert!(fixture.receiver.try_recv().is_err());
+
+    finish(job, State::Finished);
     runtime.step().await.unwrap();
     assert_eq!(view(runtime, client, transfer).phase, Phase::Finished);
 }

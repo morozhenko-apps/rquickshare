@@ -234,10 +234,25 @@ async fn given_cancelled_busy_or_missing_decoder_when_requested_then_no_queued_o
 }
 
 fn process_fixture(body: &str) -> (tempfile::TempDir, PathBuf) {
+    use std::io::Write;
+
     let root = tempfile::tempdir().unwrap();
+    let staging = root.path().join("fixture.staging");
     let path = root.path().join("fixture");
-    std::fs::write(&path, format!("#!/usr/bin/python3\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    // Do not expose an executable pathname while its inode is writable.
+    {
+        let mut writer = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staging)
+            .unwrap();
+        writer
+            .write_all(format!("#!/usr/bin/python3\n{body}\n").as_bytes())
+            .unwrap();
+        writer.sync_all().unwrap();
+    }
+    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::rename(&staging, &path).unwrap();
     (root, path)
 }
 
@@ -245,7 +260,7 @@ fn process_fixture(body: &str) -> (tempfile::TempDir, PathBuf) {
 async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_children_are_reaped(
 ) {
     // Arrange / Act / Assert: external transport fixtures, not a fake image decoder.
-    for (body, expected) in [
+    for (case, (body, expected)) in [
         (
             "import sys; sys.stdin.buffer.read(); sys.stdout.buffer.write(b'RQSP')".to_owned(),
             Error::Rejected,
@@ -261,12 +276,46 @@ async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_
             "import sys; sys.stdin.buffer.read(); sys.exit(3)".to_owned(),
             Error::Unavailable,
         ),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let (_root, path) = process_fixture(&body);
-        let result = Decoder::new(path)
+        // Observe the actual Decoder first: priming a Python fixture before
+        // this call can change the child exit/stdin pipe timing being tested.
+        let actual = Decoder::new(path.clone())
             .decode(PNG.to_vec(), CancellationToken::new())
-            .await;
-        assert_eq!(result.unwrap_err(), expected);
+            .await
+            .expect_err("malformed fixture must never produce valid pixels");
+        if actual != expected {
+            // Only on failure, independently inspect this disposable fixture in
+            // the same stripped environment. Never log input or response bytes.
+            let probe = std::process::Command::new(&path)
+                .env_clear()
+                .env("PATH", "/usr/bin:/bin")
+                .env("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+                .output()
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "malformed fixture #{case}: Decoder={actual:?}, expected={expected:?}, direct_fixture_spawn_error={error:?}"
+                    )
+                });
+            let correct_fixture = match case {
+                0 => probe.status.success() && probe.stdout == b"RQSP",
+                1 => probe.status.success() && probe.stdout.len() == MAX_OUTPUT + 1,
+                2 => probe.status.code() == Some(3) && probe.stdout.is_empty(),
+                _ => unreachable!(),
+            };
+            panic!(
+                "malformed fixture #{case}: Decoder={actual:?}, expected={expected:?}, direct_fixture_valid={correct_fixture}, status={:?}, bytes={}",
+                probe.status.code(),
+                probe.stdout.len()
+            );
+        }
+        assert_eq!(
+            actual, expected,
+            "malformed fixture #{case}: unexpected Decoder classification"
+        );
     }
     for expire in [false, true] {
         let socket_root = tempfile::tempdir().unwrap();

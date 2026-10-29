@@ -140,7 +140,7 @@ impl Item {
             ICON_NAME,
             Vec::new(),
             "rQuickShare",
-            "Send and receive nearby files",
+            crate::i18n::label("Send and receive nearby files"),
         )
     }
 }

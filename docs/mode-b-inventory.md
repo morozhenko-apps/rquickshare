@@ -1,5 +1,310 @@
 # Mode B inventory, branch map, and test matrix
 
+## 2026-10-18 P1 signed monitor placement multi-grid
+
+Four new original unit methods execute actual
+`placement::place`, `movement::clamp_position`
+and `movement::bottom_margin` across explicit
+signed origin/size, nearest-edge tie and
+i32 overflow/invalid geometry grids.
+Final test SHA `00a0a76b`:
+[Native GTK 39134995889](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995889)
+**68/68 PASS**, four names independently
+`... ok` in the complete job log.
+[Preflight 39134995892](https://github.com/morozhenko-apps/rquickshare/actions/runs/39134995892)
+Core **744 stable + 8 integration** PASS;
+formatter/frontend/Core Clippy PASS.
+Desktop Tauri **10/10 PASS** from job
+logs; quick Preflight **5/5 SUCCESS**
+on exact geometry test code. No production
+change. [Bounded Stage1–10 and D1–D5 report](mode-b-p1-native-placement-bounds-2026-10-18.md)
+documents all positive/negative/interaction
+rows and initial red formatter repair.
+The new 4 follow the previous 9 verified
+independent CLI/consent/result/idle/gate
+tests (13 across both batches).
+
+The [22-case OS/device acceptance matrix](mode-b-p0-device-acceptance-matrix-2026-10-18.md)
+is planned, **zero of its 22 physical tests
+have been executed**. Actual Wayland
+hotplug/scaling, Linux↔Google device
+transfer, mDNS/BWU authorization and
+full current-source 10× are outstanding.
+Global Stage 12 remains **NO**.
+
+
+## 2026-10-18 P0/P1 seven native domain guard tests + two Core gate races
+
+Seven new independently named Native GTK Rust unit tests
+added under existing production file test modules:
+`native_desktop/src/cli.rs` (2, exact Unix local URI
+percent bytes/whole-argv rejection),
+`native_desktop/src/card_policy.rs` (2, consent-over-
+terminal priority, dismissal/new revision/epoch,
+busy automatic stale peer hiding),
+`native_desktop/src/panel/results.rs` (2, only fresh
+same-epoch inbound Finish, FIFO and no stale replay),
+`native_desktop/src/panel/idle.rs` (1, 18 desktop
+safety observation combinations and daemon draining).
+Two independently named Core Rust tests under
+`core_lib/src/service/client/desktop/tests.rs`
+check real `PreparationGate`: exactly one of 16
+synchronized threads acquires an outstanding
+permit, and an already-closed gate never
+reauthorizes after the permit drops.
+
+The two scoped docs,
+[CLI/card/results/idle branch and N1–N12 inventory](mode-b-p0-batch-native-guards-2026-10-18.md)
+and [gate race branch and N1–N12 plan](mode-b-p0-preparation-gate-races-2026-10-18.md),
+preceded test implementation. Only
+`#[cfg(test)]` sections changed, no
+runtime, public API, installed program
+or `master` changes. Initial red native
+formatter and consumed `Surface`
+fixture failures were fixed as test-only
+changes without changing expected behavior.
+Final exact test source `66ddf1fc`:
+[Preflight 39133124486](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124486)
+**5/5 SUCCESS**: Core **744/744 stable**
+and integrations **4+4**, Tauri
+**10/10**, frontend/Clippy/format PASS.
+[Native GTK 39133124223](https://github.com/morozhenko-apps/rquickshare/actions/runs/39133124223)
+**SUCCESS, 64/64** (previously 57).
+All **nine** original method names
+individually confirmed `... ok`
+from complete Core and GTK logs.
+Two initial red CardPolicy assertions
+were invalid fixture expectations
+for the documented visible/automatic
+presentation state, corrected in
+test-only code after actual job
+failure. No product changes.
+These are test results, **not**
+a newly instrumented branch/line
+coverage percentage. Full strict 10x
+and complete Stage 12 still NO, as are
+physical Google/BlueZ/Wayland tests
+and Issues #8 and #9.
+
+
+## 2026-10-18 P0 real GTK clipboard ownership transition and queued cancellation
+
+Two additional fixture functions in
+`native_desktop/src/panel/outbound.rs`
+extend the **existing** real GTK widget
+smoke: GTK4 ContentProvider A→owner
+loss→new provider B→hostile remote
+provider C→new local D. The actual
+`clipboard_paths` async read rejects
+missing content and foreign URI without
+replaying prior owner data. A real
+oneshot `None` delivered just before
+GLib callback polling plus twice-called
+`close_input` must preserve the old
+notice and clear pending task/token/
+strip, with stale generation inert.
+**0 new standalone Rust test methods**,
+2 test-only fixture groups.
+
+The [documentation-first branch/N1–N12,
+interaction/coverage and D1–D5 report](mode-b-p0-gtk-clipboard-owner-transition-2026-10-18.md)
+records test-only source SHA `70a6abb0`.
+[Native GTK 39130339036](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339036)
+**SUCCESS, real 57/57** with no
+failed/ignored methods. A preceding
+new test source failed to compile from
+the bare generic `set_content(None)`;
+the explicit `ContentProvider` test
+type correction was verified. Same-source
+[Preflight 39130339110](https://github.com/morozhenko-apps/rquickshare/actions/runs/39130339110)
+Core **742/742 stable + 4+4**,
+formatter/frontend/Core Clippy PASS;
+desktop Tauri Clippy/unit **10/10**
+from job log, completing the exact-source
+quick Preflight **5/5 SUCCESS**.
+
+Real Wayland owner loss **mid-read**,
+network-authenticated GTK Selection send,
+BlueZ/Android/Windows, issues
+[#8](https://github.com/morozhenko-apps/rquickshare/issues/8)
+and [#9](https://github.com/morozhenko-apps/rquickshare/issues/9)
+and the final complete repository
+10x/full all-production-branch Stage 12
+remain **OPEN/NO**. Do not mistake
+a single successful GTK smoke for
+10 clean full-source runs.
+
+
+## 2026-10-18 P0 real broker Selection cross-owner and reconnect replay
+
+Two new original tests in
+`core_lib/src/service/client/controller/tests.rs`
+exercise real typed Selection returned by
+`PanelController::choose` on the private
+SelectionBus. A second NativeClient
+must receive `ForeignHandle` on single,
+batch and queued dispatch, with no
+pending operation and no queued transfer;
+the original owner still dispatches
+one legitimate transfer. A new client
+must not replay an unsent Selection
+from a controller that already closed;
+its own freshly committed Selection
+must transfer and preserve the original
+local files.
+
+The [scoped Stage 1–10 inventory,
+positive/N1–N12, interaction map
+and D1–D5](mode-b-p0-selection-lifetime-2026-10-18.md)
+was written before tests. Exact code SHA
+`e5731932`
+[Preflight 39129396907](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396907)
+Core job **742/742 stable**,
+**4+4 integrations**, both new test
+methods separately `... ok`.
+Format/frontend/Core Clippy PASS;
+desktop Tauri **10/10** from job log
+and full quick Preflight **5/5 SUCCESS**.
+Independent
+[Native GTK 39129396869](https://github.com/morozhenko-apps/rquickshare/actions/runs/39129396869)
+**57/57 PASS**. The original red rustfmt
+check was resolved without
+weakening any assertions.
+
+This tests actual daemon/client authorization,
+**not** a real connected GTK Panel or
+Bluetooth-to-TCP delivery. Physical Android/
+Windows, BWU security Issue #8,
+mDNS SDK Issue #9, global full 10×
+and Stage 12 remain **OPEN/NO**.
+
+
+## 2026-10-18 P0 actual GDK async clipboard and preparation cancellation
+
+The existing actual Native GTK widget smoke
+now invokes two private test-only fixture
+functions in `native_desktop/src/panel/outbound.rs`.
+The GDK provider supplies real clipboard
+MIME streams to unchanged
+`clipboard_paths`: valid freedesktop
+URI lists, GNOME copy/cut with Unicode
+filenames, invalid second local URI,
+remote host, unsupported MIME and
+oversized byte stream. The other
+fixture verifies pending `wait_selection`,
+`close_input` task/token cancellation,
+generation replacement, old callback
+suppression, failed-current completion
+and cleared UI busy state.
+
+A [documented scoped Stage 1–10,
+Positive/N1–N12, interaction and D1–D5](mode-b-p0-native-async-clipboard-2026-10-18.md)
+preceded implementation. At source
+`1501fa1e`:
+[Native GTK 39128370942](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370942)
+**SUCCESS**, **57/57 GTK** — this is an
+**expanded existing smoke, 0 new
+independent Rust test methods**, not
+two new test-runner entries. Earlier
+rustfmt-only failure is recorded.
+[Preflight 39128370901](https://github.com/morozhenko-apps/rquickshare/actions/runs/39128370901)
+Core **740/740 stable** + **4+4**
+integrations, frontend/format/Core
+Clippy SUCCESS. Desktop Tauri Rust
+**10/10 PASS** from its job log;
+the full quick Preflight completed
+**5/5 SUCCESS** on identical test source.
+
+External lost clipboard ownership,
+full GTK-to-daemon send and actual
+Google peers remain P0 OPEN, as do
+BWU authentication [#8](https://github.com/morozhenko-apps/rquickshare/issues/8)
+and mDNS event testability
+[#9](https://github.com/morozhenko-apps/rquickshare/issues/9).
+This remains a **single** green GTK
+suite on exact code, not mandatory
+full ten-consecutive final-source
+Mode B or global Stage 12.
+
+
+## 2026-10-18 P0 Native GTK outbound clipboard URI and session action guard
+
+Two new original `native_desktop/src/panel/outbound.rs`
+test methods cover actual GIO GNOME/freedesktop
+URI parsing: file authority, escaped Unicode,
+CRLF/comment handling, ordered paths,
+atomic no-partial import, malformed percent,
+NUL/UTF-8, remote hosts/userinfo/port,
+empty lists and exact URI_BYTES boundary.
+Existing actual GTK panel smoke was
+expanded with five controller flags,
+five stale view/endpoint cases and UI
+closing/preview/locked/provider negatives
+plus a positive manual-send control.
+
+The [scoped documented branch map, N1–N12,
+interaction inventory and D1–D5](mode-b-p0-native-outbound-clipboard-2026-10-18.md)
+preceded implementation. Exact test-source
+`c911fc02` verified from
+[Native GTK 39126241182](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241182):
+**57/57 native GTK PASS** (formerly 55),
+each new method independently `... ok`.
+[Preflight 39126241201](https://github.com/morozhenko-apps/rquickshare/actions/runs/39126241201):
+**740/740 stable Core + 4/4+4/4**,
+frontend/formatter/Core Clippy PASS;
+desktop Tauri **10/10** verified from
+its actual job log. Complete quick
+Preflight **5/5 SUCCESS**.
+First native test run failed at formatting,
+fixed by test-only commits with no
+weakened conditions or production changes.
+
+Real clipboard stream/close, actual
+daemon send, installed KDE/Wayland,
+physical Android/Windows, full post-change
+ten-consecutive Mode B, security
+[Issue #8](https://github.com/morozhenko-apps/rquickshare/issues/8)
+and mDNS
+[Issue #9](https://github.com/morozhenko-apps/rquickshare/issues/9)
+remain OPEN. Global Stage 12 = NO.
+
+
+## 2026-10-18 P0 Native GTK real portal OpenFile admission / cancellation
+
+Three new original methods in
+`native_desktop/src/portal/tests.rs` use real
+`show_directory_contents`, `show_on_mode`
+and `interaction` against the existing private
+external D-Bus portal contract fake.
+One tests Linux `O_PATH` directory rejection
+before IPC; one exercises seven version/response/
+malformed/wrong-path cases for contents-only
+`OpenFile`; one cancels an already admitted
+request and asserts a single owned Close,
+Cancelled terminal result and FD release.
+The [scoped Stage 1–10 plan, Negative N1–N12
+and D1–D5](mode-b-p0-native-portal-directory-2026-10-18.md)
+was documented before editing tests.
+
+Exact source `f63c3df1`;
+[Native GTK CI 39124127819](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127819)
+**SUCCESS** and full job log verified **55/55**
+native GTK tests with all three new methods
+separately `... ok`. Initial red formatting
+at `ceeefe21` was resolved in a test-only commit;
+no assertion weakened.
+[Preflight 39124127809](https://github.com/morozhenko-apps/rquickshare/actions/runs/39124127809)
+Core log **740/740 stable + 4/4 + 4/4**,
+Core Clippy/formatter/frontend PASS. Desktop
+Tauri Rust **10/10** and Clippy SUCCESS.
+All five fast Preflight jobs **SUCCESS**. The native portal test
+does not prove actual KDE/Wayland file manager,
+BlueZ, BWU authentication [#8](https://github.com/morozhenko-apps/rquickshare/issues/8),
+mDNS live SDK [#9](https://github.com/morozhenko-apps/rquickshare/issues/9),
+or latest-source ten-consecutive MODE B.
+Global Stage 12 remains **NO**.
+
+
 
 ## 2026-10-18 P0 mDNS TXT parser and service identity contracts
 

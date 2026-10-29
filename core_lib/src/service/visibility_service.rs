@@ -73,6 +73,125 @@ impl VisibilityIntent {
 mod tests {
     use super::*;
     #[test]
+    fn given_visibility_wire_state_cross_product_when_validated_then_no_forged_availability_or_timer_passes(
+    ) {
+        let baseline = VisibilityView::project(&format!("{:032x}", 123), None);
+        let mut cases = 0;
+        for correct_epoch in [false, true] {
+            for available in [false, true] {
+                for running in [false, true] {
+                    for mode in [0_u8, 1, 2, 3] {
+                        for remaining_ms in [0_u64, 1, 60_000, 60_001, u64::MAX] {
+                            for revision in [0_u64, 1, u64::MAX] {
+                                let mut view = baseline.clone();
+                                view.epoch = if correct_epoch {
+                                    format!("{:032x}", 123)
+                                } else {
+                                    format!("{:032x}", 124)
+                                };
+                                view.available = available;
+                                view.running = running;
+                                view.mode = mode;
+                                view.remaining_ms = remaining_ms;
+                                view.revision = revision;
+
+                                // Expected legality is expressed as separate
+                                // contract gates, not copied from valid().
+                                let valid_identity = correct_epoch;
+                                let valid_mode = mode <= 2;
+                                let valid_timer = remaining_ms <= 60_000
+                                    && (remaining_ms == 0 || (running && mode == 2));
+                                let valid_stopped = running || mode == 1;
+                                let valid_unavailable = available || (!running && revision == 0);
+                                let expected = valid_identity
+                                    && valid_mode
+                                    && valid_timer
+                                    && valid_stopped
+                                    && valid_unavailable;
+                                assert_eq!(
+                                    view.valid(123),
+                                    expected,
+                                    "epoch={correct_epoch} available={available} running={running} mode={mode} remaining={remaining_ms} revision={revision}"
+                                );
+                                cases += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(cases, 480);
+    }
+
+    #[test]
+    fn given_visibility_intent_field_boundaries_when_validated_then_only_canonical_ids_and_modes_pass(
+    ) {
+        let original = VisibilityIntent {
+            epoch: format!("{:032x}", 123),
+            revision: 42,
+            token: "a".repeat(64),
+            request: "b".repeat(32),
+            mode: 2,
+        };
+        assert!(original.valid(123));
+        assert!(!original.valid(124));
+
+        for mode in [0_u8, 1, 2, 3, u8::MAX] {
+            let mut value = original.clone();
+            value.mode = mode;
+            assert_eq!(value.valid(123), mode <= 2);
+        }
+        for (token, allowed) in [
+            (String::new(), false),
+            ("a".repeat(63), false),
+            ("a".repeat(64), true),
+            ("a".repeat(65), false),
+            ("0".repeat(64), true),
+            ("9".repeat(64), true),
+            ("f".repeat(64), true),
+            ("A".repeat(64), false),
+            ("g".repeat(64), false),
+            ("é".repeat(32), false),
+            (format!("{}A", "a".repeat(63)), false),
+        ] {
+            let mut value = original.clone();
+            value.token = token;
+            assert_eq!(value.valid(123), allowed, "token={:?}", value.token);
+        }
+        for (request, allowed) in [
+            (String::new(), false),
+            ("b".repeat(31), false),
+            ("b".repeat(32), true),
+            ("b".repeat(33), false),
+            ("0".repeat(32), true),
+            ("f".repeat(32), true),
+            ("B".repeat(32), false),
+            ("g".repeat(32), false),
+            ("é".repeat(16), false),
+        ] {
+            let mut value = original.clone();
+            value.request = request;
+            assert_eq!(value.valid(123), allowed, "request={:?}", value.request);
+        }
+        for revision in [0, 1, 42, u64::MAX] {
+            let mut value = original.clone();
+            value.revision = revision;
+            assert!(value.valid(123));
+            let base = value.base();
+            assert_eq!(base.revision, revision);
+            assert_eq!(base.token, original.token);
+        }
+
+        let mut wrong_epoch = original.clone();
+        wrong_epoch.epoch = "0000000000000000000000000000007B".to_owned();
+        assert!(!wrong_epoch.valid(123));
+        wrong_epoch.epoch = "7b".to_owned();
+        assert!(!wrong_epoch.valid(123));
+        wrong_epoch.epoch = format!("{:032x}", 124);
+        assert!(!wrong_epoch.valid(123));
+    }
+
+    #[test]
     fn given_policy_observation_when_projected_or_validated_then_stopped_and_unavailable_never_claim_visible(
     ) {
         // Arrange

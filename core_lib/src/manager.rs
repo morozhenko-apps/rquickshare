@@ -65,6 +65,8 @@ async fn route_bandwidth_upgrade_if_pending(
         return Ok(Some(socket));
     };
 
+    // A syntactically valid plaintext introduction is not proof of peer identity.
+    crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpClassified);
     match router
         .route_with_alias(
             &identity.endpoint_id,
@@ -74,6 +76,7 @@ async fn route_bandwidth_upgrade_if_pending(
         .await
     {
         Ok(routed_as) => {
+            crate::receiver_trace::event(crate::receiver_trace::Event::BwuRouteConsumed);
             if routed_as != identity.endpoint_id {
                 info!(
                     "{INNER_NAME}: routed dynamic BWU endpoint current={} last={:?} as {routed_as}",
@@ -83,6 +86,7 @@ async fn route_bandwidth_upgrade_if_pending(
             Ok(None)
         }
         Err(_socket) => {
+            crate::receiver_trace::event(crate::receiver_trace::Event::BwuTcpUnmatched);
             warn!(
                 "{INNER_NAME}: received BWU CLIENT_INTRODUCTION for unregistered endpoint current={} last={:?}",
                 identity.endpoint_id,
@@ -405,6 +409,71 @@ mod tests {
         let mut framed = (encoded.len() as u32).to_be_bytes().to_vec();
         framed.extend_from_slice(&encoded);
         framed
+    }
+
+    // P0 #8: These expected-panic sentinels reproduce the KNOWN vulnerability
+    // while preserving the actual fail-closed assertion below. Passing here
+    // confirms the bug persists; it is NOT a passing security acceptance test.
+    // Remove should_panic and require normal success once admission is fixed.
+    async fn assert_untrusted_claim_preserves_original_bwu_owner(
+        current: &str,
+        previous: Option<&str>,
+    ) {
+        let router = BwuRouter::new();
+        let mut owner = router
+            .register("established-ble-session".into())
+            .await
+            .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut untrusted_peer = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (incoming, _) = listener.accept().await.unwrap();
+
+        // The peer only knows a copy of the claimed plaintext route id. It
+        // has no authenticated binding to the established BLE session.
+        let introduction = client_introduction_with_last(current, previous);
+        untrusted_peer.write_all(&introduction).await.unwrap();
+        let _classification = route_bandwidth_upgrade_if_pending(incoming, &router)
+            .await
+            .unwrap();
+
+        // This currently fails: the one-shot owner is consumed before a
+        // cryptographic proof. Keep this oracle red and ignored until #8.
+        assert!(
+            router.has_pending().await,
+            "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner"
+        );
+        assert!(
+            matches!(
+                owner.try_recv(),
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+            ),
+            "P0 #8: an untrusted socket was delivered to the BLE owner"
+        );
+        router.cancel("established-ble-session").await;
+    }
+
+    // This test must STOP passing when a real authorization fix lands:
+    // switch back to a normal fail-closed regression, not an expected panic.
+    #[tokio::test]
+    #[should_panic(
+        expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner"
+    )]
+    async fn given_forged_current_bwu_id_when_classified_then_known_pre_auth_theft_is_detected() {
+        assert_untrusted_claim_preserves_original_bwu_owner("established-ble-session", None).await;
+    }
+
+    #[tokio::test]
+    #[should_panic(
+        expected = "P0 #8: unauthenticated BWU CLIENT_INTRODUCTION stole the pending owner"
+    )]
+    async fn given_forged_previous_bwu_id_when_classified_then_known_pre_auth_theft_is_detected() {
+        assert_untrusted_claim_preserves_original_bwu_owner(
+            "untrusted-dynamic-id",
+            Some("established-ble-session"),
+        )
+        .await;
     }
 
     #[tokio::test]

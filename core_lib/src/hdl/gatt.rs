@@ -1,5 +1,8 @@
+mod ingress;
 mod slot;
 
+use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -11,8 +14,7 @@ use bluer::gatt::local::{
 use bluer::{Adapter, Uuid, UuidExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast::Sender;
-use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use crate::channel::{ChannelDirection, ChannelMessage, TransferType};
@@ -78,6 +80,46 @@ fn receiver_discovery_refresh(
         resend_mdns: true,
         advertising: deferred_advertising_enabled.then_some(ReceiverAdvertisingRefresh::Deferred),
     })
+}
+
+fn is_weave_connection_write(packet: &[u8]) -> bool {
+    packet.first().is_some_and(|header| {
+        header & WEAVE_CONTROL != 0 && header & WEAVE_CMD_MASK == WEAVE_CMD_CONN_REQUEST
+    })
+}
+
+fn is_weave_data_write(packet: &[u8]) -> bool {
+    packet
+        .first()
+        .is_some_and(|header| header & WEAVE_CONTROL == 0)
+}
+
+/// Best-effort single-server ingress epoch, not a peer identity or admission
+/// decision. Never use this passive observer to grant transport ownership.
+fn first_data_queued_after_connect(seen: &AtomicBool, is_connect: bool, is_data: bool) -> bool {
+    if is_connect {
+        seen.store(false, Ordering::Relaxed);
+        false
+    } else {
+        is_data && !seen.swap(true, Ordering::Relaxed)
+    }
+}
+
+/// A notifier is the single owner of Weave inbound packets until it stops.
+/// Never route one shared write queue into two concurrent peer sessions.
+fn reserve_weave_bridge(slots: &Arc<Semaphore>) -> Option<OwnedSemaphorePermit> {
+    Arc::clone(slots).try_acquire_owned().ok()
+}
+
+/// BlueR awaits the returned Notify callback future before replying to
+/// StartNotify. Admission must return immediately; SessionTasks retains
+/// lifetime ownership of the worker after its JoinHandle is dropped.
+fn start_managed_notify_worker(
+    tasks: &SessionTasks,
+    worker: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), crate::sessions::SessionError> {
+    drop(tasks.spawn(worker)?);
+    Ok(())
 }
 
 fn parse_connection_request(packet: &[u8]) -> Result<u16, anyhow::Error> {
@@ -239,10 +281,9 @@ impl ReceiverGattServer {
             "{INNER_NAME}: diagnostic slot0 deferred advertising refresh enabled={deferred_slot0_advertising}"
         );
 
-        const MAX_PENDING_GATT_WRITES: usize = 64;
-        let (packet_sender, packet_receiver) = channel::<Vec<u8>>(MAX_PENDING_GATT_WRITES);
-        let packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>> =
-            Arc::new(Mutex::new(Some(packet_receiver)));
+        let packet_receiver = ingress::Ingress::shared();
+        let packet_sender = packet_receiver.clone();
+        let first_data_queued = Arc::new(AtomicBool::new(true));
         let channel_sender = self.sender.clone();
         let tcp_port = self.tcp_port;
         let bwu_router = self.bwu_router.clone();
@@ -318,15 +359,32 @@ impl ReceiverGattServer {
                             write: true,
                             write_without_response: false,
                             method: CharacteristicWriteMethod::Fun(Box::new(
-                                move |value, _request| {
+                                move |value, request| {
                                     let packet_sender = packet_sender.clone();
+                                    let first_data_queued = first_data_queued.clone();
                                     Box::pin(async move {
-                                        packet_sender.try_send(value).map_err(|error| {
-                                            warn!(
-                                                "{INNER_NAME}: rejecting GATT write because the weave queue is full or closed: {error}"
+                                        let is_connect = is_weave_connection_write(&value);
+                                        let is_data = is_weave_data_write(&value);
+                                        if is_connect {
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattWeaveConnectWrite,
                                             );
-                                            ReqError::Failed
+                                        }
+                                        ingress::Ingress::write(&packet_sender, request.adapter_name, request.device_address, request.offset, value).inspect_err(|error| {
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattWriteQueueRejected,
+                                            );
+                                            debug!("{INNER_NAME}: rejected GATT ingress: {error}");
                                         })?;
+                                        if first_data_queued_after_connect(
+                                            &first_data_queued,
+                                            is_connect,
+                                            is_data,
+                                        ) {
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattFirstDataWriteQueued,
+                                            );
+                                        }
                                         Ok(())
                                     })
                                 },
@@ -341,46 +399,64 @@ impl ReceiverGattServer {
                             notify: true,
                             indicate: true,
                             method: CharacteristicNotifyMethod::Fun(Box::new(move |notifier| {
+                                crate::receiver_trace::event(
+                                    crate::receiver_trace::Event::GattNotifyRequested,
+                                );
                                 let packet_receiver = packet_receiver.clone();
                                 let channel_sender = channel_sender.clone();
                                 let bwu_router = bwu_router.clone();
                                 let refresh_sender = session_refresh_sender.clone();
                                 let tasks = callback_tasks.clone();
                                 let admission = admission.clone();
-                                let bridge = Arc::clone(&bridge_slots).try_acquire_owned();
+                                let bridge = reserve_weave_bridge(&bridge_slots);
                                 Box::pin(async move {
-                                    let Ok(bridge) = bridge else {
+                                    let Some(bridge) = bridge else {
+                                        crate::receiver_trace::event(
+                                            crate::receiver_trace::Event::GattBridgeBusy,
+                                        );
                                         return;
                                     };
+                                    crate::receiver_trace::event(
+                                        crate::receiver_trace::Event::GattNotifyOpened,
+                                    );
                                     debug!("{INNER_NAME}: weave notify subscription started");
                                     let worker_tasks = tasks.clone();
                                     let lifetime = tasks.lifetime();
-                                    let started = tasks.spawn(async move {
-                                        let _bridge = bridge;
-                                        let result = crate::manager::session::until_stopped(
-                                            &lifetime,
-                                            weave_session(
-                                                notifier,
-                                                packet_receiver,
-                                                channel_sender,
-                                                bwu_router,
-                                                tcp_port,
-                                                worker_tasks,
-                                                admission,
-                                            ),
-                                        )
-                                        .await;
-                                        if let Some(Err(error)) = result {
-                                            warn!(
-                                            "{INNER_NAME}: weave session ended with error: {error}"
-                                        );
-                                        }
-                                        let _ = refresh_sender
-                                            .send(ReceiverAdvertisingRefresh::Immediate);
-                                    });
-                                    if let Ok(started) = started {
-                                        let _ = started.await;
+                                    let admitted = start_managed_notify_worker(
+                                        &tasks,
+                                        async move {
+                                            let _bridge = bridge;
+                                            let result = crate::manager::session::until_stopped(
+                                                &lifetime,
+                                                weave_session(
+                                                    notifier,
+                                                    packet_receiver,
+                                                    channel_sender,
+                                                    bwu_router,
+                                                    tcp_port,
+                                                    worker_tasks,
+                                                    admission,
+                                                ),
+                                            )
+                                            .await;
+                                            if let Some(Err(error)) = result {
+                                                warn!(
+                                                "{INNER_NAME}: weave session ended with error: {error}"
+                                            );
+                                            }
+                                            let _ = refresh_sender
+                                                .send(ReceiverAdvertisingRefresh::Immediate);
+                                            crate::receiver_trace::event(
+                                                crate::receiver_trace::Event::GattNotifyWorkerExited,
+                                            );
+                                        },
+                                    );
+                                    if let Err(error) = admitted {
+                                        warn!("{INNER_NAME}: unable to start managed GATT notifier worker: {error}");
                                     }
+                                    crate::receiver_trace::event(
+                                        crate::receiver_trace::Event::GattNotifyCallbackReturning,
+                                    );
                                 })
                             })),
                             ..Default::default()
@@ -467,7 +543,7 @@ struct ReceiveAdmission {
 
 async fn weave_session(
     mut notifier: CharacteristicNotifier,
-    packet_receiver: Arc<Mutex<Option<Receiver<Vec<u8>>>>>,
+    packet_receiver: ingress::Shared,
     sender: Sender<ChannelMessage>,
     bwu_router: BwuRouter,
     tcp_port: u16,
@@ -477,15 +553,11 @@ async fn weave_session(
     let ReceiveAdmission { sessions, policy } = admission;
     let notification_stopped = notifier.stopped();
     tokio::pin!(notification_stopped);
-    let mut receiver_guard = tokio::select! {
-        _ = &mut notification_stopped => return Ok(()),
-        receiver = packet_receiver.lock() => receiver,
-    };
-    let receiver = receiver_guard
-        .as_mut()
-        .ok_or_else(|| anyhow!("weave packet receiver is unavailable"))?;
+    let mut ingress_session = ingress::Session::open(packet_receiver)?;
+    let receiver = &mut ingress_session.receiver;
 
     info!("{INNER_NAME}: weave notify session opened");
+    crate::receiver_trace::event(crate::receiver_trace::Event::GattSessionOpened);
 
     let selected_packet_size = loop {
         let packet = tokio::select! {
@@ -494,7 +566,10 @@ async fn weave_session(
         };
 
         match parse_connection_request(&packet) {
-            Ok(selected) => break selected,
+            Ok(selected) => {
+                crate::receiver_trace::event(crate::receiver_trace::Event::GattConnectParsed);
+                break selected;
+            }
             Err(error) => {
                 debug!("{INNER_NAME}: ignoring pre-handshake packet: {error}");
             }
@@ -505,6 +580,7 @@ async fn weave_session(
     notifier
         .notify(connection_confirm(selected_packet_size).to_vec())
         .await?;
+    crate::receiver_trace::event(crate::receiver_trace::Event::GattConfirmSent);
     let max_payload = usize::from(selected_packet_size.saturating_sub(1)).max(19);
 
     let (inbound_side, weave_side) = tokio::io::duplex(64 * 1024);
@@ -536,10 +612,13 @@ async fn weave_session(
     let mut reassembly = Vec::new();
     let mut outbound_buffer = Vec::new();
     let mut send_counter: u8 = 1;
+    let mut first_frame_forwarded = false;
+    let mut first_data_packet_received = false;
+    let mut first_data_last_fragment = false;
     let mut read_buffer = [0_u8; 2048];
 
     // A peer can disappear without sending a final weave control packet. Observe
-    // the GATT subscription lifecycle explicitly so the session mutex is released
+    // the GATT subscription lifecycle explicitly so the session ingress is released
     // and a later transfer can start without restarting the application.
     let result = loop {
         tokio::select! {
@@ -563,6 +642,12 @@ async fn weave_session(
                     continue;
                 }
 
+                if !first_data_packet_received {
+                    first_data_packet_received = true;
+                    crate::receiver_trace::event(
+                        crate::receiver_trace::Event::GattFirstDataPacketReceived,
+                    );
+                }
                 if header & WEAVE_FIRST_BIT != 0 {
                     reassembly.clear();
                 }
@@ -578,6 +663,12 @@ async fn weave_session(
 
                 if header & WEAVE_LAST_BIT == 0 {
                     continue;
+                }
+                if !first_data_last_fragment {
+                    first_data_last_fragment = true;
+                    crate::receiver_trace::event(
+                        crate::receiver_trace::Event::GattFirstDataLastFragment,
+                    );
                 }
 
                 if reassembly.len() < 3 {
@@ -625,6 +716,12 @@ async fn weave_session(
                 }
 
                 weave_write.write_all(framed).await?;
+                if !first_frame_forwarded {
+                    first_frame_forwarded = true;
+                    crate::receiver_trace::event(
+                        crate::receiver_trace::Event::GattFirstFrameForwarded,
+                    );
+                }
                 reassembly.clear();
             }
             read_result = weave_read.read(&mut read_buffer) => {
@@ -679,24 +776,83 @@ async fn weave_session(
 }
 
 async fn run_inbound_worker(
-    mut request: InboundRequest<MigratableStream>,
+    request: InboundRequest<MigratableStream>,
     sender: Sender<ChannelMessage>,
     router: BwuRouter,
     tcp_port: u16,
     lifetime: CancellationToken,
     native: bool,
 ) {
+    run_inbound_worker_with_resolver(
+        request,
+        sender,
+        router,
+        tcp_port,
+        lifetime,
+        native,
+        crate::utils::local_lan_ipv4,
+    )
+    .await;
+}
+
+// The resolver substitutes only interface discovery in deterministic protocol
+// tests; migration, cancellation, encryption and the worker remain production.
+pub(super) async fn run_inbound_worker_with_resolver(
+    mut request: InboundRequest<MigratableStream>,
+    sender: Sender<ChannelMessage>,
+    router: BwuRouter,
+    tcp_port: u16,
+    lifetime: CancellationToken,
+    native: bool,
+    local_ip: impl Fn() -> Option<[u8; 4]>,
+) {
     let cancellation = request.cancellation();
-    let result: Option<Result<(), anyhow::Error>> = crate::manager::session::until_either_stops(&lifetime, &cancellation, async {
-        loop {
-            request.handle().await?;
-            if request.take_bwu_pending() {
-                if let Err(error) = request.do_bandwidth_upgrade(&router, tcp_port).await {
-                    warn!("{INNER_NAME}: Wi-Fi bandwidth upgrade failed; retaining current transport: {error}");
-                }
+    let result: Option<Result<(), anyhow::Error>> = loop {
+        match crate::manager::session::until_either_stops(
+            &lifetime,
+            &cancellation,
+            request.handle(),
+        )
+        .await
+        {
+            None => break None,
+            Some(Err(error)) => break Some(Err(error)),
+            Some(Ok(())) => {}
+        }
+        if request.take_bwu_pending() {
+            // User cancellation is observed inside optional BWU preparation.
+            // Committed migration retains its writer until completion/failure;
+            // service shutdown may still drop the entire operation immediately.
+            let upgrade = crate::manager::session::until_stopped(&lifetime, async {
+                let ip = local_ip()
+                    .ok_or_else(|| anyhow!("No suitable LAN IPv4 address for bandwidth upgrade"))?;
+                request.do_bandwidth_upgrade_at(&router, tcp_port, ip).await
+            })
+            .await;
+            if cancellation.is_cancelled() || lifetime.is_cancelled() {
+                break None;
+            }
+            if let Some(Err(error)) = upgrade {
+                let error = match error.downcast::<super::inbound::BwuSessionError>() {
+                    Ok(session_error) => break Some(Err(session_error.0)),
+                    Err(upgrade_error) => upgrade_error,
+                };
+                warn!("{INNER_NAME}: Wi-Fi bandwidth upgrade failed; retaining current transport: {error}");
             }
         }
-    }).await;
+    };
+    if crate::manager::session::should_notify_sender_on_cancel(
+        result.is_none(),
+        cancellation.is_cancelled(),
+        lifetime.is_cancelled(),
+        &request.state.state,
+    ) {
+        if let Some(Err(error)) =
+            crate::manager::session::until_stopped(&lifetime, request.send_local_cancel()).await
+        {
+            warn!("{INNER_NAME}: unable to deliver inbound sender Cancel: {error}");
+        }
+    }
     let message = match result {
         None => crate::manager::cancellation_message(
             &request.state.id,
@@ -734,6 +890,98 @@ mod managed_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn given_control_frames_and_overlapping_notify_when_admitted_then_only_one_bridge_owns_peer() {
+        let connect = [WEAVE_CONTROL, 0, 1, 0, 1, 0, 20];
+        assert!(is_weave_connection_write(&connect));
+        assert!(is_weave_connection_write(&connect[..1]));
+        assert!(!is_weave_connection_write(&[]));
+        assert!(!is_weave_connection_write(&[
+            WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM
+        ]));
+        assert!(!is_weave_connection_write(&[
+            WEAVE_CONTROL | WEAVE_CMD_ERROR
+        ]));
+        assert!(!is_weave_connection_write(&[WEAVE_FIRST_BIT]));
+        let permits = Arc::new(Semaphore::new(1));
+        let first = reserve_weave_bridge(&permits).unwrap();
+        assert!(
+            reserve_weave_bridge(&permits).is_none(),
+            "second active peer must never share the write queue"
+        );
+        drop(first);
+        let second = reserve_weave_bridge(&permits).unwrap();
+        assert!(reserve_weave_bridge(&permits).is_none());
+        drop(second);
+        assert!(reserve_weave_bridge(&permits).is_some());
+    }
+
+    #[tokio::test]
+    async fn given_live_notify_worker_when_callback_admits_then_reply_is_not_blocked_by_session_lifetime(
+    ) {
+        let parent = CancellationToken::new();
+        let tasks = SessionTasks::new(&parent, 2).unwrap();
+        let slots = Arc::new(Semaphore::new(1));
+        let bridge = reserve_weave_bridge(&slots).unwrap();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+
+        // The real production admission returns synchronously. Holding the
+        // BLE permit must continue until the tracked worker exits.
+        start_managed_notify_worker(&tasks, async move {
+            let _bridge = bridge;
+            let _ = started_tx.send(());
+            let _ = release_rx.await;
+        })
+        .unwrap();
+        started_rx.await.unwrap();
+        assert!(reserve_weave_bridge(&slots).is_none());
+        release_tx.send(()).unwrap();
+        tasks.stop().await.unwrap();
+        assert!(reserve_weave_bridge(&slots).is_some());
+    }
+
+    #[tokio::test]
+    async fn given_closed_managed_owner_when_notify_callback_submits_then_bridge_is_released_without_detach(
+    ) {
+        let parent = CancellationToken::new();
+        parent.cancel();
+        let tasks = SessionTasks::new(&parent, 1).unwrap();
+        let slots = Arc::new(Semaphore::new(1));
+        let bridge = reserve_weave_bridge(&slots).unwrap();
+
+        let error = start_managed_notify_worker(&tasks, async move {
+            let _bridge = bridge;
+            std::future::pending::<()>().await;
+        })
+        .unwrap_err();
+        assert_eq!(error, crate::sessions::SessionError::Closed);
+        assert!(reserve_weave_bridge(&slots).is_some());
+        tasks.stop().await.unwrap();
+    }
+
+    #[test]
+    fn given_queued_gatt_write_kinds_when_observed_then_first_data_marker_only_follows_connect() {
+        let seen = AtomicBool::new(true);
+        assert!(!first_data_queued_after_connect(&seen, false, true));
+        assert!(!first_data_queued_after_connect(&seen, false, false));
+        assert!(!first_data_queued_after_connect(&seen, true, false));
+        assert!(first_data_queued_after_connect(&seen, false, true));
+        assert!(!first_data_queued_after_connect(&seen, false, true));
+        assert!(!first_data_queued_after_connect(&seen, false, false));
+        assert!(!first_data_queued_after_connect(&seen, true, false));
+        assert!(first_data_queued_after_connect(&seen, false, true));
+
+        assert!(!is_weave_data_write(&[]));
+        assert!(!is_weave_data_write(&[WEAVE_CONTROL]));
+        assert!(!is_weave_data_write(&[
+            WEAVE_CONTROL | WEAVE_CMD_CONN_CONFIRM
+        ]));
+        assert!(!is_weave_data_write(&[WEAVE_CONTROL | WEAVE_CMD_ERROR]));
+        assert!(is_weave_data_write(&[WEAVE_FIRST_BIT, 0]));
+        assert!(is_weave_data_write(&[WEAVE_LAST_BIT, 0]));
+    }
 
     #[test]
     fn given_bad_weave_connection_requests_when_parsed_then_no_handshake_is_negotiated() {

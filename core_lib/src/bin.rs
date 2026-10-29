@@ -26,7 +26,7 @@ async fn main() -> Result<(), anyhow::Error> {
     rqs.run().await?;
 
     let discovery_channel = broadcast::channel(10);
-    rqs.discovery(discovery_channel.0)?;
+    rqs.discovery(discovery_channel.0).await?;
 
     // Wait for CTRL+C and then stop RQS
     let _ = tokio::signal::ctrl_c().await;
