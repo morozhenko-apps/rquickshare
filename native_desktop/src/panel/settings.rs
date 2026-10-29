@@ -158,7 +158,7 @@ impl Editor {
         let editor = Rc::new(Self {
             panel: Rc::downgrade(panel),
             base: RefCell::new(None),
-            language: gtk::DropDown::from_strings(&crate::ui_language::CHOICES),
+            language: gtk::DropDown::from_strings(&crate::ui_language::choices()),
             visibility: gtk::DropDown::from_strings(&[
                 crate::i18n::label("Select visibility…"),
                 crate::i18n::label("Visible"),

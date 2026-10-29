@@ -85,6 +85,13 @@ pub(super) fn translated(locale: &str, source: &str) -> Option<&'static str> {
     })
 }
 
+/// The system fallback caption is localized; explicit language names stay native.
+pub(super) fn choices() -> [&'static str; 21] {
+    let mut choices = CHOICES;
+    choices[0] = crate::i18n::label("System default");
+    choices
+}
+
 const APPLICATION_DIR: &str = "io.github.morozhenko_apps.RQuickShare";
 const PREFERENCE_FILE: &str = "ui-language";
 const MAX_LENGTH: u64 = 32;
