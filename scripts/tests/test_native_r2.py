@@ -358,7 +358,13 @@ class NativeR2Tests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError):
                         r2.public_readback(item, opener)
-                self.assertEqual(calls, [(r2.BASE + item.key, 45)])
+                self.assertEqual(len(calls), 1)
+                request, timeout = calls[0]
+                self.assertIsInstance(request, r2.urllib.request.Request)
+                self.assertEqual(request.full_url, r2.BASE + item.key)
+                self.assertEqual(request.get_header("User-agent"), r2.PUBLIC_VERIFY_USER_AGENT)
+                self.assertEqual(timeout, 45)
+                self.assertNotIn("Authorization", request.headers)
                 self.assertTrue(reply.closed)
 
     def test_given_full_flat_publication_when_completed_then_latest_is_last_and_receipt_covers_only_one_deb(self):
