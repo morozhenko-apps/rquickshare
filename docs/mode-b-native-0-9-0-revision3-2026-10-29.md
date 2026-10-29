@@ -116,3 +116,9 @@ Push of code commit 1d0d32af triggers the configured Preflight and Native GTK wo
 Source-only review status: inventory YES; branch map YES for changed delta; Positive/N1-N12 plan YES; interaction matrix YES; test implementation PARTIAL; mutation review PARTIAL; execution NO; complete branch/line measured coverage NO; KDE/Android physical T14 NO. Therefore **scoped Stage 12 = NO, repository-wide Stage 12 = NO, installed-package acceptance = NO**. Do not publish, merge master or create tag.
 
 Next checkpoint: receive terminal CI for test commit; fix only supported test/source defects using explicit MODE selection, rerun final gate if needed; then create native 0.9.0-3 .deb smoke artifact only after exact-source gates are green; verify hashes/metadata and hand operator T14 physical checklist. This does not override unrelated issue P0/feature readiness.
+
+## Localization audit scope, owner decision and latest gate
+
+Owner decision (2026-10-29): no human walkthrough for every one of the 20 languages. Agent owns completeness/semantic review with deterministic Rust/Python tests; physical acceptance targets language behavior and display, not 20 separate sessions. The previous wording requiring 20/20 *human* language reviews is superseded. Static source review: 19 table-based locale catalogs, 206 unique keys, 19 non-English arms each; exact key/table lengths and no empty translations. Dynamic formatting, RTL isolation and source-to-catalog coverage need independent checks; table presence alone is not semantic acceptance.
+
+New exact-source CI: Preflight 40877420909 SUCCESS on 1d0d32af; Native GTK 40877421291 FAIL **nightly rustfmt** on ui_language.rs newly added test rows; GTK tests skipped, not failed. Apply exact formatter diagnostics without altering expected behavior before next final gate. Current physical acceptance still historical 0.9.0-2 (13/14), not 0.9.0-3.
