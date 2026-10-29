@@ -71,6 +71,7 @@ pub(super) struct Window {
     history: gtk::Box,
     live: gtk::Box,
     notice: gtk::Label,
+    refresh: gtk::Button,
     clear: gtk::Button,
     rendered: RefCell<Option<(String, Vec<String>)>>,
     columns: Columns,
@@ -130,11 +131,19 @@ impl Window {
             history,
             live,
             notice,
+            refresh,
             clear,
             rendered: RefCell::new(None),
             columns: panel.history_columns.clone(),
         })
     }
+    pub(super) fn retranslate(&self) {
+        self.window.set_title(Some(crate::i18n::label("History")));
+        self.refresh.set_label(crate::i18n::label("Refresh"));
+        // Journal notices and row captions are rendered from stable source keys.
+        self.rendered.replace(None);
+    }
+
     pub(super) fn surface(&self) -> gtk::Window {
         self.window.clone()
     }
