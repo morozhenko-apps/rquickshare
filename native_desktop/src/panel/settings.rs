@@ -208,7 +208,9 @@ impl Editor {
             login_task: RefCell::new(None),
         });
         editor.visibility.set_selected(0);
-        editor.language.set_selected(u32::from(crate::ui_language::selection()));
+        editor
+            .language
+            .set_selected(u32::from(crate::ui_language::selection()));
         editor.name_hint.set_selectable(false);
         editor.directory.set_wrap(false);
         editor
@@ -499,7 +501,8 @@ impl Editor {
         }
         self.confirming.set(false);
         self.login_dirty.set(false);
-        self.language.set_selected(u32::from(crate::ui_language::selection()));
+        self.language
+            .set_selected(u32::from(crate::ui_language::selection()));
         if let Some(panel) = self.panel.upgrade() {
             let saved = panel.model.borrow().state.settings.clone();
             if let Some(view) = saved {
