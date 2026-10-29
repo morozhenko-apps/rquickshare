@@ -367,6 +367,36 @@ class NativeR2Tests(unittest.TestCase):
                 self.assertNotIn("Authorization", request.headers)
                 self.assertTrue(reply.closed)
 
+    def test_given_public_readback_transport_error_when_request_is_dispatched_then_it_fails_closed_without_credentials(self):
+        item = r2.object_for("linux/package.deb", self.package)
+        requests = []
+        def unavailable(request, timeout):
+            requests.append((request, timeout))
+            raise OSError("synthetic connection failure")
+        with self.assertRaises(OSError):
+            r2.public_readback(item, unavailable)
+        self.assertEqual(len(requests), 1)
+        request, timeout = requests[0]
+        self.assertEqual(request.full_url, r2.BASE + item.key)
+        self.assertEqual(timeout, 45)
+        self.assertEqual(request.get_header("User-agent"), r2.PUBLIC_VERIFY_USER_AGENT)
+        self.assertNotIn("Authorization", request.headers)
+        self.assertNotIn("Proxy-Authorization", request.headers)
+
+    def test_given_public_readback_body_error_when_streaming_then_reply_closes_and_receipt_is_not_fabricated(self):
+        class BrokenReply(io.BytesIO):
+            status = 200
+            def read(self, size=-1):
+                raise OSError("synthetic mid-stream disconnect")
+        item = r2.object_for("linux/package.deb", self.package)
+        reply = BrokenReply(self.package.read_bytes())
+        def opener(request, timeout):
+            self.assertEqual(request.get_header("User-agent"), r2.PUBLIC_VERIFY_USER_AGENT)
+            return reply
+        with self.assertRaises(OSError):
+            r2.public_readback(item, opener)
+        self.assertTrue(reply.closed)
+
     def test_given_full_flat_publication_when_completed_then_latest_is_last_and_receipt_covers_only_one_deb(self):
         store = Store()
         keys = []

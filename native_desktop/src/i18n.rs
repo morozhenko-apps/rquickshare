@@ -1106,6 +1106,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn given_system_locale_variants_when_resolved_then_only_supported_identifiers_are_returned() {
+        for (input, expected) in [
+            ("en_US.UTF-8", Some("en")),
+            ("ru_RU.UTF-8", Some("ru")),
+            ("pt_PT.UTF-8", Some("pt")),
+            ("zh_TW.UTF-8", Some("zh-Hant")),
+            ("zh_HK.UTF-8", Some("zh-Hant")),
+            ("zh_Hant.UTF-8", Some("zh-Hant")),
+            ("pt_BR.UTF-8", None),
+            ("zh_CN.UTF-8", None),
+            ("zh_Hans.UTF-8", None),
+            ("unknown_US.UTF-8", None),
+        ] {
+            assert_eq!(resolve(input), expected, "{input}");
+        }
+    }
+
+    #[test]
     fn canonical_locale_inventory_is_unique_and_complete() {
         assert_eq!(LOCALES.len(), 20);
         for (index, locale) in LOCALES.iter().enumerate() {

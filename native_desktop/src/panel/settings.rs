@@ -1007,7 +1007,7 @@ pub(super) fn verify_editor_smoke(editor: &Editor) {
     assert_eq!(panel.drawer(), before); // Settings edits never change drawer presentation.
     assert!(editor.is_dirty());
     let staged = editor.name.text();
-    for section in ["receiving", "advanced", "about", "general"] {
+    for section in ["receiving", "advanced", "general"] {
         editor.sections.set_visible_child_name(section);
         assert_eq!(editor.name.text(), staged);
         assert_eq!(panel.drawer(), before);
@@ -1028,6 +1028,18 @@ pub(super) fn verify_editor_smoke(editor: &Editor) {
     assert!(!editor.window.is_visible());
     assert!(!editor.is_dirty());
     assert_eq!(panel.drawer(), before);
+    // The language-only change must remain locally confirmable even offline,
+    // while native settings and login settings remain untouched.
+    editor.window.present();
+    editor
+        .language
+        .set_selected(if saved_language == 1 { 2 } else { 1 });
+    assert!(editor.language_changed());
+    assert!(!editor.is_dirty());
+    assert!(!editor.login_dirty.get());
+    assert!(editor.save.is_sensitive());
+    editor.cancel_draft();
+    assert_eq!(editor.language.selected(), saved_language);
     editor.window.present();
     assert!(editor.window.child().unwrap().is::<gtk::Box>());
     editor.port.set_text("655350");

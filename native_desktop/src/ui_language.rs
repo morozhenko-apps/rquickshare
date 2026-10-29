@@ -332,6 +332,110 @@ mod tests {
     }
 
     #[test]
+    fn given_locale_choice_at_each_boundary_when_mapped_then_index_and_catalog_match() {
+        assert_eq!(LOCALES, crate::i18n::LOCALES);
+        assert_eq!(CHOICES.len(), 21);
+        assert_eq!(CHOICES[0], "System default");
+        assert_eq!(CHOICES[1], "English");
+        assert_eq!(CHOICES[20], "العربية");
+        for (index, locale) in LOCALES.iter().enumerate() {
+            assert_eq!(parse(locale.as_bytes()), Some((index + 1) as u8));
+            assert_eq!(parse(format!("{locale}\n").as_bytes()), Some((index + 1) as u8));
+        }
+        for value in ["system", "system\n", "en", "ar\n"] {
+            assert!(parse(value.as_bytes()).is_some());
+        }
+        assert!(parse(&[0xff, 0xfe]).is_none());
+        assert!(parse(b"").is_none());
+        assert!(parse(b"\n").is_none());
+    }
+
+    #[test]
+    fn given_untrusted_pref_bytes_when_bounds_or_encoding_fail_then_no_language_is_accepted() {
+        let temporary = tempfile::tempdir().unwrap();
+        let file = temporary.path().join("ui-language");
+        for bytes in [
+            Vec::new(),
+            vec![0xff, 0xfe],
+            vec![b'x'; MAX_LENGTH as usize],
+            vec![b'x'; MAX_LENGTH as usize + 1],
+            b"system\n\n".to_vec(),
+            b"en\0".to_vec(),
+            b"pt-BR\n".to_vec(),
+            b"zh-Hans\n".to_vec(),
+        ] {
+            fs::write(&file, &bytes).unwrap();
+            assert_eq!(load_at(&file).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        }
+        fs::remove_file(&file).unwrap();
+        assert_eq!(load_at(&file).unwrap_err().kind(), io::ErrorKind::NotFound);
+        fs::create_dir(&file).unwrap();
+        assert_eq!(load_at(&file).unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn given_valid_existing_language_when_overwritten_then_only_exact_new_value_is_committed() {
+        let temporary = tempfile::tempdir().unwrap();
+        let file = temporary.path().join("nested").join("ui-language");
+        save_at(&file, 2).unwrap();
+        assert_eq!(fs::read(&file).unwrap(), b"ru\n");
+        assert_eq!(save_at(&file, 21).unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(fs::read(&file).unwrap(), b"ru\n");
+        save_at(&file, 4).unwrap();
+        assert_eq!(fs::read(&file).unwrap(), b"pt\n");
+        save_at(&file, 0).unwrap();
+        assert_eq!(fs::read(&file).unwrap(), b"system\n");
+        let remaining: Vec<_> = fs::read_dir(file.parent().unwrap())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0], std::ffi::OsStr::new("ui-language"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn given_new_language_store_when_created_then_private_mode_and_symlink_targets_are_preserved() {
+        use std::os::unix::fs::PermissionsExt;
+        let temporary = tempfile::tempdir().unwrap();
+        let directory = temporary.path().join("config").join(APPLICATION_DIR);
+        let file = directory.join(PREFERENCE_FILE);
+        save_at(&file, 20).unwrap();
+        assert_eq!(fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(fs::metadata(&directory).unwrap().permissions().mode() & 0o777, 0o700);
+        let target = temporary.path().join("unrelated-target");
+        fs::write(&target, b"keep me").unwrap();
+        fs::remove_file(&file).unwrap();
+        std::os::unix::fs::symlink(&target, &file).unwrap();
+        assert_eq!(save_at(&file, 1).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(fs::read(&target).unwrap(), b"keep me");
+        assert_eq!(fs::read_link(&file).unwrap(), target);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn given_parent_is_not_a_directory_when_write_attempted_then_no_target_is_replaced() {
+        let temporary = tempfile::tempdir().unwrap();
+        let parent = temporary.path().join("blocked");
+        fs::write(&parent, b"keep original").unwrap();
+        let file = parent.join("ui-language");
+        assert!(save_at(&file, 2).is_err());
+        assert_eq!(fs::read(&parent).unwrap(), b"keep original");
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn given_multiple_explicit_replacements_when_reloaded_then_only_latest_complete_value_survives() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("ui-language");
+        for (selected, bytes) in [(1, b"en\n".as_slice()), (20, b"ar\n".as_slice()), (0, b"system\n".as_slice())] {
+            save_at(&path, selected).unwrap();
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+            assert_eq!(load_at(&path).unwrap(), selected);
+        }
+    }
+
+    #[test]
     fn given_invalid_selection_when_saving_then_no_file_is_written() {
         let temporary = tempfile::tempdir().unwrap();
         let path = temporary.path().join("ui-language");

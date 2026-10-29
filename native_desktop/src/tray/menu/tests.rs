@@ -375,11 +375,45 @@ fn given_language_refresh_when_projection_is_unchanged_then_tray_revision_advanc
 
 #[test]
 fn given_revision_limit_when_language_changes_then_menu_fails_closed_without_wrapping() {
-    let mut initial = State::default();
-    initial.revision = u32::MAX;
+    let initial = State {
+        revision: u32::MAX,
+        ..Default::default()
+    };
     let (sender, receiver) = tokio::sync::watch::channel(initial);
     let handle = Handle { state: sender };
     handle.refresh_labels();
     assert_eq!(receiver.borrow().revision, u32::MAX);
     assert!(receiver.borrow().exhausted);
+}
+
+#[test]
+fn given_exhausted_menu_when_refresh_or_projection_change_arrives_then_state_stays_fail_closed() {
+    let initial = State {
+        revision: u32::MAX,
+        exhausted: true,
+        ..Default::default()
+    };
+    let (sender, receiver) = tokio::sync::watch::channel(initial);
+    let handle = Handle { state: sender };
+    handle.refresh_labels();
+    handle.publish(Projection {
+        card_visible: true,
+        ..initial.projection
+    });
+    assert_eq!(receiver.borrow().revision, initial.revision);
+    assert_eq!(receiver.borrow().projection, initial.projection);
+    assert!(receiver.borrow().exhausted);
+}
+
+#[test]
+fn given_repeated_language_refresh_when_projection_is_constant_then_every_revision_advances() {
+    let initial = State::default();
+    let (sender, receiver) = tokio::sync::watch::channel(initial);
+    let handle = Handle { state: sender };
+    for revision in 2..=9 {
+        handle.refresh_labels();
+        assert_eq!(receiver.borrow().revision, revision);
+        assert_eq!(receiver.borrow().projection, initial.projection);
+        assert!(!receiver.borrow().exhausted);
+    }
 }
