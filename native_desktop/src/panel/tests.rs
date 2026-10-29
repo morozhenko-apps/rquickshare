@@ -657,6 +657,11 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     outbound::verify(&panel);
     panel.show_transfers();
     assert!(panel.transfers.borrow().is_some());
+    panel.retranslate();
+    assert_eq!(
+        panel.transfers.borrow().as_ref().unwrap().surface().title().as_deref(),
+        Some(crate::i18n::label("History"))
+    );
     assert_eq!(panel.pages.visible_child_name().as_deref(), Some("nearby"));
     assert!(!panel.model.borrow().closing);
 

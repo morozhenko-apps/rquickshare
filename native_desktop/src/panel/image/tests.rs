@@ -52,6 +52,14 @@ pub(in crate::panel) fn verify_image_smoke(panel: &Rc<Panel>, application: &gtk:
         (1, 1)
     );
     assert!(*panel.ingress.gate.subscribe().borrow());
+    let notice_before = image.status.text();
+    image.retranslate();
+    assert_eq!(image.status.text(), notice_before);
+    assert_eq!(image.window.title().as_deref(), Some(crate::i18n::label("Send image")));
+    assert_eq!(image.capture.label().as_deref(), Some(crate::i18n::label("Capture clipboard image")));
+    assert_eq!(image.source.borrow().as_ref().unwrap().total_bytes(), size);
+    assert!(image.prepare.is_sensitive());
+    assert_eq!(attempts.get(), 0);
     // A stale guard cannot prepare; rejected admission keeps the immutable local source.
     guard.set(false);
     image.prepare.emit_clicked();

@@ -97,6 +97,17 @@ pub(in crate::panel) fn verify_composer_smoke(panel: &Rc<Panel>, application: &g
     composer.editor.emit_by_name::<()>("paste-clipboard", &[]);
     finish(&composer);
     assert_eq!(composer.body().unwrap().text(), "edited");
+    // Locale repaint must not touch unsent text, ownership or clipboard.
+    let source_before = composer.status_source.get();
+    let clipboard_before = clipboard_text(&clipboard);
+    composer.retranslate();
+    assert_eq!(composer.body().unwrap().text(), "edited");
+    assert_eq!(composer.status_source.get(), source_before);
+    assert_eq!(composer.status.text(), crate::i18n::label(source_before));
+    assert_eq!(composer.window.title().as_deref(), Some(crate::i18n::label("Send text")));
+    assert_eq!(composer.prepare.label().as_deref(), Some(crate::i18n::label("Prepare text")));
+    assert_eq!(clipboard_text(&clipboard), clipboard_before);
+    assert_eq!(attempts.get(), 1);
     for value in ["x".repeat(MAX_TEXT_BYTES + 1), "".to_owned()] {
         clipboard.set_text(&value);
         composer.paste.emit_clicked();
