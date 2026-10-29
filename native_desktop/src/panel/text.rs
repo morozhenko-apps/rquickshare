@@ -48,8 +48,11 @@ type Guard = dyn Fn(&TextKey) -> bool;
 pub(super) struct Review {
     window: gtk::Window,
     text: gtk::Label,
+    heading: gtk::Label,
     copy: gtk::Button,
+    close_button: gtk::Button,
     status: gtk::Label,
+    status_source: Cell<&'static str>,
     body: RefCell<Option<Arc<ReceivedText>>>,
     key: TextKey,
     guard: Box<Guard>,
@@ -110,8 +113,11 @@ impl Review {
         let review = Rc::new(Self {
             window,
             text,
+            heading,
             copy,
+            close_button: close.clone(),
             status,
+            status_source: Cell::new("Nothing has been copied. Use Copy to replace this clipboard."),
             body: RefCell::new(Some(body)),
             key,
             guard: Box::new(guard),
@@ -146,11 +152,27 @@ impl Review {
         self.copy
             .set_sensitive(!self.closed.get() && (self.guard)(&self.key));
     }
+    fn set_status(&self, source: &'static str) {
+        self.status_source.set(source);
+        self.status.set_text(crate::i18n::label(source));
+    }
+    pub(super) fn retranslate(&self) {
+        self.window.set_title(Some(crate::i18n::label("Received text")));
+        self.heading.set_text(crate::i18n::label(
+            if self.key.kind == PayloadKind::Url {
+                "Received link · plain text"
+            } else {
+                "Received text"
+            },
+        ));
+        self.copy.set_label(crate::i18n::label("Copy"));
+        self.close_button.set_label(crate::i18n::label("Close"));
+        self.status
+            .set_text(crate::i18n::label(self.status_source.get()));
+    }
     fn copy_explicitly(&self) {
         if self.closed.get() || !(self.guard)(&self.key) {
-            self.status.set_text(crate::i18n::label(
-                "Copy unavailable. Unlock and review the current transfer.",
-            ));
+            self.set_status("Copy unavailable. Unlock and review the current transfer.");
             return;
         }
         let body = self.body.borrow();
@@ -158,13 +180,10 @@ impl Review {
         let display = gtk::prelude::WidgetExt::display(&self.window);
         let provider = gtk::gdk::ContentProvider::for_value(&body.text().to_value());
         if display.is_closed() || display.clipboard().set_content(Some(&provider)).is_err() {
-            self.status.set_text(crate::i18n::label(
-                "Copy failed. This clipboard did not accept the text.",
-            ));
+            self.set_status("Copy failed. This clipboard did not accept the text.");
             return;
         }
-        self.status
-            .set_text(crate::i18n::label("Copied to this clipboard"));
+        self.set_status("Copied to this clipboard");
     }
     pub(super) fn close(&self) {
         if self.closed.replace(true) {
