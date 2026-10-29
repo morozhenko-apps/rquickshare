@@ -902,6 +902,7 @@ pub(super) fn verify_keyed_layout() {
     ] {
         let root = card();
         let caption = label("Stale English label");
+        caption.set_selectable(false);
         root.append(&caption);
         let entry = Entry {
             root,
