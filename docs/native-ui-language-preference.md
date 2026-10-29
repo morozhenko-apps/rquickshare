@@ -24,3 +24,13 @@ Current i18n in `native_desktop/src/i18n.rs` resolves only environment variables
 ## Rollback / handoff
 
 Separate `docs:` from code/test commits. For code rollback, revert only the client locale module and its GTK bindings, restoring environment-only language resolution; do not touch daemon settings. No master promotion, protected release tag, CI-triggered distribution or R2 writes without separate explicit authorization. Record evidence (exact SHA and test outcomes), and mark any unfinished integration as PARTIAL rather than completing the release.
+
+## Implemented source checkpoint (unverified CI)
+
+Dev executable checkpoint: `a90ccb3a72518ba8f5589dad83b6ddf56ee55683` after the staged locale/UI/R2 source changes. Implemented `src/ui_language.rs` independent bounded file preference, startup read and atomic locale switch, Settings General dropdown, Cancel/OK staging, GTK card/context-menu refresh and a dedicated DBusMenu revision notification. Closed Settings is reconstructed on next open after a confirmed language change. Added parser, preference roundtrip, invalid/symlink, menu revision and GTK Cancel smoke assertions. This is NOT terminal rustfmt/Clippy/GTK CI evidence; no host compilation or installed runtime test occurred in this session.
+
+The earlier separately requested Settings UI cleanup removes in-body duplicate product branding, About page and success-only footer. Separate About is updated to credit morozhenko apps and the native fork while retaining upstream provenance and GPL. Titlebar icon is set; physical KDE maximize/minimize decoration remains unverified.
+
+Known incompleteness: the current `localize_panel()` updates only selected fixed GTK labels; other already-open secondary windows and hard-coded/uncataloged captions may remain in their old language until reopened. Human semantic review of all 20 languages, RTL/layout/long strings and the installed native UI gate are NOT complete. Do not close issue #17 or T14 or call this 1.0.0 signoff. CI must be evaluated at the final source gate; if it finds a compiler/test defect, apply root-cause protocol before generating a new candidate.
+
+No master/tag/signed APT/R2 public release. Operator's 13/14 physical PASS belong to **previous** installed native 0.9.0-2, not this modified dev code.
