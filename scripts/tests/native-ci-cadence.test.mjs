@@ -31,6 +31,10 @@ test("Given native GTK selectors When inspected Then test admission is exact and
     "given_signal_and_close_racing_when_both_complete_then_shutdown_is_idempotently_cancelled",
   ]) assert.ok(script.includes(testName), testName);
   assert.ok(script.includes("grep -Fxc"));
+  assert.ok(script.includes('target_args=(--lib)'));
+  assert.ok(script.includes('target_args=(--bin rquickshare)'));
+  assert.ok(script.includes('"${cargo_cmd[@]}" "${target_args[@]}"'));
+  assert.ok(!script.includes('"--$target"'));
   assert.ok(script.includes("--exact"));
   assert.ok(script.includes("test result: ok. 1 passed; 0 failed; 0 ignored;"));
   for (const group of ["stable", "stress"]) {
