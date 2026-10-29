@@ -56,3 +56,14 @@ Interaction matrix: secondary window × close/hide/reopen × active locale, Abou
 Stable execution and separately identified race/flaky suites remain PENDING on final changed SHA; no full code coverage percentage or executed mutation tool is claimed. The prior 0.9.0-4 5/5 owner physical PASS is historical, not acceptance of the newly changed chrome/contrast.
 
 Release blocker: Frozen #8 availability/DoS path and #16 authenticated route grouping remain unresolved; #23 initial BLE stall, #24 throughput, #26 special BWU-cancel race and #27 Windows also lack exact current physical acceptance. Public 1.0.0 cannot claim those gates met. Required signer/protected tag environment is not verified by connected tools; no protected master/tag/R2 production action has occurred. Direct 1.0.0 source candidate can proceed without an extra human acceptance, but irreversible publication is fail-closed.
+
+## Superseding owner release authorization — 2026-10-29
+
+The owner explicitly clarified: **SHIP NATIVE 1.0.0 WITH ISSUES #8 AND #16 OPEN**. They are known retained limitations and are **not** release blockers. This decision supersedes earlier paragraphs in this document treating their unresolved state as a 1.0.0 release STOP FACTOR or demanding another product-scope waiver. Do not change source code or issue state for #8/#16; do not claim they were solved. Preserve compatibility, independent unverified peer routes and consent; no "authenticated route equivalence" claim. The owner also chose no intermediate human 1.0.0 acceptance after 0.9.0-4 5/5 PASS. No evidence that Google resolved or failed to resolve a corresponding defect is asserted by this agent.
+
+Remaining release *integrity* gates are non-negotiable engineering checks (not a new request to accept known issues): terminal successful latest-source Preflight + native GTK, exact-source 1.0.0-1 package smoke and hash/dependency validation, correct protected master and immutable annotated native/v1.0.0 tag, validated signer-only environment, signed R2/APT metadata and public HTTPS verification. If a gate fails, fix the concrete error; no retries in a polling loop or silent bypass.
+
+Terminal CI failures inspected at 19:35:25 and 19:36:05 Lisbon (UTC+0):
+- GTK #40941463331 at 0419fd8f: 171/172 passed; the i18n catalog invariant found "About" duplicated between Settings and menu_extra.
+- Preflight #40941562152 at 5c511078: 90/91 Python methods passed; a newly authored CSS selector test erroneously used double-escaped regex.
+Root fixes in executable commit 1e0825c6: unique menu source identifiers "Tray About"/"Tray Quit", separate English user-visible fallback "About"/"Quit" (20-language localized entries and panel.about/panel.quit actions unchanged); correct CSS regex without weakening the required solid theme-foreground check. No changes to Core, identity, BWU or #8/#16. New terminal CI is **not yet established**, and no protected release has been published.
