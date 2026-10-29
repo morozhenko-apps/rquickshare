@@ -1,41 +1,41 @@
 # rQuickShare
 
-**Share files, photos and text between Linux and compatible nearby Android Quick Share devices.** Free, open source and designed for straightforward desktop-to-phone transfers.
+Moving a photo or a file between Linux and Android should be a boring task. It isn't always, which is why I keep working on rQuickShare.
 
-[Product page](https://morozhenko.com/en/rquickshare/) · [Download for Linux](https://morozhenko.com/rquickshare/install/linux) · [Report an issue](https://github.com/morozhenko-apps/rquickshare/issues)
+It's a free, open-source Linux desktop app for sharing files, photos and text with compatible nearby Android devices using Quick Share. I maintain this fork to make everyday transfers easier, without adding a cloud account or making you upload files to a server first.
 
-## Features
+[Product page](https://morozhenko.com/en/rquickshare/) · [Linux installation](https://morozhenko.com/rquickshare/install/linux) · [GitHub issues](https://github.com/morozhenko-apps/rquickshare/issues)
 
-- Discover compatible nearby Android devices and choose who receives your files, images or text.
-- Review incoming transfer requests and explicitly accept or decline them.
-- Follow outgoing and incoming transfer progress from a compact native Linux desktop interface.
-- Open received files or their containing folder.
-- Use nearby connectivity supported by participating devices without a developer-operated cloud file-storage account.
+## What it does
 
-The recipient, device capabilities, network conditions and operating-system permissions determine whether a particular discovery or transfer path is available. rQuickShare does not claim compatibility with every phone or sharing implementation.
+You can find compatible Android devices nearby and send them a file, image or text from your Linux desktop. You can also receive transfers, with a clear choice to accept or decline incoming requests. A small tray card shows what's happening, and a separate view helps you follow ongoing and completed transfers.
 
-## Install
+The idea is to keep sharing simple without hiding important decisions. A rejected transfer should stay rejected, and an interrupted transfer should not look like a success.
 
-The native rQuickShare 1.0.0 release targets **Ubuntu 26.04, x86-64 (amd64)** and is packaged as a Debian `.deb` file.
+## Getting started
 
-**[Download the Ubuntu 26.04 DEB](https://morozhenko.com/rquickshare/install/linux)**
+The native Linux package targets **Ubuntu 26.04 on x86-64 (amd64)** and comes as a `.deb` file. Use the [Linux installation link](https://morozhenko.com/rquickshare/install/linux), install the package with your usual package manager, and open rQuickShare.
 
-You can also find release assets and source history in the [GitHub repository](https://github.com/morozhenko-apps/rquickshare). The native release is provided for Linux; this edition does not include Windows or macOS installers. Android is the compatible peer device, not a separate rQuickShare Android application.
+Make sure nearby discovery and the required connection permissions are enabled on both devices. Then select a compatible Android Quick Share device and send your file or text. When receiving something, check which device is sending it before accepting.
 
-After installing, launch rQuickShare, enable the connectivity and discovery permissions needed on both devices, select the recipient and send your content. Accept any incoming transfer only from a device you recognize.
+This native edition is for Linux. It does not include Windows or macOS installers, and you don't need to install a separate rQuickShare app on Android.
 
-## Privacy and security
+## Privacy and compatibility
 
-Transfers use supported nearby and local-network connections. File contents are not uploaded to a developer-operated cloud-storage service. Discovery and transfer can exchange device identifiers and connection metadata with other participating devices; use trusted recipients and review every incoming request.
+The file content travels over supported nearby connections, not through a cloud-storage service operated by me. You don't need an account with the developer to send or receive anything. The devices still exchange information needed for discovery and connection, so this is not a promise of complete anonymity.
 
-For the full data-processing description, see the [Privacy Policy](https://morozhenko.com/rquickshare/privacy-policy) and [Terms of Use](https://morozhenko.com/rquickshare/terms-of-use).
+Quick Share compatibility depends on the devices, their permissions and the available connections. I can't promise that every Android phone and every network setup will behave the same way. If something doesn't work, I'd rather know exactly what failed than pretend the transfer succeeded.
 
-## Feedback and contributing
+You can read the [Privacy Policy](https://morozhenko.com/rquickshare/privacy-policy) and [Terms of Use](https://morozhenko.com/rquickshare/terms-of-use) for more detail.
 
-For device compatibility issues, crashes or transfer problems, [open a GitHub issue](https://github.com/morozhenko-apps/rquickshare/issues) with reproducible steps, the operating systems and the expected versus observed behavior. Before sharing screenshots or logs, remove private file paths, device identifiers, IP addresses, confidential file names and other personal information.
+## Bugs and feedback
 
-This is an independently maintained fork of [Martichou/rquickshare](https://github.com/Martichou/rquickshare). Bug reports and proposals are welcome; unsolicited upstream pull requests are not accepted.
+If you find a bug or an awkward part of the interface, [open an issue](https://github.com/morozhenko-apps/rquickshare/issues). Tell me what you tried, what you expected and what actually happened. The Linux version, Android model and steps to reproduce are more useful than a screenshot of a generic error.
 
-## License
+Please remove personal file names, local paths, device identifiers, IP addresses and private data from logs before posting them publicly. Suggestions and bug reports are welcome, but I'm not accepting unsolicited pull requests to this fork.
 
-rQuickShare is distributed under the [GNU General Public License v3.0](LICENSE). Original authorship, attribution and licensing obligations remain in force.
+## Source and license
+
+rQuickShare is an independently maintained fork of [Martichou/rquickshare](https://github.com/Martichou/rquickshare). Credit for the original project and other contributors stays with them.
+
+The code is available under the [GNU General Public License v3.0](LICENSE).
