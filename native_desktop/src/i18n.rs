@@ -643,6 +643,9 @@ fn translated_compose(locale: &str) -> &'static [&'static str; 11] {
 }
 
 fn translated(locale: &str, source: &'static str) -> &'static str {
+    if let Some(value) = crate::ui_language::translated(locale, source) {
+        return value;
+    }
     if let Some(value) = history::translated(locale, source) {
         return value;
     }
