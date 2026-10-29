@@ -16,10 +16,27 @@ pub(super) const LOCALES: [&str; 20] = [
 
 /// Native names stay recognizable even while the surrounding UI language changes.
 pub(super) const CHOICES: [&str; 21] = [
-    "System default", "English", "Русский", "Español", "Português (Portugal)",
-    "Deutsch", "Français", "Italiano", "Polski", "हिन्दी", "繁體中文", "日本語",
-    "Nederlands", "Svenska", "Türkçe", "한국어", "বাংলা", "ไทย", "Bahasa Indonesia",
-    "Filipino", "العربية",
+    "System default",
+    "English",
+    "Русский",
+    "Español",
+    "Português (Portugal)",
+    "Deutsch",
+    "Français",
+    "Italiano",
+    "Polski",
+    "हिन्दी",
+    "繁體中文",
+    "日本語",
+    "Nederlands",
+    "Svenska",
+    "Türkçe",
+    "한국어",
+    "বাংলা",
+    "ไทย",
+    "Bahasa Indonesia",
+    "Filipino",
+    "العربية",
 ];
 
 pub(super) fn translated(locale: &str, source: &str) -> Option<&'static str> {
@@ -80,7 +97,9 @@ pub(super) fn selection() -> u8 {
 }
 
 pub(super) fn explicit_locale() -> Option<&'static str> {
-    LOCALES.get(usize::from(selection().checked_sub(1)?)).copied()
+    LOCALES
+        .get(usize::from(selection().checked_sub(1)?))
+        .copied()
 }
 
 fn parse(bytes: &[u8]) -> Option<u8> {
@@ -114,7 +133,9 @@ fn load_at(path: &Path) -> io::Result<u8> {
         ));
     }
     let mut bytes = Vec::new();
-    File::open(path)?.take(MAX_LENGTH + 1).read_to_end(&mut bytes)?;
+    File::open(path)?
+        .take(MAX_LENGTH + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_LENGTH {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -126,9 +147,7 @@ fn load_at(path: &Path) -> io::Result<u8> {
 
 /// Read only the GTK preference. Damaged files cannot activate a guessed language.
 pub(super) fn initialize() {
-    let selected = config_file()
-        .and_then(|path| load_at(&path))
-        .unwrap_or(0);
+    let selected = config_file().and_then(|path| load_at(&path)).unwrap_or(0);
     SELECTED.store(selected, Ordering::Release);
 }
 
@@ -206,7 +225,10 @@ fn save_at(path: &Path, selected: u8) -> io::Result<()> {
 /// Persist first; change process language only after the atomic file replacement succeeds.
 pub(super) fn save(selected: u8) -> io::Result<bool> {
     if selected > LOCALES.len() as u8 {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Unsupported UI locale"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unsupported UI locale",
+        ));
     }
     if selected == selection() {
         return Ok(false);
@@ -228,7 +250,10 @@ mod tests {
             assert!(!translated(locale, "System default").unwrap().is_empty());
         }
         assert_eq!(translated("ru", "Language"), Some("Язык"));
-        assert_eq!(translated("pt", "System default"), Some("Predefinição do sistema"));
+        assert_eq!(
+            translated("pt", "System default"),
+            Some("Predefinição do sistema")
+        );
         assert_eq!(translated("xx", "Language"), Some("Language"));
     }
 
@@ -236,11 +261,23 @@ mod tests {
     fn given_all_locale_options_when_parsed_then_only_explicit_canonical_ids_are_valid() {
         assert_eq!(parse(b"system\n"), Some(0));
         for (index, code) in LOCALES.iter().enumerate() {
-            assert_eq!(parse(format!("{code}\n").as_bytes()), Some((index + 1) as u8));
+            assert_eq!(
+                parse(format!("{code}\n").as_bytes()),
+                Some((index + 1) as u8)
+            );
         }
         for invalid in [
-            "", "en-US", "pt-BR", "zh-Hans", "system\n\n", "xx", " ru",
-            "system\r\n", "../en", "ru\0", "RU",
+            "",
+            "en-US",
+            "pt-BR",
+            "zh-Hans",
+            "system\n\n",
+            "xx",
+            " ru",
+            "system\r\n",
+            "../en",
+            "ru\0",
+            "RU",
         ] {
             assert_eq!(parse(invalid.as_bytes()), None, "{invalid:?}");
         }
@@ -263,16 +300,25 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let path = temporary.path().join("ui-language");
         fs::write(&path, vec![b'x'; 1024]).unwrap();
-        assert_eq!(load_at(&path).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            load_at(&path).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
         fs::write(&path, b"pt-BR\n").unwrap();
-        assert_eq!(load_at(&path).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            load_at(&path).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
         #[cfg(unix)]
         {
             let target = temporary.path().join("target");
             fs::write(&target, b"ru\n").unwrap();
             fs::remove_file(&path).unwrap();
             std::os::unix::fs::symlink(&target, &path).unwrap();
-            assert_eq!(load_at(&path).unwrap_err().kind(), io::ErrorKind::InvalidData);
+            assert_eq!(
+                load_at(&path).unwrap_err().kind(),
+                io::ErrorKind::InvalidData
+            );
             assert!(save_at(&path, 2).is_err());
             assert_eq!(fs::read(&target).unwrap(), b"ru\n");
         }
@@ -282,7 +328,10 @@ mod tests {
     fn given_invalid_selection_when_saving_then_no_file_is_written() {
         let temporary = tempfile::tempdir().unwrap();
         let path = temporary.path().join("ui-language");
-        assert_eq!(save_at(&path, 21).unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(
+            save_at(&path, 21).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
         assert!(!path.exists());
     }
 }
