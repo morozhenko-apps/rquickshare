@@ -53,13 +53,20 @@ struct Worker {
     ingress: Arc<Ingress>,
     runtime: Handle,
 }
+enum ImageNotice {
+    Key(&'static str),
+    Captured { dimensions: String, bytes: u64 },
+}
 type Prepare = dyn Fn(OpenedSelection) -> Result<Completion, ControllerError>;
 pub(super) struct Image {
     window: gtk::Window,
     picture: gtk::Picture,
+    heading: gtk::Label,
     capture: gtk::Button,
     prepare: gtk::Button,
+    cancel_button: gtk::Button,
     status: gtk::Label,
+    notice: RefCell<ImageNotice>,
     source: RefCell<Option<OpenedSelection>>,
     permit: RefCell<Option<PreparationPermit>>,
     task: RefCell<Option<glib::JoinHandle<()>>>,
@@ -122,9 +129,14 @@ impl Image {
         let image = Rc::new(Self {
             window,
             picture,
+            heading,
             capture,
             prepare,
+            cancel_button: cancel.clone(),
             status,
+            notice: RefCell::new(ImageNotice::Key(
+                "Clipboard is read only when you capture. Nothing is sent yet.",
+            )),
             source: RefCell::new(None),
             permit: RefCell::new(Some(permit)),
             task: RefCell::new(None),
@@ -174,6 +186,31 @@ impl Image {
         self.prepare
             .set_sensitive(ready && self.source.borrow().is_some());
     }
+    fn set_notice(&self, notice: ImageNotice) {
+        self.notice.replace(notice);
+        self.retranslate_status();
+    }
+    fn retranslate_status(&self) {
+        match &*self.notice.borrow() {
+            ImageNotice::Key(source) => self.status.set_text(crate::i18n::label(source)),
+            ImageNotice::Captured { dimensions, bytes } => self.status.set_text(&format!(
+                "{dimensions} · {} · Clipboard.png\n{}",
+                crate::i18n::byte_count(*bytes),
+                crate::i18n::label("Review the image, then prepare and choose recipients.")
+            )),
+        }
+    }
+    pub(super) fn retranslate(&self) {
+        self.window.set_title(Some(crate::i18n::label("Send image")));
+        self.heading.set_text(crate::i18n::label(
+            "Capture a clipboard image, review it, then choose recipients.",
+        ));
+        self.capture
+            .set_label(crate::i18n::label("Capture clipboard image"));
+        self.prepare.set_label(crate::i18n::label("Prepare image"));
+        self.cancel_button.set_label(crate::i18n::label("Cancel"));
+        self.retranslate_status();
+    }
     fn show_capture(&self, image: CapturedImage) {
         let texture = gtk::gdk::MemoryTexture::new(
             image.preview_width as i32,
@@ -183,13 +220,10 @@ impl Image {
             image.preview_width as usize * 4,
         );
         self.picture.set_paintable(Some(&texture));
-        self.status.set_text(&format!(
-            "{} × {} px · {} · Clipboard.png\n{}",
-            image.width,
-            image.height,
-            crate::i18n::byte_count(image.source.total_bytes()),
-            crate::i18n::label("Review the image, then prepare and choose recipients.")
-        ));
+        self.set_notice(ImageNotice::Captured {
+            dimensions: format!("{} × {} px", image.width, image.height),
+            bytes: image.source.total_bytes(),
+        });
         self.source.replace(Some(image.source));
     }
     fn capture_explicitly(self: &Rc<Self>) {
@@ -213,9 +247,7 @@ impl Image {
                 Ok(bytes) => bytes,
                 Err(()) => {
                     image.busy.set(false);
-                    image.status.set_text(crate::i18n::label(
-                        "No supported PNG was captured. Use a static image up to 32 MiB and 64 million pixels.",
-                    ));
+                    image.set_notice(ImageNotice::Key("No supported PNG was captured. Use a static image up to 32 MiB and 64 million pixels."));
                     image.refresh();
                     return;
                 }
@@ -242,9 +274,7 @@ impl Image {
                         image.permit.replace(Some(permit));
                         match result {
                             Ok(captured) => image.show_capture(captured),
-                            Err(_) => image.status.set_text(crate::i18n::label(
-                                "Image capture failed validation or exceeded resource limits. The previous image is kept.",
-                            )),
+                            Err(_) => image.set_notice(ImageNotice::Key("Image capture failed validation or exceeded resource limits. The previous image is kept.")),
                         }
                         image.busy.set(false);
                         image.refresh();
@@ -272,17 +302,13 @@ impl Image {
             .as_ref()
             .and_then(|source| source.try_clone().ok());
         let Some(source) = source else {
-            self.status.set_text(crate::i18n::label(
-                "Image source could not be prepared. Capture it again.",
-            ));
+            self.set_notice(ImageNotice::Key("Image source could not be prepared. Capture it again."));
             return;
         };
         let completion = match (self.submit)(source) {
             Ok(completion) => completion,
             Err(_) => {
-                self.status.set_text(crate::i18n::label(
-                    "Preparation was not queued. Review the current source and connection.",
-                ));
+                self.set_notice(ImageNotice::Key("Preparation was not queued. Review the current source and connection."));
                 return;
             }
         };
