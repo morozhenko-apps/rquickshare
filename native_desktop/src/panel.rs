@@ -1017,6 +1017,30 @@ impl Panel {
             });
         }
     }
+    /// Repaint presentation only; retain the controller, daemon, consent and transfer owners.
+    pub(super) fn retranslate(self: &Rc<Self>) {
+        crate::i18n::localize_panel(&self.builder);
+        self.reconnect_button
+            .set_label(crate::i18n::label("Retry connection"));
+        self.curtain.set_label(&format!(
+            "{}\n{}",
+            crate::i18n::label("Choose target devices"),
+            crate::i18n::label("Clear prepared files")
+        ));
+        self.curtain.update_property(&[
+            gtk::accessible::Property::Label(crate::i18n::label("Clear prepared files")),
+            gtk::accessible::Property::Description(crate::i18n::label("Choose target devices")),
+        ]);
+        self.refresh_localized_menus();
+        if let Some(about) = self.about.borrow().as_ref() {
+            about.set_website_label(crate::i18n::label("Project website"));
+        }
+        if let Some(handle) = self.tray_menu.borrow().as_ref() {
+            handle.refresh_labels();
+        }
+        self.render();
+    }
+
     pub fn render(self: &Rc<Self>) {
         self.schedule_results();
         // Publish after readiness/action updates using an immutable model projection.
