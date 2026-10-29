@@ -24,3 +24,25 @@ After the final implementation revision: exhaustive changed-file branch/test/neg
 ## Rollback and status
 
 All code and docs commits separate and atomic. Revert style fixes independently; do not mutate prior installed 0.9.0-2. Initial status: Phase 1 IN PROGRESS, Phase 2 PARTIAL, Mode B completion NO, new package absent. Existing physical 0.9.0-2 13/14 PASS remains historical to previous SHA. Keep an accurate evidence checkpoint here, not claims of future success.
+
+## Checkpoint: existing fixes versus required new work
+
+Read-only reconciliation on current dev:
+- #11 unusable LAN IPv4 exclusion has existing pure tests and green prior exact-source CI 2545e051; owner acceptance still requires physical VPN/LAN cases.
+- #12 approved cancel/join discovery worker and terminal browser closure are implemented with prior CI evidence at 424a3a54; SDK/hardware lifecycle remains unverified.
+- #19 mDNS tombstone producer/consumer mismatch is fixed and tested with prior six-green c384e8e2; stale-entry physical H01/H15 remains pending.
+- #21 manual-only Hidden startup has an owner-reported physical PASS on installed prior debug candidate and source code enforces initial Invisible; outstanding risk is stored visibility snapshot / settings reapply consistency.
+- #22 premetadata row "Connecting… / Waiting for details" implemented and source tested; installed screen confirmation pending.
+- #26 source is **not** in the original unfixed state: inbound.rs::send_local_cancel now returns an explicit error when deferred_upgrade_writes is present or the committed BWU writer is unavailable; gatt.rs retains committed migration writer ownership until completion or failure; inbound/bwu_cancel_tests.rs covers eight cancellation/migration scenarios. This is a source/fixture correction, **not** proof Pixel observed a cancelled UI during the committed migration.
+- #25 ordinary LAN local Cancel has previously been physically observed as cancelled on Pixel; cancellation under BWU and sender/receiver terminal ordering still require scoped installed acceptance.
+- #23 has source-instrumented static GATT/Weave stage markers; first BLE handshake stall lacks a new same-process trace. #24 already has first-file and 25/50/75% redacted trace markers; suspected throughput loss still lacks a controlled bytes/time measurement, so tuning would be speculative.
+- #13 Devices attention code and GTK navigation tests exist; owner's 0.9.0-2 T11 marked PASS, but the reported summary alone does not establish all multi-request/focus/scroll and reduced-motion acceptance.
+- #17 has agent-run source inventory and localized secondary-window fixes, not a 20-human-review requirement. #27 Windows is a separate platform adapter and card deliverable; no Windows source or physical Windows claim. #14 protected publication not approved.
+
+No issues closed from code existence alone. No action on #8 or #16.
+
+## Phase 1 execution evidence
+
+Nightly rustfmt failure on Native GTK run 40881389292 (source 47a60cda): exact diagnostic changes applied to eight native GTK files with style-only commit a845d8476bebfe4b9621077c9fbfc107420a8f27. This successfully exposed the next gate: Native GTK run 40900116999 compiled sufficiently to reveal test compiler errors E0369/E0277 in compose/tests.rs line 115. Root cause was the added test comparing un-awaited Future values returned by clipboard_text; the test was intended to compare actual clipboard content. Focused test-only fix b85aeaad4af6ad2dbe0f64d5501541be90419c10 now reads actual GTK clipboard text through GLib MainContext; no production or protocol behavior changed. Preflight 40900117006 was in_progress at the checkpoint and GTK 40900116999 failure was only at test compilation. **Do not claim test suite completion or candidate readiness until subsequent terminal exact-source CI**.
+
+Phase 1: PARTIAL; Phase 2: source audit completed / physical evidence pending, not fully closed; Mode B: NO; .deb 0.9.0-3: NOT BUILT; master/tag/R2: UNTOUCHED.
