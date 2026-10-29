@@ -1649,8 +1649,8 @@ mod tests {
     }
 
     #[test]
-    fn given_all_locales_when_security_and_transfer_actions_are_compared_then_distinct_outcomes_remain_distinct()
-    {
+    fn given_all_locales_when_security_and_transfer_actions_are_compared_then_distinct_outcomes_remain_distinct(
+    ) {
         for locale in LOCALES {
             for (left, right) in [
                 ("Receive", "Send"),

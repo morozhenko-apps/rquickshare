@@ -128,7 +128,9 @@ impl Composer {
             status,
             status_source: Cell::new("Clipboard is read only when you paste. Nothing is sent yet."),
             heading,
-            heading_source: Cell::new("Write or paste text, then prepare it and choose recipients."),
+            heading_source: Cell::new(
+                "Write or paste text, then prepare it and choose recipients.",
+            ),
             prepare_source: Cell::new("Prepare text"),
             cancel_button: cancel.clone(),
             permit: RefCell::new(Some(permit)),
@@ -252,9 +254,13 @@ impl Composer {
                 match result {
                     Ok(text) => {
                         composer.buffer.set_text(text.text());
-                        composer.set_status("Text captured. Review it, then prepare and choose recipients.");
+                        composer.set_status(
+                            "Text captured. Review it, then prepare and choose recipients.",
+                        );
                     }
-                    Err(()) => composer.set_status("No supported text was captured. Use 1–128 KiB of UTF-8 text without NUL."),
+                    Err(()) => composer.set_status(
+                        "No supported text was captured. Use 1–128 KiB of UTF-8 text without NUL.",
+                    ),
                 }
                 composer.refresh();
             }
@@ -274,7 +280,9 @@ impl Composer {
         let completion = match (self.submit)(text) {
             Ok(completion) => completion,
             Err(_) => {
-                self.set_status("Preparation was not queued. Review the current source and connection.");
+                self.set_status(
+                    "Preparation was not queued. Review the current source and connection.",
+                );
                 return;
             }
         };

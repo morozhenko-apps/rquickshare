@@ -201,7 +201,8 @@ impl Image {
         }
     }
     pub(super) fn retranslate(&self) {
-        self.window.set_title(Some(crate::i18n::label("Send image")));
+        self.window
+            .set_title(Some(crate::i18n::label("Send image")));
         self.heading.set_text(crate::i18n::label(
             "Capture a clipboard image, review it, then choose recipients.",
         ));

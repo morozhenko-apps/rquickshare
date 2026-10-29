@@ -117,7 +117,9 @@ impl Review {
             copy,
             close_button: close.clone(),
             status,
-            status_source: Cell::new("Nothing has been copied. Use Copy to replace this clipboard."),
+            status_source: Cell::new(
+                "Nothing has been copied. Use Copy to replace this clipboard.",
+            ),
             body: RefCell::new(Some(body)),
             key,
             guard: Box::new(guard),
@@ -157,14 +159,14 @@ impl Review {
         self.status.set_text(crate::i18n::label(source));
     }
     pub(super) fn retranslate(&self) {
-        self.window.set_title(Some(crate::i18n::label("Received text")));
-        self.heading.set_text(crate::i18n::label(
-            if self.key.kind == PayloadKind::Url {
+        self.window
+            .set_title(Some(crate::i18n::label("Received text")));
+        self.heading
+            .set_text(crate::i18n::label(if self.key.kind == PayloadKind::Url {
                 "Received link · plain text"
             } else {
                 "Received text"
-            },
-        ));
+            }));
         self.copy.set_label(crate::i18n::label("Copy"));
         self.close_button.set_label(crate::i18n::label("Close"));
         self.status

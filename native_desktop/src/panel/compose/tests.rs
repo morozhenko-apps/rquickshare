@@ -104,8 +104,14 @@ pub(in crate::panel) fn verify_composer_smoke(panel: &Rc<Panel>, application: &g
     assert_eq!(composer.body().unwrap().text(), "edited");
     assert_eq!(composer.status_source.get(), source_before);
     assert_eq!(composer.status.text(), crate::i18n::label(source_before));
-    assert_eq!(composer.window.title().as_deref(), Some(crate::i18n::label("Send text")));
-    assert_eq!(composer.prepare.label().as_deref(), Some(crate::i18n::label("Prepare text")));
+    assert_eq!(
+        composer.window.title().as_deref(),
+        Some(crate::i18n::label("Send text"))
+    );
+    assert_eq!(
+        composer.prepare.label().as_deref(),
+        Some(crate::i18n::label("Prepare text"))
+    );
     assert_eq!(clipboard_text(&clipboard), clipboard_before);
     assert_eq!(attempts.get(), 1);
     for value in ["x".repeat(MAX_TEXT_BYTES + 1), "".to_owned()] {

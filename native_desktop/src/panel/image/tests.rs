@@ -55,7 +55,10 @@ pub(in crate::panel) fn verify_image_smoke(panel: &Rc<Panel>, application: &gtk:
     let notice_before = image.status.text();
     image.retranslate();
     assert_eq!(image.status.text(), notice_before);
-    assert_eq!(image.window.title().as_deref(), Some(crate::i18n::label("Send image")));
+    assert_eq!(
+        image.window.title().as_deref(),
+        Some(crate::i18n::label("Send image"))
+    );
     assert_eq!(
         image.capture.label().as_deref(),
         Some(crate::i18n::label("Capture clipboard image"))

@@ -206,10 +206,22 @@ pub(in crate::panel) fn verify_review_smoke(panel: &Rc<Panel>, application: &gtk
     assert_eq!(clipboard_text(&primary), "existing selection");
     assert_eq!(review.status.text(), "Copied to this clipboard");
     review.retranslate();
-    assert_eq!(review.status.text(), crate::i18n::label("Copied to this clipboard"));
-    assert_eq!(review.window.title().as_deref(), Some(crate::i18n::label("Received text")));
-    assert_eq!(review.copy.label().as_deref(), Some(crate::i18n::label("Copy")));
-    assert_eq!(review.text.text(), "<b>private</b>\nhttps://example.invalid/");
+    assert_eq!(
+        review.status.text(),
+        crate::i18n::label("Copied to this clipboard")
+    );
+    assert_eq!(
+        review.window.title().as_deref(),
+        Some(crate::i18n::label("Received text"))
+    );
+    assert_eq!(
+        review.copy.label().as_deref(),
+        Some(crate::i18n::label("Copy"))
+    );
+    assert_eq!(
+        review.text.text(),
+        "<b>private</b>\nhttps://example.invalid/"
+    );
     let copied = clipboard_text(&clipboard);
     // Real panel lock handling destroys the owned surface and body, preserving explicit copy.
     panel.text_review.replace(Some(review.clone()));
