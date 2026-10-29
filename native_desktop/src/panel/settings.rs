@@ -1015,7 +1015,13 @@ pub(super) fn verify_editor_smoke(editor: &Editor) {
     editor.cancel_draft();
     assert!(editor.window.is_visible()); // An admitted operation cannot be closed midway.
     editor.busy.set(false);
+    let saved_language = editor.language.selected();
+    editor
+        .language
+        .set_selected(if saved_language == 1 { 2 } else { 1 });
+    assert!(editor.language_changed()); // Staged only: no user preference file is written.
     editor.cancel_draft();
+    assert_eq!(editor.language.selected(), saved_language);
     assert!(!editor.window.is_visible());
     assert!(!editor.is_dirty());
     assert_eq!(panel.drawer(), before);
