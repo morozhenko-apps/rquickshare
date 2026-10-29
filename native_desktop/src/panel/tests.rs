@@ -580,9 +580,14 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
         )
     );
     assert!(about.author.text().contains("(morozhenko)"));
-    assert!(about.author.text().contains(
-        if crate::i18n::active() == "ru" { "Станислав Мосейко" } else { "Stanislav Moseyko" }
-    ));
+    assert!(about
+        .author
+        .text()
+        .contains(if crate::i18n::active() == "ru" {
+            "Станислав Мосейко"
+        } else {
+            "Stanislav Moseyko"
+        }));
     assert!(about.upstream.text().contains("Martichou/rquickshare"));
     assert_eq!(about.website.uri(), "https://morozhenko.com");
     assert_eq!(about.website.label().as_deref(), Some("morozhenko.com ↗"));
