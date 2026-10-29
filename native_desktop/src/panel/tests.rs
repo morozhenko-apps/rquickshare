@@ -574,12 +574,14 @@ fn given_actual_builder_and_untrusted_details_when_rendered_then_preview_is_iner
     assert_eq!(about.version().as_deref(), Some(env!("CARGO_PKG_VERSION")));
     assert_eq!(
         about.comments().as_deref(),
-        Some("Independent fork of Martichou/rquickshare. Send and receive nearby files and text")
+        Some("rQuickShare Native is the native Linux edition of this independent fork. Based on Martichou/rquickshare. Maintained by morozhenko apps.")
     );
     assert_eq!(
         about.logo_icon_name().as_deref(),
         Some(crate::tray::ICON_NAME)
     );
+    assert_eq!(about.website().as_deref(), Some("https://morozhenko.com"));
+    assert!(!about.is_resizable());
     about.close();
     assert!(!about.is_visible());
     panel.actions.activate_action("about", None);
