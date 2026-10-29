@@ -143,6 +143,23 @@ pub struct Handle {
     pub(super) state: watch::Sender<State>,
 }
 impl Handle {
+    /// A language change modifies labels even if no transfer state changed.
+    pub fn refresh_labels(&self) {
+        self.state.send_if_modified(|state| {
+            if state.exhausted {
+                return false;
+            }
+            match state.revision.checked_add(1) {
+                Some(revision) => state.revision = revision,
+                None => {
+                    state.exhausted = true;
+                    return false;
+                }
+            }
+            true
+        });
+    }
+
     pub fn publish(&self, projection: Projection) {
         self.state.send_if_modified(|state| {
             if state.exhausted || state.projection == projection {
