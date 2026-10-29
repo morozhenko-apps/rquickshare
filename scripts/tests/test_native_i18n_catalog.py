@@ -19,7 +19,7 @@ LOCALES = (
 )
 LITERAL = re.compile(r'"((?:\\.|[^"\\])*)"')
 TABLE = re.compile(r'const KEYS: \[&str; (\d+)\] = \[([\s\S]*?)\];')
-UI_CALL = re.compile(r'(?:crate::)?i18n::label\(\s*"((?:\\.|[^"\\])*)"\s*\)')
+UI_CALL = re.compile(r'(?:crate::)?i18n::label\(\s*"((?:\\.|[^"\\])*)"\s*,?\s*\)')
 
 
 def catalog():
