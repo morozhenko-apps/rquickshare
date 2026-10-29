@@ -83,3 +83,36 @@ Plan to add at least 14 independent branch and interaction-focused checks across
 ## Stages 9–12 criteria
 
 Stage 9 follows ONLY after this inventory. Fix confirmed test-only Clippy failure, add the planned test cases without relaxing product contracts. Stage 10: mutations must be killed for active-language commit ordering, invalid index, 32/33-byte boundary, no false daemon save, DBus revision exhaustion and R2 HTTP 200/size/hash/UA. Stage 11: run complete applicable STABLE suite once at final source gate and tracked FLAKY once separately; no repeated polling. Stage 12 requires all changed public paths/branches/rules/boundaries/applicable N1-N12 and interactions, else record NO and exact gaps. Even successful scoped Mode B cannot close global Mode B or skip owner-installed T14. No master, tags, signing or R2 writes.
+
+## Stage 9. Source test implementation checkpoint
+
+Test-only commit: 1d0d32afdbf6993ab42b16da8e0a2ae4931eb457. No Core/daemon, R2 upload, Settings domain, release, signing, tag or master modifications.
+
+- Native GTK tests: replaced Default-then-field-reassign with complete State initializer, fixing strict Clippy without disabling a lint; added two DBusMenu tests for exhausted and repeated revision. Existing tests retain normal revision and MAX transition.
+- UI language tests: added six independent tests for 21-option index/catalog parity, malformed bytes and 32/33 maximum, valid atomic replacement and old-value retention, private file/directory modes and symlink rejection, failure with non-directory parent, and multiple full-value replacements.
+- Native i18n tests: added a table of supported system territory mappings (en/ru/pt/zh-Hant) and explicit rejection of pt-BR, zh-Hans, unknown locales.
+- Existing GTK Settings smoke now asserts language-only selection is confirmable offline, draft is not native/login dirty, Cancel restores original language, three remaining page navigation works; deleted obsolete navigation to About page, consistent with owner-approved removal.
+- Python R2 tests: added injected opener transport error and streaming read failure with context-manager close and non-secret explicit User-Agent; existing 200/206/301/403/404/429/500/503 and short/long/hash matrix remains strict.
+
+This is an authored-test checkpoint, **not evidence that any of these tests passed**. Mode B stages 11/12 are pending CI.
+
+## Stage 10. Mutation review
+
+- Change 21 choices to 20, reorder the locale table or translate unknown territory: new exact index and i18n variants fail.
+- Replace reject-invalid with accept-invalid, weaken 32-byte bound or treat directory as a file: corruption/boundary table fails.
+- Remove atomic replace, corrupt stored previous value, accept symlink, drop private file mode: overwrite/private mode tests fail.
+- Make a language-only change silently set native-settings dirty, disable offline confirmation or let Cancel keep the draft: GTK editor fixture fails. Actual confirmed file-write failure while an open GTK editor remains *hardware/UI-integration evidence*, not fully proven by fixture.
+- Change DBus menu revision increment to no-op or overflow wrap; publish events despite exhaustion: new tests fail. Actual KDE shell's refresh behavior is still hardware evidence.
+- Drop User-Agent, leak auth into public Request, accept status other than 200, relax exact byte count/hash or fail to close a broken stream: Python tests fail.
+- Revert package revision to 2 or reuse installed candidate identity: Python dpkg ordering test fails.
+- Remove unauthenticated receiver authorization or enable auto-consent: none of these delta tests is a substitute for the independent Core/P0 security tests or manual Pixel acceptance. They remain open and are **not** presented as killed mutations.
+
+## Stage 11. Final execution pending
+
+Push of code commit 1d0d32af triggers the configured Preflight and Native GTK workflows automatically. Current session has no local Rust compiler/GTK host and cannot claim local GTK execution. The strict CI result is UNKNOWN until a terminal completion event or user-supplied result; do not poll running workflows, trigger duplicate reruns or infer green from previous source c0b2b331. The known-FLAKY suite (if any is applicable to the scope) needs independent evidence. This document-only commit must not dispatch CI.
+
+## Stage 12. Completion Gate
+
+Source-only review status: inventory YES; branch map YES for changed delta; Positive/N1-N12 plan YES; interaction matrix YES; test implementation PARTIAL; mutation review PARTIAL; execution NO; complete branch/line measured coverage NO; KDE/Android physical T14 NO. Therefore **scoped Stage 12 = NO, repository-wide Stage 12 = NO, installed-package acceptance = NO**. Do not publish, merge master or create tag.
+
+Next checkpoint: receive terminal CI for test commit; fix only supported test/source defects using explicit MODE selection, rerun final gate if needed; then create native 0.9.0-3 .deb smoke artifact only after exact-source gates are green; verify hashes/metadata and hand operator T14 physical checklist. This does not override unrelated issue P0/feature readiness.
