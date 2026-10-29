@@ -99,7 +99,10 @@ pub(in crate::panel) fn verify_composer_smoke(panel: &Rc<Panel>, application: &g
     assert_eq!(composer.body().unwrap().text(), "edited");
     // Locale repaint must not touch unsent text, ownership or clipboard.
     let source_before = composer.status_source.get();
-    let clipboard_before = clipboard_text(&clipboard);
+    let clipboard_before = glib::MainContext::default()
+        .block_on(clipboard.read_text_future())
+        .unwrap()
+        .unwrap();
     composer.retranslate();
     assert_eq!(composer.body().unwrap().text(), "edited");
     assert_eq!(composer.status_source.get(), source_before);
@@ -112,7 +115,13 @@ pub(in crate::panel) fn verify_composer_smoke(panel: &Rc<Panel>, application: &g
         composer.prepare.label().as_deref(),
         Some(crate::i18n::label("Prepare text"))
     );
-    assert_eq!(clipboard_text(&clipboard), clipboard_before);
+    assert_eq!(
+        glib::MainContext::default()
+            .block_on(clipboard.read_text_future())
+            .unwrap()
+            .unwrap(),
+        clipboard_before
+    );
     assert_eq!(attempts.get(), 1);
     for value in ["x".repeat(MAX_TEXT_BYTES + 1), "".to_owned()] {
         clipboard.set_text(&value);
