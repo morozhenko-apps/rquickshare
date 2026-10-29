@@ -1032,6 +1032,18 @@ impl Panel {
             gtk::accessible::Property::Description(crate::i18n::label("Choose target devices")),
         ]);
         self.refresh_localized_menus();
+        if let Some(history) = self.transfers.borrow().as_ref() {
+            history.retranslate();
+        }
+        if let Some(review) = self.text_review.borrow().as_ref() {
+            review.retranslate();
+        }
+        if let Some(composer) = self.composer.borrow().as_ref() {
+            composer.retranslate();
+        }
+        if let Some(image) = self.image.borrow().as_ref() {
+            image.retranslate();
+        }
         if let Some(about) = self.about.borrow().as_ref() {
             about.set_website_label("morozhenko.com");
         }
