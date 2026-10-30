@@ -1,6 +1,6 @@
 name: Native GTK instrumented coverage
 
-# Coverage is explicit or part of validated release Mode B, never an automatic dev job.
+# Manual instrumentation only; never triggered by development or release publication.
 on:
   workflow_dispatch:
 
