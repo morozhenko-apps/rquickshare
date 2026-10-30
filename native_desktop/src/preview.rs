@@ -219,7 +219,23 @@ impl Decoder {
                     }
                     Ok(output)
                 };
-                let (_, output) = tokio::try_join!(write, read)?;
+                // A helper can finish invalid stdout while closing stdin.
+                // try_join! would return an early BrokenPipe from the writer,
+                // hiding a confirmed oversized reply as Unavailable.
+                // Complete bounded stdout admission even when stdin fails.
+                tokio::pin!(write, read);
+                let (write_result, output) = tokio::select! {
+                    biased;
+                    output = &mut read => {
+                        let output = output?;
+                        (write.await, output)
+                    }
+                    write_result = &mut write => {
+                        let output = read.await?;
+                        (write_result, output)
+                    }
+                };
+                write_result?;
                 let status = child.wait().await.map_err(|_| Error::Unavailable)?;
                 if !status.success() {
                     return Err(Error::Unavailable);

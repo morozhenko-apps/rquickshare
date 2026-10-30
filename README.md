@@ -1,31 +1,51 @@
 # rQuickShare
 
-rQuickShare is a free, open-source app for sharing files, images and text with nearby devices. Its native Linux desktop client works with Android devices using Google Quick Share-compatible discovery and transfer flows.
+**Share files, photos and text with nearby devices.** rQuickShare is a free, open-source desktop app built around the idea that moving something between your computer and your phone should be simple.
 
-## Why I work on it
+[Product page](https://morozhenko.com/en/rquickshare/) · [Download](https://morozhenko.com/rquickshare/install/linux) · [Report an issue](https://github.com/morozhenko-apps/rquickshare/issues)
 
-Sharing something between a computer and a phone should be straightforward. I wanted to send a photo, move a document or copy a small piece of text without uploading it somewhere, opening a web service or dealing with cables.
+## Why this project exists
 
-rQuickShare brings that everyday convenience to the Linux desktop. It keeps the sharing controls nearby in a small tray interface while making sure receiving something always stays your decision.
+I originally wanted a native way to share files between Linux and Android. I liked the idea behind [Martichou's rQuickShare](https://github.com/Martichou/rquickshare), but I wasn't happy with the interface or some parts of the implementation. Development also seemed to have slowed down, so I decided to take the existing project as a starting point and work on it myself.
 
-## What it does
+It made more sense to improve an open-source implementation than to start from zero just to solve the same problem. The goal is a straightforward desktop experience, with clear transfer status, sensible controls and fewer surprises.
 
-The app discovers nearby devices and lets you send files or text to a selected recipient. Incoming requests display a clear choice to accept or decline, including verification information when needed. Transfers continue independently of whether the tray card is visible.
+Linux and Android were the first priority, not the final limit. I'd like to bring rQuickShare to Windows and macOS as well. Those are plans, not supported downloads yet.
 
-You can see incoming and outgoing transfers, track their progress and open received files or their containing folder. The native client integrates with the desktop to keep the sharing experience accessible without leaving a large window open.
+## Features
 
-Discovery and transfer take place across the supported local network and nearby connectivity mechanisms rather than through a separate rQuickShare cloud-storage account. Consent, transfer identity and destination safety remain explicit.
+- Discover compatible nearby Android devices and choose where to send files, photos or text.
+- Review incoming transfers and explicitly accept or decline them.
+- Track incoming and outgoing transfers from the desktop, including a compact tray interface.
+- Open received files or their containing folder.
+- Use supported nearby connections without uploading your files to a developer-operated cloud-storage account.
 
-## Platform
+Compatibility depends on the other device, its Quick Share implementation, permissions and available connections. Not every device or network behaves the same way.
 
-The native desktop application targets **Linux**. Its current interface uses a tray card and native desktop integration.
+## Install
 
-## Feedback
+The current native build is available as a **DEB package for Ubuntu 26.04 on x86-64 (amd64)**.
 
-Found a bug or a device compatibility problem? Please [open an issue](https://github.com/morozhenko-apps/rquickshare/issues) with the devices involved, steps to reproduce it and the behavior you observed. Suggestions that make nearby sharing easier are welcome there too. Remove identifying device names, private file paths and confidential content before sharing screenshots or logs.
+**[Download rQuickShare for Linux](https://morozhenko.com/rquickshare/install/linux)**
 
-This is an independently maintained fork of [Martichou/rquickshare](https://github.com/Martichou/rquickshare). External bug reports and ideas are welcome, but unsolicited upstream pull requests are not accepted.
+After installation, open rQuickShare and make sure the required nearby discovery and connectivity permissions are enabled on both devices. Choose a compatible Android device and send a file or some text. Check the sender before accepting an incoming request.
 
-## License
+Windows and macOS versions are planned, but there are no installers for them in this release. Android is currently the other device in the transfer, not a separate rQuickShare app you need to install.
 
-The project is distributed under the [GNU General Public License v3.0](LICENSE). Original authorship and licensing obligations remain in force.
+## Privacy and security
+
+Transfers use supported nearby and local-network connections. File contents are not uploaded to a cloud-storage service operated by this project. Devices still exchange information needed to discover and connect to each other, so local sharing does not mean complete anonymity.
+
+For more detail, read the [Privacy Policy](https://morozhenko.com/rquickshare/privacy-policy) and [Terms of Use](https://morozhenko.com/rquickshare/terms-of-use).
+
+## Feedback and contributing
+
+If a device is not discovered, a transfer fails or part of the interface is confusing, [open an issue](https://github.com/morozhenko-apps/rquickshare/issues). Include what you tried, what you expected, what happened instead and the device/OS versions. Please remove personal file paths, device identifiers, IP addresses and private data before sharing logs or screenshots.
+
+Bug reports and suggestions are welcome. I am not accepting unsolicited pull requests to this fork.
+
+## Source and license
+
+rQuickShare is an independently maintained fork of [Martichou/rquickshare](https://github.com/Martichou/rquickshare). Credit to the original author and other contributors remains in place.
+
+The source is available under the [GNU General Public License v3.0](LICENSE).
