@@ -70,9 +70,11 @@ legacy Tauri and standard GTK paths keep their normal single-run
 checks. The eight probes are not asserted to be currently flaky.
 See [the stable/10x regression map](ci-stable-race-sensitive-2026-10-17.md).
 
-The final `mode-b.yml` still follows this document's mandatory
-Stage 11: complete Core, Tauri, Vue and Python test suites **10x**
-and native GTK **10x**, with coverage only after both succeed.
+The historical 2026-10-17 full-suite-10x and release coverage gate is
+superseded. The current `mode-b.yml` is manual pre-release QA: all stable
+Core/Tauri/Vue/Python and Native GTK cases run 1x, and selected exact-name
+race-sensitive cases run 10x. Core and GTK run in parallel. Coverage is
+measured separately offline when required, never by release CI.
 The first GitHub full run from 2026-10-17 failed on Python test
 environment parity, not flaky domain behavior; the next run
 corrects it with pinned `scripts/requirements-r2.txt`.
