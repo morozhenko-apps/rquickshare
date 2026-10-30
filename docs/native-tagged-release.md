@@ -1,5 +1,5 @@
 > Current CI contract (2026-10-30): [native preview and CI cadence](native-preview-ci-cadence.md).
-> Coverage runs only through explicit diagnostic workflows, never during release.
+> Coverage is an offline/local diagnostic, not a GitHub Actions workflow or release step.
 > Stable tests run 1x and exact risk probes 10x on the tag, with Core/GTK in parallel.
 > Earlier references below to complete-suite 10x or release coverage are historical.
 > Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
