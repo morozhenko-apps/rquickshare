@@ -139,22 +139,21 @@ test("Given protected master When workflow gates are required Then doc-only PRs 
   assert.match(native, /if: needs\.scope\.outputs\.gtk == 'true'/);
   assert.match(native, /false\) \[\[ "\$GTK_RESULT" == skipped \]\]/);
   const prConfig = native.split("  pull_request:\n")[1]?.split("  workflow_dispatch:\n")[0];
-  assert.equal(prConfig?.trim(), "branches: [master]",
+  assert.equal(prConfig?.trim(), "branches: [dev, master]",
     "required native GTK gate must not disappear due to PR path filtering");
   assert.match(scope, /git diff --no-renames --name-only -z/);
   assert.match(scope, /\[\[ -s "\$changed" \]\]/);
 });
 
-test("Given normal mainline changes Then only explicit verification marker or PR can launch CI", () => {
+test("Given normal dev changes Then only explicit verification marker or PR can launch CI", () => {
   const core = read(".github/workflows/lint.yml");
   const native = read(".github/workflows/native-gtk-ui.yml");
   for (const workflow of [core, native]) {
-    assert.match(workflow, /push:\n    branches: \[master\]\n    paths:\n      - 'ci\/run-preflight\.txt'/);
-    assert.match(workflow, /pull_request:\n    branches: \[master\]/);
+    assert.match(workflow, /push:\n    branches: \[dev\]\n    paths:\n      - 'ci\/run-preflight\.txt'/);
+    assert.match(workflow, /pull_request:\n    branches: \[dev, master\]/);
     assert.match(workflow, /workflow_dispatch:/);
     const pushBlock = workflow.split("\n  push:\n")[1]?.split("\n  pull_request:\n")[0];
-    assert.match(pushBlock, /paths:\n\s+- 'ci\/run-preflight\.txt'/, "ordinary pushes need an explicit marker");
-    assert.doesNotMatch(pushBlock, /paths-ignore:/);
+    assert.ok(pushBlock && !pushBlock.includes("master"), "A master push must not create redundant CI");
   }
   assert.doesNotMatch(core, /if: github\.event_name != 'pull_request'/);
 });

@@ -1,14 +1,14 @@
 name: Native GTK UI verification
 
-# Deliberate mainline verification like CFVigil. A marker or relevant PR
+# Deliberate dev verification like CFVigil. A marker or relevant PR
 # runs real GTK/Bubblewrap tests; ordinary pushes do not.
 on:
   push:
-    branches: [master]
+    branches: [dev]
     paths:
       - 'ci/run-preflight.txt'
   pull_request:
-    branches: [master]
+    branches: [dev, master]
   workflow_dispatch:
 
 permissions:
@@ -78,7 +78,7 @@ jobs:
             core_lib -> target
             native_desktop -> target
           shared-key: native-gtk-ui-ubuntu-26.04
-          save-if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request' }}
+          save-if: ${{ github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' }}
 
       - name: Native GTK source formatting and lint
         run: |

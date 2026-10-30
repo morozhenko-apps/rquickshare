@@ -3,7 +3,7 @@ name: Native sandbox capability probe
 # One small credential-free OS/namespace probe; never triggers full package tests.
 on:
   push:
-    branches: [master]
+    branches: [dev]
     paths:
       - ".github/workflows/native-sandbox-capability.yml"
   workflow_dispatch:
