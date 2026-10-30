@@ -1,6 +1,6 @@
 # Native preview decoder and release validation cadence
 
-Mode A (implementation and targeted regression). Owner-approved decision: 2026-10-29. This contract supersedes the historic requirement for ten **entire** suites in `mode-b-test-plan.md`; coverage and installed-device acceptance remain mandatory and independent.
+Mode A (implementation and targeted regression). Owner-approved decision: 2026-10-29. This contract supersedes the historic requirement for ten **entire** suites in `mode-b-test-plan.md`; installed-device acceptance and separately requested coverage analysis remain independent.
 
 ## Observed failure and root cause
 
@@ -17,7 +17,7 @@ Other examined hypotheses: invalid Python fixture itself (falsified by independe
 - All stable tests **once**, with no omitted tests: Core Rust library excluding its eight exact-name risk probes, Core integrations, Tauri desktop Rust, frontend Vitest, Python publication contracts, Native GTK library + bin except exact-name risk probes.
 - Exactly **ten** consecutive passes of each explicitly enumerated race-sensitive probe; fail immediately on red, do not retry to green. The Core list is the existing eight `scripts/ci-core-test-groups.sh` probes. A new `scripts/ci-native-gtk-test-groups.sh` selects the native library subprocess/cancellation/Bwrap tests and the main-bin shutdown/ownership race tests.
 - Require precise test inventory presence before exclusion; prevent zero-test false green. Do not use `--ignored`, automatic retries or environment-wide test skipping. Keep the real Bubblewrap user/PID/mount-namespace check and real sandbox helper.
-- Routine Preflight and native GTK CI use stable 1× + isolated stress 10× on source changes. Reusable release Mode B executes the same stable 1× and stress 10× once per tagged source, then a single coverage measurement. Signing, private R2, public HTTPS and exact APT acquisition gates remain unchanged.
+- As in CFVigil, development verification runs on an explicit `ci/run-preflight.txt` marker or a PR, not on every ordinary dev push. Routine Preflight and native GTK verification run stable 1× + selected risk probes 10×. On an approved release tag, Mode B verifies both suites independently (in parallel); **coverage never runs in the release workflow**. Coverage remains a deliberate `workflow_dispatch` diagnostic that cannot block a release. Signing, R2/public HTTPS and exact APT acquisition gates remain unchanged.
 - Native GTK suite uses Ubuntu 26.04, D-Bus session and Xvfb. Build `rquickshare-preview-helper` before either selected test set.
 
 ## Risk, branch inventory, and invariants
