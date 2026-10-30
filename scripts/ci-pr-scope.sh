@@ -15,23 +15,31 @@ if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
 
   changed="$(mktemp)"
   trap 'rm -f -- "$changed"' EXIT
-  git diff --name-only -z "${refs[1]}" "${refs[0]}" > "$changed"
+  # Keep both sides of renames: moving an executable input into docs does not
+  # make removal of the original native/package input a prose-only change.
+  git diff --no-renames --name-only -z "${refs[1]}" "${refs[0]}" > "$changed"
   [[ -s "$changed" ]] || { echo "PR merge has no changed files" >&2; exit 1; }
 
   preflight=false
   gtk=false
   while IFS= read -r -d '' path; do
-    # Documentation changes must not start source tests. The whitelist is
-    # intentionally narrow: unknown file types default to executable changes.
+    # Native/package inputs take precedence over their extension, including
+    # packaged README files. Docs also contains live non-prose test fixtures.
     case "$path" in
-      docs/*|doc/*|*/docs/*|*/doc/*|README.md|*/README.md|AGENT.md|*/AGENT.md|AGENTS.md|*/AGENTS.md|CHANGELOG.md|*/CHANGELOG.md|CONTRIBUTING.md|*/CONTRIBUTING.md|.github/agents/*|.codex.md|*.md|*.mdx)
+      core_lib/*|native_desktop/*)
+        preflight=true
+        gtk=true
+        continue ;;
+      docs/*.md|doc/*.md|README.md|AGENT.md|AGENTS.md|CHANGELOG.md|CONTRIBUTING.md|.github/agents/*.md|.codex.md)
         continue ;;
     esac
 
     preflight=true
     case "$path" in
-      native_desktop/*|core_lib/*|scripts/ci-native-gtk-test-groups.sh|scripts/ci-pr-scope.sh|scripts/tests/native-ci-cadence.test.mjs|scripts/tests/pr-ci-scope.test.mjs|scripts/native_*.py|.github/workflows/native-*|.github/workflows/lint.yml|.github/workflows/feature-package-smoke.yml)
-        gtk=true ;;
+      app/main/*)
+        # This legacy frontend/Tauri tree has its own complete Preflight lane.
+        ;;
+      *) gtk=true ;;
     esac
   done < "$changed"
 elif [[ "${GITHUB_EVENT_NAME:-}" != workflow_dispatch && "${GITHUB_EVENT_NAME:-}" != push ]]; then

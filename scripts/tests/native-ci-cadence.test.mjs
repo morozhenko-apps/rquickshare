@@ -141,7 +141,7 @@ test("Given protected master When workflow gates are required Then doc-only PRs 
   const prConfig = native.split("  pull_request:\n")[1]?.split("  workflow_dispatch:\n")[0];
   assert.equal(prConfig?.trim(), "branches: [dev, master]",
     "required native GTK gate must not disappear due to PR path filtering");
-  assert.match(scope, /git diff --name-only -z/);
+  assert.match(scope, /git diff --no-renames --name-only -z/);
   assert.match(scope, /\[\[ -s "\$changed" \]\]/);
 });
 
