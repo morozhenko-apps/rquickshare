@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const read = path => readFileSync(new URL("../../" + path, import.meta.url), "utf8");
 
@@ -21,12 +21,12 @@ test("Given release Mode B When inspected Then stable suites do not run ten time
   const gtk = mode.split("\n  native_gtk:\n")[1];
   assert.ok(gtk, "Native GTK validation job must exist");
   assert.ok(!gtk.includes("needs: full_suite"), "Independent Core and GTK checks should run in parallel");
-  const manualCoverage = read(".github/workflows/coverage.yml");
-  const manualGTKCoverage = read(".github/workflows/native-gtk-coverage.yml");
-  for (const diagnostic of [manualCoverage, manualGTKCoverage]) {
-    assert.match(diagnostic, /workflow_dispatch:/);
-    assert.doesNotMatch(diagnostic, /^  push:/m);
-    assert.doesNotMatch(diagnostic, /^  pull_request:/m);
+  for (const path of [
+    ".github/workflows/coverage.yml",
+    ".github/workflows/native-gtk-coverage.yml",
+  ]) {
+    assert.equal(existsSync(new URL("../../" + path, import.meta.url)), false,
+      "Coverage is offline analysis, not another GitHub Actions workflow: " + path);
   }
   assert.ok(release.includes("needs: [admission, mode-b]"));
   assert.ok(release.includes("environment: apt-release"));
