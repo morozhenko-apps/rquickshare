@@ -120,6 +120,31 @@ test("Given APT refresh When importing the signing subkey Then keyring argv is a
     "the existing signer-only subkey admission check must remain enforced");
 });
 
+
+test("Given protected master When workflow gates are required Then doc-only PRs avoid heavy suites", () => {
+  const preflight = read(".github/workflows/lint.yml");
+  const native = read(".github/workflows/native-gtk-ui.yml");
+  const scope = read("scripts/ci-pr-scope.sh");
+  for (const workflow of [preflight, native]) {
+    assert.match(workflow, /run: bash scripts\/ci-pr-scope\.sh/);
+    assert.match(workflow, /name: .* admission/);
+    assert.match(workflow, /if: always\(\)/);
+    assert.match(workflow, /needs: \[scope,/);
+  }
+  assert.match(preflight, /name: Preflight admission/);
+  assert.match(preflight, /if: needs\.scope\.outputs\.preflight == 'true'/);
+  assert.match(preflight, /\[\[ "\$SCOPE_RESULT" == success \]\]/);
+  assert.match(preflight, /false\) expected=skipped/);
+  assert.match(native, /name: Native GTK admission/);
+  assert.match(native, /if: needs\.scope\.outputs\.gtk == 'true'/);
+  assert.match(native, /false\) \[\[ "\$GTK_RESULT" == skipped \]\]/);
+  const prConfig = native.split("  pull_request:\n")[1]?.split("  workflow_dispatch:\n")[0];
+  assert.equal(prConfig?.trim(), "branches: [dev, master]",
+    "required native GTK gate must not disappear due to PR path filtering");
+  assert.match(scope, /git diff --name-only -z/);
+  assert.match(scope, /\[\[ -s "\$changed" \]\]/);
+});
+
 test("Given normal dev changes Then only explicit verification marker or PR can launch CI", () => {
   const core = read(".github/workflows/lint.yml");
   const native = read(".github/workflows/native-gtk-ui.yml");
