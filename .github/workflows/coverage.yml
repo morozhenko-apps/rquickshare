@@ -1,6 +1,6 @@
 name: Coverage measurement
 
-# Manual diagnostic coverage. The final Mode B coverage gate also runs from mode-b.yml.
+# Manual diagnostic coverage only. Release Mode B has no coverage job.
 
 on:
   workflow_dispatch:
