@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deterministic dev-CI partition of core Rust tests: stable once, race-sensitive 10x.
-# MODE B's final full-suite 10x remains a separate, stricter acceptance gate.
+# The release gate runs these same stable 1x and exact risk-probe 10x groups.
 set -euo pipefail
 
 usage() {
