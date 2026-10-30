@@ -66,6 +66,11 @@ fix. Do not run domain suites as diagnostics or change product assertions.
 5. [ ] Add focused parameterized regression tests for scope and actual aggregate
    shell gates. Extend cheap policy checks so missing time/permission/cache
    boundaries and dangling workflow inputs cannot drift silently.
+   Parse workflow structure with pinned CI-only PyYAML via BaseLoader (including
+   the literal `on` key), not regex approximations. Add `requirements-ci.txt`
+   extending the existing R2 test requirements; publisher dependencies stay
+   unchanged. This adds one small parser wheel to the existing Python job,
+   without another job or runtime dependency.
 6. [ ] At the final gate, execute Node helper contracts and Python offline
    contracts once, shell syntax/policy and workflow validation. Preserve the
    existing full source/native checks on the final pilot PR. Record exact
@@ -106,3 +111,18 @@ final source, unchanged test inventory, visible real failures, preserved release
 admission and an observed runtime without a material regression. Compare cold
 and warm behavior honestly; do not claim speedup before execution. Until that
 receipt arrives the other four repositories remain unchanged.
+
+## Diagnostic result before implementation
+
+Three minimal real-Git merge reproductions returned exit 0 and
+`preflight=false`, `gtk=false`: changing the live preview bus configuration,
+changing packaged README content and renaming a native runtime input into a
+prose path. All three should require source/native checks. The first two are
+caused by broad directory/extension exemptions; the third additionally exposes
+rename collapsing. Use `git diff --no-renames --name-only -z` and a narrow prose
+allowlist with executable/package paths taking precedence. A new scope test
+must cover each actual case, including old and new rename directions.
+
+Supporting references: [workflow syntax and timeouts](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
+[cache input contract](https://github.com/Swatinem/rust-cache/tree/v2.9.0),
+[existing pinned workflow validator](https://github.com/rhysd/actionlint/blob/v1.7.7/docs/install.md).
