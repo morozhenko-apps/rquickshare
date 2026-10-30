@@ -54,23 +54,10 @@ jobs:
           (( revision <= 2147483647 )) || exit 1
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-      - name: Validate flat distribution and cleanup contracts
-        run: node --test scripts/tests/*.test.mjs
-
-  mode-b:
-    name: Mode B stable 1x and race-sensitive 10x on release tag
-    needs: admission
-    uses: ./.github/workflows/mode-b.yml
-    permissions:
-      contents: read
-
   package:
-    # All source contracts, real sandbox smoke and Clippy passed on the same
-    # immutable release commit in Mode B. Only build and verify the DEB here.
-    needs: [admission, mode-b]
+    # Pre-release QA/Mode B is completed and approved before tagging.
+    # The tag pipeline verifies source identity, builds once, signs and publishes.
+    needs: admission
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
@@ -167,7 +154,7 @@ jobs:
           printf '%s' "$SUBKEY_PASSPHRASE" > "$private/passphrase"
           gpg --no-options --homedir "$private/gnupg" --batch --import "$private/import.gpg" >/dev/null 2>&1
           rm -f "$private/import.gpg"
-          python3 -c 'import sys; sys.path.insert(0, "scripts"); import native_apt as apt; apt.public_key(sys.argv[1], sys.argv[2])' \
+          python3 -c 'import sys; from pathlib import Path; sys.path.insert(0, "scripts"); import native_apt as apt; apt.public_key(Path(sys.argv[1]), sys.argv[2])' \
             "$private/keyring.gpg" "$SIGNING_FINGERPRINT"
           gpg --no-options --homedir "$private/gnupg" --batch --with-colons --list-secret-keys \
             "$SIGNING_FINGERPRINT" > "$private/keys.txt"

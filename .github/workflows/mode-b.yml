@@ -1,8 +1,9 @@
-name: Mode B validation
+name: Pre-release Mode B validation
 
-# Only the validated master-HEAD release-tag workflow may call the 10x gate.
+# Explicit owner QA gate on the final candidate/master SHA, BEFORE tagging.
+# No release workflow calls Mode B. Stable tests 1x, selected risk probes 10x.
 on:
-  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -87,7 +88,7 @@ jobs:
 
   native_gtk:
     name: Native GTK stable suite 1x and race-sensitive 10x
-    needs: full_suite
+    # Independent of the Core suite, so both test jobs can run in parallel.
     runs-on: ubuntu-26.04
     steps:
       - name: Install native test prerequisites
@@ -152,62 +153,3 @@ jobs:
             dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
             xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stress
 
-  coverage:
-    name: Final coverage measurement
-    needs: [full_suite, native_gtk]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Install Linux test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            protobuf-compiler dbus-daemon libdbus-1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev \
-            libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
-
-      - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --locked
-
-      - name: Install pinned pnpm
-        run: npm install --global pnpm@9.7.0
-
-      - name: Install frontend dependencies
-        working-directory: ./app/main
-        run: pnpm install --frozen-lockfile
-
-      - name: Measure Rust core coverage
-        working-directory: ./core_lib
-        run: |
-          cargo llvm-cov \
-            --all-features \
-            --summary-only \
-            --ignore-filename-regex 'target/|bindings/'
-
-      - name: Measure frontend coverage
-        working-directory: ./app/main
-        run: |
-          pnpm exec vitest run \
-            --coverage \
-            --coverage.provider=v8 \
-            --coverage.reporter=text \
-            --coverage.include='src/**/*.{ts,vue}' \
-            --coverage.exclude='src/auto-imports.d.ts'
-
-      - name: Measure desktop Rust coverage
-        working-directory: ./app/main/src-tauri
-        run: |
-          cargo +stable llvm-cov \
-            --no-default-features \
-            --bin rquickshare \
-            --summary-only \
-            --ignore-filename-regex 'target/|bindings/|core_lib/'

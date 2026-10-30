@@ -13,7 +13,7 @@ fail() {
 # must never be activated by editing their YAML during a dev push.
 for name in \
   p0-bwu-router.yml p0-client-introduction.yml p0-weave-worker.yml \
-  native-gtk-coverage.yml native-package-smoke.yml native-release-check.yml
+  native-package-smoke.yml native-release-check.yml
 do
   file=".github/workflows/$name"
   [[ -f "$file" ]] || fail "missing $file"
@@ -24,10 +24,21 @@ do
     fail "$name is no longer manually accessible"
 done
 
+for file in .github/workflows/coverage.yml .github/workflows/native-gtk-coverage.yml; do
+  [[ ! -e "$file" ]] || fail "CFVigil-style CI must not contain coverage Actions workflows: $file"
+done
+
 mode_b=".github/workflows/mode-b.yml"
-grep -Eq '^  workflow_call:' "$mode_b" || fail 'Mode B reusable entry is missing'
-if grep -Eq '^  (push|workflow_dispatch):' "$mode_b"; then
-  fail 'Full 10x Mode B must not run directly from development'
+grep -Eq '^  workflow_dispatch:' "$mode_b" ||
+  fail 'Pre-release Mode B must be a deliberate manual workflow'
+if grep -Eq '^  (push|pull_request|workflow_call):' "$mode_b"; then
+  fail 'Pre-release Mode B must never trigger from a release or code push'
+fi
+if grep -Eq '^  coverage:' "$mode_b" || grep -Eq 'llvm-cov|--coverage|coverage.provider' "$mode_b"; then
+  fail 'CFVigil cadence forbids a coverage job or instrumentation in the release gate'
+fi
+if grep -Fq 'needs: full_suite' "$mode_b"; then
+  fail 'Independent native GTK and Core validation should run concurrently'
 fi
 # Pinned actionlint predates the newly available GitHub-hosted Ubuntu 26.04.
 # Admit only this verified label through its narrow compatibility config;
@@ -59,13 +70,23 @@ grep -Fq 'native_release_tag.py version "$TAG"' .github/workflows/native-apt-ref
 grep -Fq 'release_tag.tag_from_version' scripts/native_ci_archive.py ||
   fail 'APT archive does not derive the Native source tag'
 grep -Fq 'needs: admission' .github/workflows/native-tag-publish.yml ||
-  fail 'Release Mode B lacks tag-admission dependency'
-grep -Fq 'uses: ./.github/workflows/mode-b.yml' .github/workflows/native-tag-publish.yml ||
-  fail 'Release no longer calls full Mode B'
+  fail 'Release packaging must follow tag admission'
+if grep -Fq 'uses: ./.github/workflows/mode-b.yml' .github/workflows/native-tag-publish.yml ||
+   grep -Eq '^  mode-b:' .github/workflows/native-tag-publish.yml; then
+  fail 'Pre-release Mode B must not run in the tagged publisher'
+fi
 grep -Fq "cancel-in-progress: false" .github/workflows/native-tag-publish.yml ||
   fail 'Release publication may cancel a previous tag'
 
 preflight=".github/workflows/lint.yml"
+for workflow in "$preflight" ".github/workflows/native-gtk-ui.yml"; do
+  grep -Fq "      - 'ci/run-preflight.txt'" "$workflow" ||
+    fail "$workflow must be triggered deliberately by a verification marker"
+  grep -Fq 'branches: [dev, master]' "$workflow" ||
+    fail "$workflow must support reviewed PR verification against dev/master"
+  grep -Fq 'workflow_dispatch:' "$workflow" ||
+    fail "$workflow must allow explicit operator verification"
+done
 grep -Fq 'scripts/ci-core-test-groups.sh stable' "$preflight" ||
   fail 'Dev core stable tests have disappeared'
 grep -Fq 'scripts/ci-core-test-groups.sh stress' "$preflight" ||
@@ -91,4 +112,4 @@ for file in .github/workflows/p0-*.yml; do
     fail "$file lacks mainline HEAD verification"
 done
 
-printf 'PASS: dev fast-test and protected tag-only stress workflow contracts\n'
+printf 'PASS: CFVigil-style deliberate dev CI and coverage-free protected release verification\n'

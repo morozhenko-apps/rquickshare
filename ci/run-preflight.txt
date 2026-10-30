@@ -1,0 +1,4 @@
+verification: cfvigil-style release CI cadence
+reason: remove release coverage; run stable once and selected race probes ten times in independent Core and native GTK jobs
+verification_scope: native-tag-publish, mode-b, preflight, native-gtk-ui, exact-inventory and policy regressions
+requested: 2026-10-30
