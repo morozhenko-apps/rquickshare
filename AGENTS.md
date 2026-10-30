@@ -4,8 +4,8 @@ All project documentation, code comments and commit messages are in English; con
 
 ## Development and branches
 
-- Work on `dev`, which is the primary integration branch. `master` is protected and reserved for explicitly approved releases. Inspect the current remote tip, open PRs and other agent work before writing. Do not force-push, discard others' work or promote protected branches.
-- Use a temporary task branch only when actual concurrent ownership makes direct work unsafe. Reconcile via a PR targeting `dev`; remove the branch only when its unique work is preserved and no agent still owns it.
+- `master` is the sole long-lived branch. Use a short-lived branch and a reviewed PR for changes, preserve required checks and inspect concurrent work first. Retire branches only after their unique work is preserved. Never force-push or bypass protected mainline checks. Publishing still requires separate explicit release authorization.
+- Target `master` for reviewed changes; do not recreate a permanent `dev` branch. Remove task branches only when their work is preserved and no agent/worktree still owns them.
 - Keep code/config and documentation in separate commits. Record decisions and rollback boundaries before architectural work; implement the root cause, not a workaround.
 - **Never poll a running CI or package workflow.** Trigger the appropriate final gate only after finishing the change, give the owner its URL and current unverified scope, then stop. Continue only after a completion event or a new user instruction. Do not repeatedly query workflow status, trigger more builds while a run is active or start CI for documentation-only changes.
 - CI success is not proof of installed-device behavior. Run stable source checks at the end of work, race-sensitive/heavy checks only at the applicable final gate, and keep real-device/peer acceptance separate. Do not claim a feature complete until its required source and native evidence is available.
