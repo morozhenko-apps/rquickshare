@@ -50,20 +50,20 @@ fix. Do not run domain suites as diagnostics or change product assertions.
 
 1. [x] Analyze current guides, actual open work, completed baseline job times,
    workflow/helper dependencies and package inputs. Record this plan first.
-2. [ ] Diagnose the classifier against real synthetic Git merges, then narrow
+2. [x] Diagnose the classifier against real synthetic Git merges, then narrow
    the prose exemption and include deleted/renamed inputs. Unknown executable
    inputs require applicable checks; known legacy frontend-only changes retain
    the native skip. Keep the existing fail-closed aggregate gates and names.
-3. [ ] Harden ordinary workflow execution: explicit read-only token permissions,
+3. [x] Harden ordinary workflow execution: explicit read-only token permissions,
    no persisted checkout credentials, locked Rust resolution, dependency cache
    reuse restricted to trusted dev writers and separate configuration keys.
    Keep compilation reuse within a job and native acceptance unchanged.
-4. [ ] Bound existing job duration: scope/admission 5 minutes, lightweight
+4. [x] Bound existing job duration: scope/admission 5 minutes, lightweight
    formatting/contracts/frontend 10 minutes, Rust/GTK workers 20 minutes.
    Budgets allow setup/cold compilation beyond the measured baseline; a timeout
    fails visibly and does not retry. Queue time is not a promised wall-time cap.
    Remove the deleted Mode B path from the manual workflow syntax checker.
-5. [ ] Add focused parameterized regression tests for scope and actual aggregate
+5. [x] Add focused parameterized regression tests for scope and actual aggregate
    shell gates. Extend cheap policy checks so missing time/permission/cache
    boundaries and dangling workflow inputs cannot drift silently.
    Parse workflow structure with pinned CI-only PyYAML via BaseLoader (including
@@ -71,12 +71,12 @@ fix. Do not run domain suites as diagnostics or change product assertions.
    extending the existing R2 test requirements; publisher dependencies stay
    unchanged. This adds one small parser wheel to the existing Python job,
    without another job or runtime dependency.
-6. [ ] At the final gate, execute Node helper contracts and Python offline
+6. [x] At the final local gate, execute Node helper contracts and Python offline
    contracts once, shell syntax/policy and workflow validation. Preserve the
    existing full source/native checks on the final pilot PR. Record exact
    commands, results and unverified native scope. No repeated full local Rust
    build merely to duplicate the PR's platform-specific execution evidence.
-7. [ ] Commit docs separately from executable changes, push the isolated branch
+7. [ ] Complete remote pilot acceptance: commit docs separately from executable changes, push the isolated branch
    and create a PR to dev. Trigger only this final gate. Per AGENTS.md, stop at
    the handoff URL; do not poll an active CI or roll out other repositories
    before a completion event or a new owner instruction supplies the result.
@@ -126,3 +126,46 @@ must cover each actual case, including old and new rename directions.
 Supporting references: [workflow syntax and timeouts](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
 [cache input contract](https://github.com/Swatinem/rust-cache/tree/v2.9.0),
 [existing pinned workflow validator](https://github.com/rhysd/actionlint/blob/v1.7.7/docs/install.md).
+
+## Local validation receipt
+
+Executable source commit: `de0b003dd8176c7c651c96ff7f8e8d487d6dda47`.
+The final local gate ran once after the last executable change:
+
+| Command | Exit / concrete result |
+| --- | --- |
+| `bash -n scripts/ci-pr-scope.sh` | 0 |
+| `bash -n scripts/ci-core-test-groups.sh` | 0 |
+| `bash -n scripts/ci-native-gtk-test-groups.sh` | 0 |
+| `bash scripts/ci-check-workflow-policy.sh` | 0 |
+| `node --test scripts/tests/*.test.mjs` | 0; 17 passed, zero failed/skipped/canceled; 1.818s process time |
+| `work/rqs-pilot-python/bin/python -m unittest discover -s scripts/tests -v` | 0; 102 passed, no skips; 49.664s process time |
+| `work/ci-pilot-tools/actionlint -config-file .github/actionlint.yaml -shellcheck= -pyflakes= .github/workflows/lint.yml .github/workflows/native-gtk-ui.yml .github/workflows/native-release-check.yml .github/workflows/native-tag-publish.yml .github/workflows/native-apt-refresh.yml` | 0; five relevant workflows, pinned v1.7.7 archive checksum verified |
+| `git diff --check` | 0 |
+
+The `work/` executable paths above belong to the external task workspace, not
+the application. Python 3.14.4 / Node 24.22.1; the isolated Python environment
+installed exactly `scripts/requirements-ci.txt`. All eight commands took
+51.627s combined locally. This is helper validation, not the PR wall time.
+No source file was changed after this local gate, only this receipt.
+
+Added nine test methods (seven Python, two Node), plus expanded table-driven
+scope cases. The scope harness exercises 31 real-Git/event/output cases; the
+new gate tests execute 56 dependency/scope outcome combinations and semantic
+workflow assertions. Mutations removing a required result, accepting cancel or
+missing scope, skipping packaged content, collapsing renames, widening cache
+writes, removing locked resolution or time bounds are protected by these
+assertions. No instrumented mutation run or product coverage claim is made.
+
+No separate known-FLAKY inventory is registered by this pilot; it neither
+quarantines failures nor labels risk probes flaky. Repetition was not run.
+Complete Rust/frontend/Tauri and real GTK/Bubblewrap execution on the final PR
+remain PENDING. Native product logic, live packages, device state, protected
+master, tag/signing/R2 operations and the other four products were not changed.
+All owned local commands completed; terminal closed.
+
+Continuation: find the final PR by head `ci/rquickshare-pilot-20261030` and base
+`dev` before creating or dispatching anything. The branch intentionally
+includes the independent PR #39 source as its baseline; the incremental pilot
+diff starts at `74ec3d7e`. Require final applicable source and native outcomes
+before declaring this pilot accepted or transferring the recipe elsewhere.
