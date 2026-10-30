@@ -68,59 +68,37 @@ jobs:
       contents: read
 
   package:
+    # All source contracts, real sandbox smoke and Clippy passed on the same
+    # immutable release commit in Mode B. Only build and verify the DEB here.
     needs: [admission, mode-b]
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
-      - name: Install Ubuntu 26.04 native ABI dependencies
+      - name: Install native ABI build dependencies
         run: |
           sudo apt-get update
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates git curl build-essential pkg-config dpkg-dev python3 python3-venv \
+            ca-certificates git curl build-essential pkg-config dpkg-dev python3 \
             protobuf-compiler libdbus-1-dev libudev-dev libgtk-4-dev libgtk4-layer-shell-dev \
-            libfontconfig-dev libseccomp-dev bubblewrap glycin-loaders \
-            dbus-daemon dbus-x11 xvfb xauth desktop-file-utils gnupg gpgv
-      - name: Require real unprivileged Bubblewrap sandbox on native Ubuntu 26.04
-        shell: bash
-        run: |
-          set -euo pipefail
-          source /etc/os-release
-          test "$VERSION_ID" = "26.04"
-          test "$(id -u)" -ne 0
-          # The real Glycin loader needs user, PID and mount namespaces.
-          bwrap --die-with-parent --unshare-user --unshare-pid \
-            --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
+            libfontconfig-dev libseccomp-dev bubblewrap glycin-loaders desktop-file-utils
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
       - uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: |
             core_lib -> target
             native_desktop -> target
           shared-key: native-ubuntu-26.04
-      - name: Run signed-package contract tests and Rust checks
+      - name: Build and verify native Debian package
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/native-python"
-          "$RUNNER_TEMP/native-python/bin/python" -m pip install -r scripts/requirements-r2.txt
-          "$RUNNER_TEMP/native-python/bin/python" -m unittest discover -s scripts/tests -p 'test_native_*.py' -v
-          cargo +stable test --locked --manifest-path core_lib/Cargo.toml
-          cargo +stable clippy --locked --manifest-path core_lib/Cargo.toml --all-targets -- -D warnings
-          cargo +stable test --locked --manifest-path native_desktop/Cargo.toml
-          cargo +stable clippy --locked --manifest-path native_desktop/Cargo.toml --all-targets --no-deps -- -D warnings
           desktop-file-validate native_desktop/packaging/share/applications/io.github.morozhenko_apps.RQuickShare.desktop
-      - name: Build native package and unsigned APT
-        shell: bash
-        run: |
-          set -euo pipefail
+          # Build performs package manifest, dependency, ELF, checksum,
+          # content/mode/owner, and isolated offline binary-smoke validation.
           python3 scripts/native_deb.py build --output "$RUNNER_TEMP/native-packages"
-          python3 scripts/native_apt.py prepare --package "$RUNNER_TEMP/native-packages/"*.deb \
-            --output "$RUNNER_TEMP/native-apt-unsigned"
       - uses: actions/upload-artifact@v6
         with:
           name: native-package
