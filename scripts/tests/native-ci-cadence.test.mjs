@@ -58,3 +58,28 @@ test("Given broken stdin and oversized decoder stdout Then output bounds win det
   assert.ok(regressions.includes("input.resize(MAX_ENCODED, 0)"));
   assert.ok(regressions.includes("probe.stdout.len() == MAX_OUTPUT + 1"));
 });
+
+test("Given Mode B admitted one commit When packaging Then no source suite is repeated before signing", () => {
+  const workflow = read(".github/workflows/native-tag-publish.yml");
+  const modeB = read(".github/workflows/mode-b.yml");
+  const packageStep = workflow.split("\n  package:\n")[1]?.split("\n  publish:\n")[0];
+  const publishStep = workflow.split("\n  publish:\n")[1]?.split("\n  cleanup:\n")[0];
+  assert.ok(packageStep && publishStep, "Package and publish jobs must exist");
+  assert.match(packageStep, /needs: \[admission, mode-b\]/);
+  assert.match(packageStep, /runs-on: ubuntu-26\.04/);
+  assert.match(packageStep, /desktop-file-validate/);
+  assert.match(packageStep, /python3 scripts\/native_deb\.py build/);
+  assert.match(packageStep, /actions\/upload-artifact@v6/);
+  assert.match(packageStep, /native-packages\/\*\.deb\.sha256/);
+  assert.doesNotMatch(packageStep, /cargo (?:\+stable )?(?:test|clippy)\b/);
+  assert.doesNotMatch(packageStep, /unittest discover|pip install|native_apt\.py prepare/);
+  assert.doesNotMatch(packageStep, /xvfb-run|dbus-run-session|bwrap --die-with-parent/);
+  assert.match(modeB, /scripts\/ci-native-gtk-test-groups\.sh stress/);
+  assert.match(modeB, /scripts\/ci-native-gtk-test-groups\.sh stable/);
+  assert.match(modeB, /unittest discover -s scripts\/tests/);
+  assert.match(publishStep, /native_apt\.py prepare/);
+  assert.match(publishStep, /environment: apt-release/);
+  assert.match(publishStep, /native_apt\.py verify/);
+  assert.match(publishStep, /scripts\/native_r2\.py publish/);
+  assert.equal((workflow.match(/native_apt\.py prepare/g) || []).length, 1);
+});
