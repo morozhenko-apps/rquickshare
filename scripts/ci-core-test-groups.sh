@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Deterministic dev-CI partition of core Rust tests: stable once, race-sensitive 10x.
-# The release gate runs these same stable 1x and exact risk-probe 10x groups.
+# Standard CI runs every Core test once. The optional explicit stress command
+# remains available during a separately scoped, periodic Mode B coverage review.
 set -euo pipefail
 
 usage() {
@@ -40,7 +40,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../core_lib"
 
 # Rust's --exact test filter can silently run zero tests. Validate the
 # inventory and the names before launching either suite.
-inventory="$(cargo test --all-features --lib -- --list)"
+inventory="$(cargo test --locked --all-features --lib -- --list)"
 test_count="$(printf '%s\n' "$inventory" | grep -cE ': test$' || true)"
 if (( test_count <= ${#RACE_SENSITIVE[@]} )); then
   echo "Core unit-test inventory is unexpectedly empty or smaller than the stress group" >&2
@@ -56,13 +56,9 @@ for test_name in "${RACE_SENSITIVE[@]}"; do
 done
 
 if [[ "$group" == stable ]]; then
-  exclusions=()
-  for test_name in "${RACE_SENSITIVE[@]}"; do
-    exclusions+=(--skip "$test_name")
-  done
-  expected=$((test_count - ${#RACE_SENSITIVE[@]}))
-  echo "Core stable group: $expected unit tests once, ${#RACE_SENSITIVE[@]} race-sensitive tests excluded, integration binaries retained."
-  output="$(cargo test --all-features -- "${exclusions[@]}" 2>&1)" || {
+  expected=$test_count
+  echo "Core standard group: all $expected unit tests once, including risk probes; integration binaries retained."
+  output="$(cargo test --locked --all-features 2>&1)" || {
     printf '%s\n' "$output"
     exit 1
   }
@@ -78,7 +74,7 @@ echo "Core race-sensitive group: ${#RACE_SENSITIVE[@]} exact tests, ten consecut
 for attempt in $(seq 1 10); do
   echo "=== Core race-sensitive attempt $attempt/10 ==="
   for test_name in "${RACE_SENSITIVE[@]}"; do
-    output="$(cargo test --all-features --lib -- "$test_name" --exact 2>&1)" || {
+    output="$(cargo test --locked --all-features --lib -- "$test_name" --exact 2>&1)" || {
       printf '%s\n' "$output"
       echo "Race-sensitive failure on attempt $attempt/10: $test_name" >&2
       exit 1

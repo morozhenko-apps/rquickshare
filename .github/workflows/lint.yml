@@ -11,6 +11,9 @@ on:
     branches: [dev, master]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -19,11 +22,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  rust_format:
-    name: Rust format
+  scope:
+    name: Resolve PR test scope
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      preflight: ${{ steps.classify.outputs.preflight }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect executable changes using the PR merge diff
+        id: classify
+        run: bash scripts/ci-pr-scope.sh
+
+  rust_format:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
+    name: Rust format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
@@ -56,7 +79,7 @@ jobs:
       - name: Offline Python contract tests with pinned publication dependencies
         run: |
           python3 -m venv "$RUNNER_TEMP/native-publication-python"
-          "$RUNNER_TEMP/native-publication-python/bin/python" -m pip install -r scripts/requirements-r2.txt
+          "$RUNNER_TEMP/native-publication-python/bin/python" -m pip install -r scripts/requirements-ci.txt
           "$RUNNER_TEMP/native-publication-python/bin/python" -m unittest discover -s scripts/tests -v
 
       - uses: actions/setup-node@v7
@@ -66,10 +89,15 @@ jobs:
         run: node --test scripts/tests/*.test.mjs
 
   frontend:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
     name: Frontend lint, typecheck and unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -97,12 +125,23 @@ jobs:
         run: pnpm exec vitest run
 
   core_tests:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
     name: Core Rust tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2.9.0
+        with:
+          workspaces: core_lib -> target
+          shared-key: preflight-core-tests
+          save-if: ${{ github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' }}
 
       - name: Install core dependencies
         run: |
@@ -112,10 +151,9 @@ jobs:
       - name: Run stable Core Rust tests once
         run: bash scripts/ci-core-test-groups.sh stable
 
-      - name: Run selected Core race-sensitive tests ten consecutive times
-        run: bash scripts/ci-core-test-groups.sh stress
-
   clippy:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
     name: Clippy (${{ matrix.directory }})
     strategy:
       matrix:
@@ -127,12 +165,21 @@ jobs:
             clippy_args: "--no-default-features --all-targets"
             os: ubuntu-24.04
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+
+      - uses: Swatinem/rust-cache@v2.9.0
+        with:
+          workspaces: ${{ matrix.directory }} -> target
+          shared-key: preflight-clippy-${{ matrix.directory }}
+          save-if: ${{ github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' }}
 
       - name: Install Linux dependencies
         run: |
@@ -154,9 +201,37 @@ jobs:
 
       - name: Clippy
         working-directory: ${{ matrix.directory }}
-        run: cargo +stable clippy ${{ matrix.clippy_args }} -- -D warnings
+        run: cargo +stable clippy --locked ${{ matrix.clippy_args }} -- -D warnings
 
       - name: Desktop Rust unit tests
         if: matrix.directory == 'app/main/src-tauri'
         working-directory: ./app/main/src-tauri
-        run: cargo +stable test --no-default-features --bin rquickshare
+        run: cargo +stable test --locked --no-default-features --bin rquickshare
+
+  admission:
+    name: Preflight admission
+    if: always()
+    needs: [scope, rust_format, frontend, core_tests, clippy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SCOPE_RESULT: ${{ needs.scope.result }}
+      PREFLIGHT_REQUIRED: ${{ needs.scope.outputs.preflight }}
+      RUST_RESULT: ${{ needs.rust_format.result }}
+      FRONTEND_RESULT: ${{ needs.frontend.result }}
+      CORE_RESULT: ${{ needs.core_tests.result }}
+      CLIPPY_RESULT: ${{ needs.clippy.result }}
+    steps:
+      - name: Require exact applicable suite outcomes
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SCOPE_RESULT" == success ]] || exit 1
+          case "$PREFLIGHT_REQUIRED" in
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) exit 1 ;;
+          esac
+          for result in "$RUST_RESULT" "$FRONTEND_RESULT" "$CORE_RESULT" "$CLIPPY_RESULT"; do
+            [[ "$result" == "$expected" ]] || exit 1
+          done

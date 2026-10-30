@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Inventory-verified native GTK test partition: stable 1x, exact risk probes 10x.
+# Standard CI runs every GTK test once; explicit stress mode is reserved
+# for occasional, feature-batch Mode B work outside GitHub Actions.
 set -euo pipefail
 
 case "${1:-}" in
@@ -57,13 +58,9 @@ run_target() {
   done
 
   if [[ "$mode" == stable ]]; then
-    local skips=()
-    for method in "${selected[@]}"; do
-      skips+=(--skip "$method")
-    done
-    expected=$((count - ${#selected[@]}))
-    echo "Native GTK $target stable: $expected tests once; ${#selected[@]} exact stress methods excluded."
-    output="$("${cargo_cmd[@]}" "${target_args[@]}" -- "${skips[@]}" 2>&1)" || {
+    expected=$count
+    echo "Native GTK $target standard suite: all $expected tests once, including selected risk probes."
+    output="$("${cargo_cmd[@]}" "${target_args[@]}" 2>&1)" || {
       printf '%s\n' "$output"
       exit 1
     }

@@ -4,33 +4,32 @@ import { existsSync, readFileSync } from "node:fs";
 
 const read = path => readFileSync(new URL("../../" + path, import.meta.url), "utf8");
 
-test("Given release Mode B When inspected Then stable suites do not run ten times", () => {
-  const mode = read(".github/workflows/mode-b.yml");
+test("Given ordinary CI and a release Then Mode B is not a GitHub Actions workflow", () => {
+  const preflight = read(".github/workflows/lint.yml");
+  const gtk = read(".github/workflows/native-gtk-ui.yml");
   const release = read(".github/workflows/native-tag-publish.yml");
-  for (const selector of [
-    "scripts/ci-core-test-groups.sh stable",
-    "scripts/ci-core-test-groups.sh stress",
-    "scripts/ci-native-gtk-test-groups.sh stable",
-    "scripts/ci-native-gtk-test-groups.sh stress",
-  ]) assert.ok(mode.includes(selector), selector);
-  assert.ok(!mode.includes("for attempt in $(seq 1 10)"));
-  assert.ok(mode.includes("pnpm exec vitest run"));
-  assert.ok(mode.includes("unittest discover -s scripts/tests"));
-  assert.ok(!mode.includes("\n  coverage:"), "Release Mode B must never run coverage");
-  assert.ok(!mode.includes("llvm-cov"), "Release must not install instrumentation");
-  const gtk = mode.split("\n  native_gtk:\n")[1];
-  assert.ok(gtk, "Native GTK validation job must exist");
-  assert.ok(!gtk.includes("needs: full_suite"), "Independent Core and GTK checks should run in parallel");
   for (const path of [
+    ".github/workflows/mode-b.yml",
     ".github/workflows/coverage.yml",
     ".github/workflows/native-gtk-coverage.yml",
-  ]) {
-    assert.equal(existsSync(new URL("../../" + path, import.meta.url)), false,
-      "Coverage is offline analysis, not another GitHub Actions workflow: " + path);
+  ]) assert.equal(existsSync(new URL("../../" + path, import.meta.url)), false,
+    "Periodic Mode B and coverage must not be GitHub Actions jobs: " + path);
+  for (const workflow of [preflight, gtk, release]) {
+    assert.ok(!workflow.includes("ci-core-test-groups.sh stress"));
+    assert.ok(!workflow.includes("ci-native-gtk-test-groups.sh stress"));
+    assert.ok(!workflow.includes("uses: ./.github/workflows/mode-b.yml"));
   }
-  assert.match(mode, /workflow_dispatch:/);
-  assert.doesNotMatch(mode, /workflow_call:|^  push:/m);
-  assert.doesNotMatch(release, /mode-b|mode_b|\.\/\.github\/workflows\/mode-b\.yml/);
+  assert.ok(preflight.includes("scripts/ci-core-test-groups.sh stable"));
+  assert.ok(gtk.includes("scripts/ci-native-gtk-test-groups.sh stable"));
+  for (const script of [
+    "scripts/ci-core-test-groups.sh",
+    "scripts/ci-native-gtk-test-groups.sh",
+  ]) {
+    const source = read(script);
+    assert.ok(source.includes("for attempt in $(seq 1 10)"));
+    assert.ok(!source.includes('--skip "$test_name"'));
+    assert.ok(!source.includes('--skip "$method"'));
+  }
   assert.ok(release.includes("needs: admission"));
   assert.ok(release.includes("environment: apt-release"));
 });
@@ -51,14 +50,11 @@ test("Given native GTK selectors When inspected Then test admission is exact and
   assert.ok(!script.includes('"--$target"'));
   assert.ok(script.includes("--exact"));
   assert.ok(script.includes("test result: ok. 1 passed; 0 failed; 0 ignored;"));
-  for (const group of ["stable", "stress"]) {
-    assert.ok(ui.includes("scripts/ci-native-gtk-test-groups.sh " + group));
-    assert.ok(modeHas(group), group);
-    assert.ok(preflight.includes("scripts/ci-core-test-groups.sh " + group));
-  }
-  function modeHas(group) {
-    return read(".github/workflows/mode-b.yml").includes("scripts/ci-native-gtk-test-groups.sh " + group);
-  }
+  assert.ok(ui.includes("scripts/ci-native-gtk-test-groups.sh stable"));
+  assert.ok(preflight.includes("scripts/ci-core-test-groups.sh stable"));
+  assert.ok(!ui.includes("scripts/ci-native-gtk-test-groups.sh stress"));
+  assert.ok(!preflight.includes("scripts/ci-core-test-groups.sh stress"));
+
 });
 
 test("Given broken stdin and oversized decoder stdout Then output bounds win deterministically", () => {
@@ -73,9 +69,8 @@ test("Given broken stdin and oversized decoder stdout Then output bounds win det
   assert.ok(regressions.includes("probe.stdout.len() == MAX_OUTPUT + 1"));
 });
 
-test("Given Mode B admitted one commit When packaging Then no source suite is repeated before signing", () => {
+test("Given successful source review When packaging Then no source suite is repeated before signing", () => {
   const workflow = read(".github/workflows/native-tag-publish.yml");
-  const modeB = read(".github/workflows/mode-b.yml");
   const packageStep = workflow.split("\n  package:\n")[1]?.split("\n  publish:\n")[0];
   const publishStep = workflow.split("\n  publish:\n")[1]?.split("\n  cleanup:\n")[0];
   assert.ok(packageStep && publishStep, "Package and publish jobs must exist");
@@ -90,9 +85,6 @@ test("Given Mode B admitted one commit When packaging Then no source suite is re
   assert.doesNotMatch(packageStep, /cargo (?:\+stable )?(?:test|clippy)\b/);
   assert.doesNotMatch(packageStep, /unittest discover|pip install|native_apt\.py prepare/);
   assert.doesNotMatch(packageStep, /xvfb-run|dbus-run-session|bwrap --die-with-parent/);
-  assert.match(modeB, /scripts\/ci-native-gtk-test-groups\.sh stress/);
-  assert.match(modeB, /scripts\/ci-native-gtk-test-groups\.sh stable/);
-  assert.match(modeB, /unittest discover -s scripts\/tests/);
   assert.match(publishStep, /native_apt\.py prepare/);
   assert.match(publishStep, /environment: apt-release/);
   assert.match(publishStep, /native_apt\.py verify/);
@@ -112,6 +104,45 @@ test("Given a signing keyring path from CI Then it is normalized before strict k
     "The secret subkey-only authorization gate must remain intact");
   assert.ok(!signingStep.includes("apt.public_key(sys.argv[1],"),
     "A raw argv string must never reach the pathlib-only keyring validator");
+});
+
+test("Given APT refresh When importing the signing subkey Then keyring argv is a Path", () => {
+  const workflow = read(".github/workflows/native-apt-refresh.yml");
+  const signingStep = workflow.split("      - name: Import protected release signing subkey only\n")[1]
+    ?.split("      - name: Authenticate current R2 and regenerate the same package metadata\n")[0];
+  assert.ok(signingStep, "APT refresh signer admission step must exist");
+  assert.ok(signingStep.includes("from pathlib import Path"), "refresh must import Path");
+  assert.ok(signingStep.includes("apt.public_key(Path(sys.argv[1]), sys.argv[2])"),
+    "refresh must normalize keyring argv to Path before strict validation");
+  assert.ok(!signingStep.includes("apt.public_key(sys.argv[1],"),
+    "the raw argv string must never reach the pathlib-only keyring validator");
+  assert.ok(signingStep.includes("scripts/native_ci_signing_key.py"),
+    "the existing signer-only subkey admission check must remain enforced");
+});
+
+
+test("Given protected master When workflow gates are required Then doc-only PRs avoid heavy suites", () => {
+  const preflight = read(".github/workflows/lint.yml");
+  const native = read(".github/workflows/native-gtk-ui.yml");
+  const scope = read("scripts/ci-pr-scope.sh");
+  for (const workflow of [preflight, native]) {
+    assert.match(workflow, /run: bash scripts\/ci-pr-scope\.sh/);
+    assert.match(workflow, /name: .* admission/);
+    assert.match(workflow, /if: always\(\)/);
+    assert.match(workflow, /needs: \[scope,/);
+  }
+  assert.match(preflight, /name: Preflight admission/);
+  assert.match(preflight, /if: needs\.scope\.outputs\.preflight == 'true'/);
+  assert.match(preflight, /\[\[ "\$SCOPE_RESULT" == success \]\]/);
+  assert.match(preflight, /false\) expected=skipped/);
+  assert.match(native, /name: Native GTK admission/);
+  assert.match(native, /if: needs\.scope\.outputs\.gtk == 'true'/);
+  assert.match(native, /false\) \[\[ "\$GTK_RESULT" == skipped \]\]/);
+  const prConfig = native.split("  pull_request:\n")[1]?.split("  workflow_dispatch:\n")[0];
+  assert.equal(prConfig?.trim(), "branches: [dev, master]",
+    "required native GTK gate must not disappear due to PR path filtering");
+  assert.match(scope, /git diff --no-renames --name-only -z/);
+  assert.match(scope, /\[\[ -s "\$changed" \]\]/);
 });
 
 test("Given normal dev changes Then only explicit verification marker or PR can launch CI", () => {

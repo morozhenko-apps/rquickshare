@@ -9,14 +9,6 @@ on:
       - 'ci/run-preflight.txt'
   pull_request:
     branches: [dev, master]
-    paths:
-      - 'native_desktop/**'
-      - 'core_lib/**'
-      - 'scripts/ci-native-gtk-test-groups.sh'
-      - 'scripts/tests/native-ci-cadence.test.mjs'
-      - '.github/workflows/native-gtk-ui.yml'
-      - '.github/workflows/mode-b.yml'
-      - '.github/workflows/native-tag-publish.yml'
   workflow_dispatch:
 
 permissions:
@@ -27,9 +19,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Resolve native GTK PR scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      gtk: ${{ steps.classify.outputs.gtk }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect native production or CI changes
+        id: classify
+        run: bash scripts/ci-pr-scope.sh
+
   native_gtk:
     name: Native GTK widget tests and strict lint
+    needs: scope
+    if: needs.scope.outputs.gtk == 'true'
     runs-on: ubuntu-26.04
+    timeout-minutes: 20
     steps:
       - name: Install native test prerequisites
         run: |
@@ -51,6 +61,8 @@ jobs:
           bwrap --die-with-parent --unshare-user --unshare-pid \
             --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -66,6 +78,7 @@ jobs:
             core_lib -> target
             native_desktop -> target
           shared-key: native-gtk-ui-ubuntu-26.04
+          save-if: ${{ github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' }}
 
       - name: Native GTK source formatting and lint
         run: |
@@ -83,12 +96,25 @@ jobs:
             dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
             xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stable
 
-      - name: Native GTK selected race-sensitive tests ten consecutive times
+
+  admission:
+    name: Native GTK admission
+    if: always()
+    needs: [scope, native_gtk]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SCOPE_RESULT: ${{ needs.scope.result }}
+      GTK_REQUIRED: ${{ needs.scope.outputs.gtk }}
+      GTK_RESULT: ${{ needs.native_gtk.result }}
+    steps:
+      - name: Require native GTK success or an audited non-native skip
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
-          export TMPDIR="$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
-          GTK_A11Y=none GDK_BACKEND=x11 GSK_RENDERER=cairo \
-            dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
-            xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stress
+          [[ "$SCOPE_RESULT" == success ]] || exit 1
+          case "$GTK_REQUIRED" in
+            true) [[ "$GTK_RESULT" == success ]] ;;
+            false) [[ "$GTK_RESULT" == skipped ]] ;;
+            *) exit 1 ;;
+          esac

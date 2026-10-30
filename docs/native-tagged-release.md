@@ -1,7 +1,11 @@
 > Current CI contract (2026-10-30): [native preview and CI cadence](native-preview-ci-cadence.md).
 > Coverage is an offline/local diagnostic, not a GitHub Actions workflow or release step.
-> Stable tests run 1x and exact risk probes 10x on the tag, with Core/GTK in parallel.
-> Earlier references below to complete-suite 10x or release coverage are historical.
+> Mode B is **episodic engineering work on test coverage**, performed once
+> after a substantial batch of features accumulates. It is not a release gate,
+> not a GitHub Actions workflow, and never runs automatically or manually as
+> part of publishing a version. Ordinary CI runs all tests once. A release
+> only validates its tag, builds, signs, publishes and verifies artifacts.
+> Historic instructions below attaching Mode B to tagging are superseded.
 > Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
 > The owner-approved flat layout supersedes the historical Worker, nested
 > archive and binary GitHub attachment instructions below. Live cutover and
@@ -38,13 +42,13 @@ secret, bucket object or tag is created by this source task.
 1. A tag push starts the native release workflow. Validate **exact tag
    syntax**, match native product version, and require tag commit equals the
    current protected `master` HEAD; fail closed for dev/untrusted refs.
-2. Validate the exact tag and protected master HEAD **before spending build time**.
-   Invoke the existing strict complete Mode B 10x as a reusable workflow on
-   **that tagged source**, requiring its successful job result as an actual
-   dependency, not a historical/API-provided success badge. Then build and
-   verify the Ubuntu 26.04 ABI without secrets and stage immutable package/
-   unsigned APT bytes as GitHub artifacts. Do not invoke arbitrary workflow
-   code from PRs.
+2. **On tag push**, validate the exact annotated tag and protected master
+   HEAD before spending build time, then build and verify the Ubuntu 26.04
+   DEB once without secrets and upload the immutable package and checksum.
+   The protected publish job prepares, signs and verifies the APT snapshot
+   once. Do not invoke arbitrary workflow code from PRs. Mode B is a separate,
+   periodically chosen feature-batch testing activity; it is not required
+   before tagging and never runs within a release pipeline.
 3. The isolated `apt-release` GitHub Environment holds only the
    *signing subkey* exported without the certifying/primary secret, its
    passphrase, pinned public keyring and bucket-scoped R2 credentials.
@@ -170,14 +174,16 @@ encrypted recovery archive into a GitHub issue, chat or job log.
    `rquickshare-download` Worker from protected master.** Verify the exact
    Cloudflare build and route are healthy before publication; GitHub Actions must
    not execute a second `wrangler deploy` or require a Worker API token.
-6. For the selected first public `v0.9.0`, obtain verified real Android/Linux,
-   Debian install/migration/rollback and exact-source complete Mode B
-   evidence. Fast-forward verified `dev` to protected `master`, then
-   create exactly one new annotated `vMAJOR.MINOR.PATCH` tag on
-   `master`. Tag push performs verification, complete 10x Mode B,
-   native compilation, protected signature, conditional R2 promotion,
-   public HTTPS/isolated APT acquisition and finally GitHub Release
-   publication. Never move or recycle a published tag.
+6. For an approved release, review the already available development tests
+   and required installed-device / Debian install-migration-rollback evidence
+   without invoking a separate Mode B cycle. Promote the verified candidate
+   via protected `master`, then create the annotated
+   `native/vMAJOR.MINOR.PATCH` tag targeting that commit. Tag CI performs
+   admission, one native DEB build and verification, protected signing,
+   conditional R2 publication, public HTTPS/isolated APT acquisition and
+   GitHub Release publication. Neither Mode B nor coverage is a tag job.
+   Never move or recycle a published tag; recovery of an unpublished failed
+   tag requires explicit authorization and a checked old-object lease.
 7. After release, ensure both distribution options are documented:
    direct versioned .deb download (no automatic APT enrollment) and
    explicit installation of the attached **public** archive keyring and
@@ -188,7 +194,7 @@ encrypted recovery archive into a GitHub issue, chat or job log.
    be monitored and renewed before the seven-day validity window
    expires; a successful schedule is not guaranteed delivery.
 
-Failure boundaries: tag validation/Mode B/build errors must leave R2
+Failure boundaries: tag validation/build errors must leave R2
 untouched. If Worker deployment or any previous-snapshot/signing/R2
 publication step fails, do not create GitHub Release. The R2 publisher
 never unconditionally overwrites `InRelease`: partial immutable objects
