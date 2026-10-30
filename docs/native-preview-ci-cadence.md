@@ -14,10 +14,10 @@ Other examined hypotheses: invalid Python fixture itself (falsified by independe
 
 ## Approved CI architecture
 
-- All stable tests **once**, with no omitted tests: Core Rust library excluding its eight exact-name risk probes, Core integrations, Tauri desktop Rust, frontend Vitest, Python publication contracts, Native GTK library + bin except exact-name risk probes.
-- Exactly **ten** consecutive passes of each explicitly enumerated race-sensitive probe; fail immediately on red, do not retry to green. The Core list is the existing eight `scripts/ci-core-test-groups.sh` probes. A new `scripts/ci-native-gtk-test-groups.sh` selects the native library subprocess/cancellation/Bwrap tests and the main-bin shutdown/ownership race tests.
+- Ordinary CI runs **all tests once**, including the enumerated race-sensitive probes: Core Rust, integrations, Tauri, frontend, Python publication contracts and Native GTK library/bin. The probes are not omitted from normal CI.
+- During a separately requested, **periodic Mode B feature-batch audit**, the selected race-sensitive probes may be run ten consecutive times. Fail immediately on red rather than retrying to green. The Core and Native GTK scripts retain their exact-name risk inventories for that engineering activity, but no GitHub Actions job runs their `stress` mode.
 - Require precise test inventory presence before exclusion; prevent zero-test false green. Do not use `--ignored`, automatic retries or environment-wide test skipping. Keep the real Bubblewrap user/PID/mount-namespace check and real sandbox helper.
-- As in CFVigil, development verification runs on an explicit `ci/run-preflight.txt` marker or a PR, not on every ordinary dev push. Routine Preflight and native GTK verification run stable 1× + selected risk probes 10×. **Before creating a release tag**, the operator manually dispatches `.github/workflows/mode-b.yml` on the final candidate/master SHA and confirms both independent Core and GTK jobs completed successfully on exactly that SHA. A changed candidate requires new pre-release evidence. The tag publication pipeline never runs Mode B or coverage. No GitHub Actions coverage workflows are retained; optional coverage analysis is local and cannot block publication. Signing, R2/public HTTPS and exact APT acquisition gates remain unchanged.
+- As in CFVigil, development verification runs on an explicit `ci/run-preflight.txt` marker or a PR, not on every ordinary dev push. Routine Preflight and Native GTK execute the **entire** applicable suite 1×, including selected risk probes. Mode B is an episodic test-coverage mode chosen when a substantial feature batch has accumulated, and is **not** a pre-release gate or workflow. Tag publication does not repeat source tests or coverage. The signing, R2/public HTTPS and exact APT acquisition gates remain unchanged.
 - Native GTK suite uses Ubuntu 26.04, D-Bus session and Xvfb. Build `rquickshare-preview-helper` before either selected test set.
 
 ## Risk, branch inventory, and invariants
@@ -28,7 +28,7 @@ Other examined hypotheses: invalid Python fixture itself (falsified by independe
 | `native_desktop/src/preview/tests.rs` | In-range RGBA/real helper | Explicit early-stdin-close/oversized-output regression; retains old fixture assertions, cancellations and owned child check | A mutation restoring `try_join!` or rejecting only after `stdin` must fail the regression or stress gate. |
 | `scripts/ci-core-test-groups.sh` | Stable full Core integration once; eight exact stress selectors | Missing/renamed test, zero-test, scheduler-sensitive errors, early red stop | Keep existing list/inventory and assert output counts. |
 | `scripts/ci-native-gtk-test-groups.sh` | Entire native GTK stable lib/bin once | N2/N4/N5/N7/N9: selected worker and subprocess races 10×; missing test fails before any suite; both test targets explicitly named | Detect accidental empty filters, exact selected methods, stable pass counts and first failure. |
-| `lint.yml`, `native-gtk-ui.yml`, `mode-b.yml` | Fast source checks and protected release gate | No 10× entire-suite regression, no bypass of stable suite, permissions and package/signature gates unchanged | Static policy regression and release job dependency review. |
+| `lint.yml`, `native-gtk-ui.yml`, `native-tag-publish.yml` | Ordinary source checks and protected release packaging | All applicable tests once in dev CI; no Mode B, 10× loops or coverage in tagged publication | Static policy regression and independent package/signature gates. |
 
 Mutation review: dropping a selected method, filtering to zero tests, restoring unconditional full 10×, allowing oversized pixels, ignoring write failure on valid output, or skipping child reap must be caught by policy checks or targeted tests. No fabricated mutation execution or coverage percentage is claimed.
 
@@ -36,7 +36,7 @@ Mutation review: dropping a selected method, filtering to zero tests, restoring 
 
 1. Documentation + root-cause evidence (this file; docs-only commit).
 2. Scoped production correction, new process regression, exact-name GTK selectors and CI cadence changes in one code/test commit.
-3. Final verification via automatic dev Preflight + native GTK workflows, then evaluate failures on their exact source SHA. No direct workflow polling and no additional manual 10× gate during implementation.
+3. Final verification via explicit marker or reviewed PR Preflight + Native GTK, then evaluate failures on their exact source SHA. No direct workflow polling or Mode B gate during ordinary implementation or releases.
 4. Separately, only after CI is green, protected master promotion and owner-directed version/tag/release recovery; do not move `native/v1.0.0` from this task. Do not touch current signed archive, secrets or R2.
 
 Rollback: revert scoped code/test commit to restore prior classification and workflows; documentation records previous release failure and this decision. The one-off native tag recovery procedure remains separate. Device-to-device validation and Mode B Stage 12 physical acceptance are still outstanding.

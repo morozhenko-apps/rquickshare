@@ -1,11 +1,14 @@
 # Mode B test plan and coverage map
 
-> Current owner-approved CI cadence (2026-10-29): stable suites run once, and only exact-name
-> race-sensitive tests run ten consecutive times; see [native preview and CI cadence](native-preview-ci-cadence.md).
-> Older full-suite-10x requirements and historical run notes below are superseded for new releases.
-> Full test inventory, independently requested coverage analysis, physical Linux/Android
-> acceptance, signed release authorization and Stage 12 remain separate requirements.
-> **Coverage is offline/local only**; there are no coverage GitHub Actions jobs (2026-10-30).
+> Current policy (2026-10-30): **Mode B is a periodically chosen mode of
+> engineering work to audit and extend test coverage for a substantial batch of
+> features**, not a standing CI stage or a prerequisite of each release.
+> Perform one scoped Mode B cycle when the feature pool warrants it.
+> Regular Preflight/GTK CI runs all applicable tests once; release CI only
+> admits, packages, signs, publishes and verifies artifacts.
+> Exact-name stress tools and offline coverage analysis remain available for
+> episodic engineering use, but no Mode B or coverage GitHub Actions jobs exist.
+> Dated stage reports and older full-suite 10x descriptions below are history.
 
 _Last updated: 2026-10-12_
 
@@ -70,11 +73,11 @@ legacy Tauri and standard GTK paths keep their normal single-run
 checks. The eight probes are not asserted to be currently flaky.
 See [the stable/10x regression map](ci-stable-race-sensitive-2026-10-17.md).
 
-The historical 2026-10-17 full-suite-10x and release coverage gate is
-superseded. The current `mode-b.yml` is manual pre-release QA: all stable
-Core/Tauri/Vue/Python and Native GTK cases run 1x, and selected exact-name
-race-sensitive cases run 10x. Core and GTK run in parallel. Coverage is
-measured separately offline when required, never by release CI.
+The historic 2026-10-17 full-suite 10x and coverage release gate is
+superseded. There is **no** `mode-b.yml` Actions workflow. Ordinary CI
+runs all applicable tests once, including risk probes. Periodic Mode B work
+on a chosen batch may execute exact stress scripts and measure coverage
+offline when appropriate. Release CI does not run those activities.
 The first GitHub full run from 2026-10-17 failed on Python test
 environment parity, not flaky domain behavior; the next run
 corrects it with pinned `scripts/requirements-r2.txt`.

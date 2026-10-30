@@ -1,11 +1,11 @@
 > Current CI contract (2026-10-30): [native preview and CI cadence](native-preview-ci-cadence.md).
 > Coverage is an offline/local diagnostic, not a GitHub Actions workflow or release step.
-> Mode B is a **separate manual pre-release QA gate**, not part of tagged CI.
-> Run the `Pre-release Mode B validation` workflow on the exact final candidate
-> commit before creating or moving an annotated release tag. Confirm both Core
-> and GTK jobs succeeded and the recorded run SHA equals the candidate/master SHA.
-> If the candidate changes, repeat pre-release verification. Coverage is local only.
-> Historic instructions below referring to Mode B on tag push are superseded.
+> Mode B is **episodic engineering work on test coverage**, performed once
+> after a substantial batch of features accumulates. It is not a release gate,
+> not a GitHub Actions workflow, and never runs automatically or manually as
+> part of publishing a version. Ordinary CI runs all tests once. A release
+> only validates its tag, builds, signs, publishes and verifies artifacts.
+> Historic instructions below attaching Mode B to tagging are superseded.
 > Current distribution contract: [flat R2 distribution](FLAT_DISTRIBUTION.md).
 > The owner-approved flat layout supersedes the historical Worker, nested
 > archive and binary GitHub attachment instructions below. Live cutover and
@@ -42,17 +42,13 @@ secret, bucket object or tag is created by this source task.
 1. A tag push starts the native release workflow. Validate **exact tag
    syntax**, match native product version, and require tag commit equals the
    current protected `master` HEAD; fail closed for dev/untrusted refs.
-2. **Before tagging**, the operator runs `Pre-release Mode B validation`
-   (`.github/workflows/mode-b.yml`, `workflow_dispatch`) on the final
-   candidate/master SHA and records its completed success and exact run SHA.
-   Both independent Core and Native GTK suites run stable cases once and
-   selected race-sensitive probes ten times. Review the result as part of
-   pre-release QA, not as an automatic release job. **On tag push**, validate
-   the exact tag and protected master HEAD before spending build time, then
-   build and verify the Ubuntu 26.04 DEB without secrets and upload its exact
-   immutable package/checksum artifact. The protected publish job prepares,
-   signs and verifies the APT snapshot once. Do not invoke arbitrary workflow
-   code from PRs.
+2. **On tag push**, validate the exact annotated tag and protected master
+   HEAD before spending build time, then build and verify the Ubuntu 26.04
+   DEB once without secrets and upload the immutable package and checksum.
+   The protected publish job prepares, signs and verifies the APT snapshot
+   once. Do not invoke arbitrary workflow code from PRs. Mode B is a separate,
+   periodically chosen feature-batch testing activity; it is not required
+   before tagging and never runs within a release pipeline.
 3. The isolated `apt-release` GitHub Environment holds only the
    *signing subkey* exported without the certifying/primary secret, its
    passphrase, pinned public keyring and bucket-scoped R2 credentials.
@@ -178,15 +174,14 @@ encrypted recovery archive into a GitHub issue, chat or job log.
    `rquickshare-download` Worker from protected master.** Verify the exact
    Cloudflare build and route are healthy before publication; GitHub Actions must
    not execute a second `wrangler deploy` or require a Worker API token.
-6. Before each approved release, obtain the required real Android/Linux
-   and Debian install/migration/rollback acceptance separately from automated
-   testing. Merge the verified candidate through reviewed protected `master`;
-   manually run pre-release Mode B on that exact master commit and confirm
-   both completed jobs. Only then create an annotated
-   `native/vMAJOR.MINOR.PATCH` tag targeting the same commit. Tag CI performs
+6. For an approved release, review the already available development tests
+   and required installed-device / Debian install-migration-rollback evidence
+   without invoking a separate Mode B cycle. Promote the verified candidate
+   via protected `master`, then create the annotated
+   `native/vMAJOR.MINOR.PATCH` tag targeting that commit. Tag CI performs
    admission, one native DEB build and verification, protected signing,
    conditional R2 publication, public HTTPS/isolated APT acquisition and
-   GitHub Release publication. Mode B and coverage are **not** tag jobs.
+   GitHub Release publication. Neither Mode B nor coverage is a tag job.
    Never move or recycle a published tag; recovery of an unpublished failed
    tag requires explicit authorization and a checked old-object lease.
 7. After release, ensure both distribution options are documented:
@@ -199,7 +194,7 @@ encrypted recovery archive into a GitHub issue, chat or job log.
    be monitored and renewed before the seven-day validity window
    expires; a successful schedule is not guaranteed delivery.
 
-Failure boundaries: tag validation/Mode B/build errors must leave R2
+Failure boundaries: tag validation/build errors must leave R2
 untouched. If Worker deployment or any previous-snapshot/signing/R2
 publication step fails, do not create GitHub Release. The R2 publisher
 never unconditionally overwrites `InRelease`: partial immutable objects
