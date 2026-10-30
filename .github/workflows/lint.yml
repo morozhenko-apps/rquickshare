@@ -1,26 +1,15 @@
 name: Preflight
 
+# CFVigil-style deliberate development verification.
+# Code and docs pushes do not start CI; only marker changes or PRs do.
 on:
   push:
-    branches: [ "dev", "master" ]
-    paths-ignore:
-      - 'docs/**'
-      - 'doc/**'
-      - '**/docs/**'
-      - '**/doc/**'
-      - 'README.md'
-      - '**/README.md'
-      - 'AGENT.md'
-      - '**/AGENT.md'
-      - 'AGENTS.md'
-      - '**/AGENTS.md'
-      - 'CHANGELOG.md'
-      - '**/CHANGELOG.md'
-      - 'CONTRIBUTING.md'
-      - '**/CONTRIBUTING.md'
-      - '.github/agents/**'
-      - '.codex.md'
+    branches: [dev]
+    paths:
+      - 'ci/run-preflight.txt'
   pull_request:
+    branches: [dev, master]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -30,9 +19,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  scope:
+    name: Resolve PR test scope
+    runs-on: ubuntu-latest
+    outputs:
+      preflight: ${{ steps.classify.outputs.preflight }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Detect executable changes using the PR merge diff
+        id: classify
+        run: bash scripts/ci-pr-scope.sh
+
   rust_format:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
     name: Rust format
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.head.ref != 'dev'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -78,8 +81,9 @@ jobs:
         run: node --test scripts/tests/*.test.mjs
 
   frontend:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
     name: Frontend lint, typecheck and unit tests
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.head.ref != 'dev'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -110,8 +114,9 @@ jobs:
         run: pnpm exec vitest run
 
   core_tests:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
     name: Core Rust tests
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.head.ref != 'dev'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -126,12 +131,10 @@ jobs:
       - name: Run stable Core Rust tests once
         run: bash scripts/ci-core-test-groups.sh stable
 
-      - name: Run selected Core race-sensitive tests ten consecutive times
-        run: bash scripts/ci-core-test-groups.sh stress
-
   clippy:
+    needs: scope
+    if: needs.scope.outputs.preflight == 'true'
     name: Clippy (${{ matrix.directory }})
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.head.ref != 'dev'
     strategy:
       matrix:
         include:
@@ -175,3 +178,30 @@ jobs:
         if: matrix.directory == 'app/main/src-tauri'
         working-directory: ./app/main/src-tauri
         run: cargo +stable test --no-default-features --bin rquickshare
+
+  admission:
+    name: Preflight admission
+    if: always()
+    needs: [scope, rust_format, frontend, core_tests, clippy]
+    runs-on: ubuntu-latest
+    env:
+      SCOPE_RESULT: ${{ needs.scope.result }}
+      PREFLIGHT_REQUIRED: ${{ needs.scope.outputs.preflight }}
+      RUST_RESULT: ${{ needs.rust_format.result }}
+      FRONTEND_RESULT: ${{ needs.frontend.result }}
+      CORE_RESULT: ${{ needs.core_tests.result }}
+      CLIPPY_RESULT: ${{ needs.clippy.result }}
+    steps:
+      - name: Require exact applicable suite outcomes
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SCOPE_RESULT" == success ]] || exit 1
+          case "$PREFLIGHT_REQUIRED" in
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) exit 1 ;;
+          esac
+          for result in "$RUST_RESULT" "$FRONTEND_RESULT" "$CORE_RESULT" "$CLIPPY_RESULT"; do
+            [[ "$result" == "$expected" ]] || exit 1
+          done

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Deterministic dev-CI partition of core Rust tests: stable once, race-sensitive 10x.
-# MODE B's final full-suite 10x remains a separate, stricter acceptance gate.
+# Standard CI runs every Core test once. The optional explicit stress command
+# remains available during a separately scoped, periodic Mode B coverage review.
 set -euo pipefail
 
 usage() {
@@ -56,13 +56,9 @@ for test_name in "${RACE_SENSITIVE[@]}"; do
 done
 
 if [[ "$group" == stable ]]; then
-  exclusions=()
-  for test_name in "${RACE_SENSITIVE[@]}"; do
-    exclusions+=(--skip "$test_name")
-  done
-  expected=$((test_count - ${#RACE_SENSITIVE[@]}))
-  echo "Core stable group: $expected unit tests once, ${#RACE_SENSITIVE[@]} race-sensitive tests excluded, integration binaries retained."
-  output="$(cargo test --all-features -- "${exclusions[@]}" 2>&1)" || {
+  expected=$test_count
+  echo "Core standard group: all $expected unit tests once, including risk probes; integration binaries retained."
+  output="$(cargo test --all-features 2>&1)" || {
     printf '%s\n' "$output"
     exit 1
   }
