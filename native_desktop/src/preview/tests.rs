@@ -276,6 +276,13 @@ async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_
             "import sys; sys.stdin.buffer.read(); sys.exit(3)".to_owned(),
             Error::Unavailable,
         ),
+        (
+            format!(
+                "import os,sys; os.close(0); sys.stdout.buffer.write(b'x'*{}); sys.stdout.buffer.flush()",
+                MAX_OUTPUT + 1
+            ),
+            Error::Rejected,
+        ),
     ]
     .into_iter()
     .enumerate()
@@ -283,8 +290,14 @@ async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_
         let (_root, path) = process_fixture(&body);
         // Observe the actual Decoder first: priming a Python fixture before
         // this call can change the child exit/stdin pipe timing being tested.
+        // The fourth helper closes stdin and overflows stdout while a
+        // maximum-sized admitted input is being written to the pipe.
+        let mut input = PNG.to_vec();
+        if case == 3 {
+            input.resize(MAX_ENCODED, 0);
+        }
         let actual = Decoder::new(path.clone())
-            .decode(PNG.to_vec(), CancellationToken::new())
+            .decode(input, CancellationToken::new())
             .await
             .expect_err("malformed fixture must never produce valid pixels");
         if actual != expected {
@@ -304,6 +317,7 @@ async fn given_external_process_failures_when_cancelled_or_malformed_then_owned_
                 0 => probe.status.success() && probe.stdout == b"RQSP",
                 1 => probe.status.success() && probe.stdout.len() == MAX_OUTPUT + 1,
                 2 => probe.status.code() == Some(3) && probe.stdout.is_empty(),
+                3 => probe.status.success() && probe.stdout.len() == MAX_OUTPUT + 1,
                 _ => unreachable!(),
             };
             panic!(

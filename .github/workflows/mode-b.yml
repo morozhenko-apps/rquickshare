@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   full_suite:
-    name: Complete automated suite 10x
+    name: Stable automated suites 1x and Core race-sensitive 10x
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -66,35 +66,27 @@ jobs:
             fi
           done
 
-      - name: Run complete suite ten consecutive times
+      - name: Run complete stable suites once
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 10); do
-            echo "=== Mode B attempt ${attempt}/10: Rust ==="
-            (
-              cd core_lib
-              cargo test --all-features
-            )
+          bash scripts/ci-core-test-groups.sh stable
+          (
+            cd app/main/src-tauri
+            cargo +stable test --no-default-features --bin rquickshare
+          )
+          (
+            cd app/main
+            pnpm exec vitest run
+          )
+          "$RUNNER_TEMP/mode-b-python/bin/python" -m unittest discover -s scripts/tests
 
-            echo "=== Mode B attempt ${attempt}/10: desktop Rust ==="
-            (
-              cd app/main/src-tauri
-              cargo +stable test --no-default-features --bin rquickshare
-            )
-
-            echo "=== Mode B attempt ${attempt}/10: frontend ==="
-            (
-              cd app/main
-              pnpm exec vitest run
-            )
-
-            echo "=== Mode B attempt ${attempt}/10: offline analyzer ==="
-            "$RUNNER_TEMP/mode-b-python/bin/python" -m unittest discover -s scripts/tests
-          done
+      - name: Run exact Core race-sensitive tests ten consecutive times
+        shell: bash
+        run: bash scripts/ci-core-test-groups.sh stress
 
   native_gtk:
-    name: Native GTK isolated UI complete suite 10x
+    name: Native GTK stable suite 1x and race-sensitive 10x
     needs: full_suite
     runs-on: ubuntu-26.04
     steps:
@@ -139,18 +131,26 @@ jobs:
           cargo +nightly fmt --manifest-path native_desktop/Cargo.toml -- --check
           cargo +stable clippy --locked --manifest-path native_desktop/Cargo.toml --all-targets --no-deps -- -D warnings
 
-      - name: Run native GTK complete suite ten consecutive times
+      - name: Run native GTK stable suites once
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
           export TMPDIR="$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
           cargo +stable build --locked --manifest-path native_desktop/Cargo.toml --bin rquickshare-preview-helper
-          for attempt in $(seq 1 10); do
-            echo "=== Mode B attempt ${attempt}/10: Native GTK ==="
-            GTK_A11Y=none GDK_BACKEND=x11 GSK_RENDERER=cairo \
-              dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
-              xvfb-run -a cargo +stable test --locked --manifest-path native_desktop/Cargo.toml
-          done
+          GTK_A11Y=none GDK_BACKEND=x11 GSK_RENDERER=cairo \
+            dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
+            xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stable
+
+      - name: Run exact native GTK race-sensitive suite ten consecutive times
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
+          export TMPDIR="$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
+          GTK_A11Y=none GDK_BACKEND=x11 GSK_RENDERER=cairo \
+            dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
+            xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stress
 
   coverage:
     name: Final coverage measurement

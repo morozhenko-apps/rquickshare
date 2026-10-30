@@ -68,8 +68,20 @@ grep -Fq "cancel-in-progress: false" .github/workflows/native-tag-publish.yml ||
 preflight=".github/workflows/lint.yml"
 grep -Fq 'scripts/ci-core-test-groups.sh stable' "$preflight" ||
   fail 'Dev core stable tests have disappeared'
-if grep -Fq 'scripts/ci-core-test-groups.sh stress' "$preflight"; then
-  fail 'Dev core tests still run stress 10x'
+grep -Fq 'scripts/ci-core-test-groups.sh stress' "$preflight" ||
+  fail 'Dev core risk-probe stress 10x has disappeared'
+for workflow in ".github/workflows/native-gtk-ui.yml" "$mode_b"; do
+  grep -Fq 'scripts/ci-native-gtk-test-groups.sh stable' "$workflow" ||
+    fail "$workflow does not run native GTK stable once"
+  grep -Fq 'scripts/ci-native-gtk-test-groups.sh stress' "$workflow" ||
+    fail "$workflow does not run native GTK selected stress ten times"
+done
+grep -Fq 'scripts/ci-core-test-groups.sh stable' "$mode_b" ||
+  fail 'Release Mode B omits Core stable once'
+grep -Fq 'scripts/ci-core-test-groups.sh stress' "$mode_b" ||
+  fail 'Release Mode B omits Core risk-probe stress ten times'
+if grep -Fq 'for attempt in $(seq 1 10)' "$mode_b"; then
+  fail 'Release Mode B still repeats stable suites ten times'
 fi
 
 for file in .github/workflows/p0-*.yml; do
