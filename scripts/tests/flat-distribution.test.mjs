@@ -21,7 +21,7 @@ test("Given_a_flat_release_When_workflow_is_inspected_Then_tag_signing_readback_
   assert.ok(workflow.includes('"$(git rev-parse HEAD)" == "$(git rev-parse origin/master^{commit})"'));
   assert.match(workflow,/git rev-parse origin\/master\^\{commit\}/);
   assert.match(workflow,/environment: apt-release/);
-  assert.match(workflow,/uses: \.\/\.github\/workflows\/mode-b.yml/);
+  assert.doesNotMatch(workflow, /uses: \\.\\/\\.github\\/workflows\\/mode-b\\.yml/);
   assert.match(workflow,/--receipt "\$RUNNER_TEMP\/publication-receipt.json"/);
   assert.match(workflow,/needs: \[admission, publish, cleanup\]/);
   assert.match(workflow,/scripts\/cleanup-published-artifacts.mjs/);

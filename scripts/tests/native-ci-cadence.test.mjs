@@ -28,7 +28,10 @@ test("Given release Mode B When inspected Then stable suites do not run ten time
     assert.equal(existsSync(new URL("../../" + path, import.meta.url)), false,
       "Coverage is offline analysis, not another GitHub Actions workflow: " + path);
   }
-  assert.ok(release.includes("needs: [admission, mode-b]"));
+  assert.match(mode, /workflow_dispatch:/);
+  assert.doesNotMatch(mode, /workflow_call:|^  push:/m);
+  assert.doesNotMatch(release, /mode-b|mode_b|\.\/\.github\/workflows\/mode-b\.yml/);
+  assert.ok(release.includes("needs: admission"));
   assert.ok(release.includes("environment: apt-release"));
 });
 
@@ -76,7 +79,9 @@ test("Given Mode B admitted one commit When packaging Then no source suite is re
   const packageStep = workflow.split("\n  package:\n")[1]?.split("\n  publish:\n")[0];
   const publishStep = workflow.split("\n  publish:\n")[1]?.split("\n  cleanup:\n")[0];
   assert.ok(packageStep && publishStep, "Package and publish jobs must exist");
-  assert.match(packageStep, /needs: \[admission, mode-b\]/);
+  assert.match(packageStep, /needs: admission/);
+  assert.doesNotMatch(workflow, /node --test scripts\/tests\/\*\.test\.mjs/);
+  assert.doesNotMatch(workflow, /mode-b/);
   assert.match(packageStep, /runs-on: ubuntu-26\.04/);
   assert.match(packageStep, /desktop-file-validate/);
   assert.match(packageStep, /python3 scripts\/native_deb\.py build/);

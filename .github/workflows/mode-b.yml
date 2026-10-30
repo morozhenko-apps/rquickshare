@@ -1,9 +1,9 @@
-name: Mode B validation
+name: Pre-release Mode B validation
 
-# Protected tag calls validation only: stable 1x and selected race probes 10x.
-# Coverage is a separate manual diagnostic, never a release dependency.
+# Explicit owner QA gate on the final candidate/master SHA, BEFORE tagging.
+# No release workflow calls Mode B. Stable tests 1x, selected risk probes 10x.
 on:
-  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read

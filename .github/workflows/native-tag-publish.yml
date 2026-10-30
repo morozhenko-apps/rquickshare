@@ -54,23 +54,10 @@ jobs:
           (( revision <= 2147483647 )) || exit 1
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-      - name: Validate flat distribution and cleanup contracts
-        run: node --test scripts/tests/*.test.mjs
-
-  mode-b:
-    name: Mode B stable 1x and race-sensitive 10x on release tag
-    needs: admission
-    uses: ./.github/workflows/mode-b.yml
-    permissions:
-      contents: read
-
   package:
-    # All source contracts, real sandbox smoke and Clippy passed on the same
-    # immutable release commit in Mode B. Only build and verify the DEB here.
-    needs: [admission, mode-b]
+    # Pre-release QA/Mode B is completed and approved before tagging.
+    # The tag pipeline verifies source identity, builds once, signs and publishes.
+    needs: admission
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:

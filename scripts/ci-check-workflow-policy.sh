@@ -29,9 +29,10 @@ for file in .github/workflows/coverage.yml .github/workflows/native-gtk-coverage
 done
 
 mode_b=".github/workflows/mode-b.yml"
-grep -Eq '^  workflow_call:' "$mode_b" || fail 'Mode B reusable entry is missing'
-if grep -Eq '^  (push|workflow_dispatch):' "$mode_b"; then
-  fail 'Release-only Mode B must not run directly from development'
+grep -Eq '^  workflow_dispatch:' "$mode_b" ||
+  fail 'Pre-release Mode B must be a deliberate manual workflow'
+if grep -Eq '^  (push|pull_request|workflow_call):' "$mode_b"; then
+  fail 'Pre-release Mode B must never trigger from a release or code push'
 fi
 if grep -Eq '^  coverage:' "$mode_b" || grep -Eq 'llvm-cov|--coverage|coverage.provider' "$mode_b"; then
   fail 'CFVigil cadence forbids a coverage job or instrumentation in the release gate'
@@ -69,9 +70,11 @@ grep -Fq 'native_release_tag.py version "$TAG"' .github/workflows/native-apt-ref
 grep -Fq 'release_tag.tag_from_version' scripts/native_ci_archive.py ||
   fail 'APT archive does not derive the Native source tag'
 grep -Fq 'needs: admission' .github/workflows/native-tag-publish.yml ||
-  fail 'Release Mode B lacks tag-admission dependency'
-grep -Fq 'uses: ./.github/workflows/mode-b.yml' .github/workflows/native-tag-publish.yml ||
-  fail 'Release no longer calls full Mode B'
+  fail 'Release packaging must follow tag admission'
+if grep -Fq 'uses: ./.github/workflows/mode-b.yml' .github/workflows/native-tag-publish.yml ||
+   grep -Eq '^  mode-b:' .github/workflows/native-tag-publish.yml; then
+  fail 'Pre-release Mode B must not run in the tagged publisher'
+fi
 grep -Fq "cancel-in-progress: false" .github/workflows/native-tag-publish.yml ||
   fail 'Release publication may cancel a previous tag'
 
