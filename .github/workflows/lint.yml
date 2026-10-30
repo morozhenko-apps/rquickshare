@@ -112,9 +112,6 @@ jobs:
       - name: Run stable Core Rust tests once
         run: bash scripts/ci-core-test-groups.sh stable
 
-      - name: Run selected Core race-sensitive tests ten consecutive times
-        run: bash scripts/ci-core-test-groups.sh stress
-
   clippy:
     name: Clippy (${{ matrix.directory }})
     strategy:

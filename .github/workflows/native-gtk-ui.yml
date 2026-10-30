@@ -15,7 +15,6 @@ on:
       - 'scripts/ci-native-gtk-test-groups.sh'
       - 'scripts/tests/native-ci-cadence.test.mjs'
       - '.github/workflows/native-gtk-ui.yml'
-      - '.github/workflows/mode-b.yml'
       - '.github/workflows/native-tag-publish.yml'
   workflow_dispatch:
 
@@ -83,12 +82,3 @@ jobs:
             dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
             xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stable
 
-      - name: Native GTK selected race-sensitive tests ten consecutive times
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
-          export TMPDIR="$GITHUB_WORKSPACE/core_lib/target/native-ui-test-tmp"
-          GTK_A11Y=none GDK_BACKEND=x11 GSK_RENDERER=cairo \
-            dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
-            xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stress

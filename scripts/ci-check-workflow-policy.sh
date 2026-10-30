@@ -24,22 +24,10 @@ do
     fail "$name is no longer manually accessible"
 done
 
-for file in .github/workflows/coverage.yml .github/workflows/native-gtk-coverage.yml; do
-  [[ ! -e "$file" ]] || fail "CFVigil-style CI must not contain coverage Actions workflows: $file"
+# Mode B is a periodic engineering coverage activity, not any CI workflow.
+for file in .github/workflows/coverage.yml .github/workflows/native-gtk-coverage.yml .github/workflows/mode-b.yml; do
+  [[ ! -e "$file" ]] || fail "Periodic QA/coverage must not be a GitHub Actions workflow: $file"
 done
-
-mode_b=".github/workflows/mode-b.yml"
-grep -Eq '^  workflow_dispatch:' "$mode_b" ||
-  fail 'Pre-release Mode B must be a deliberate manual workflow'
-if grep -Eq '^  (push|pull_request|workflow_call):' "$mode_b"; then
-  fail 'Pre-release Mode B must never trigger from a release or code push'
-fi
-if grep -Eq '^  coverage:' "$mode_b" || grep -Eq 'llvm-cov|--coverage|coverage.provider' "$mode_b"; then
-  fail 'CFVigil cadence forbids a coverage job or instrumentation in the release gate'
-fi
-if grep -Fq 'needs: full_suite' "$mode_b"; then
-  fail 'Independent native GTK and Core validation should run concurrently'
-fi
 # Pinned actionlint predates the newly available GitHub-hosted Ubuntu 26.04.
 # Admit only this verified label through its narrow compatibility config;
 # do not disable runner-label checking or the other actionlint rules.
@@ -51,8 +39,6 @@ grep -Fq -- '-config-file .github/actionlint.yaml' .github/workflows/native-rele
   fail 'release actionlint does not explicitly read its runner compatibility config'
 grep -Fq 'runs-on: ubuntu-26.04' .github/workflows/native-tag-publish.yml ||
   fail 'native release no longer builds against the verified Ubuntu 26.04 runner'
-grep -Fq 'runs-on: ubuntu-26.04' .github/workflows/mode-b.yml ||
-  fail 'Native Mode B no longer tests on the verified Ubuntu 26.04 runner'
 grep -Fq 'tags: ["native/v*"]' .github/workflows/native-tag-publish.yml ||
   fail 'Native release must trigger exclusively on its independent tag namespace'
 grep -Fq 'native_release_tag.py version "$GITHUB_REF_NAME"' .github/workflows/native-tag-publish.yml ||
@@ -88,22 +74,23 @@ for workflow in "$preflight" ".github/workflows/native-gtk-ui.yml"; do
     fail "$workflow must allow explicit operator verification"
 done
 grep -Fq 'scripts/ci-core-test-groups.sh stable' "$preflight" ||
-  fail 'Dev core stable tests have disappeared'
-grep -Fq 'scripts/ci-core-test-groups.sh stress' "$preflight" ||
-  fail 'Dev core risk-probe stress 10x has disappeared'
-for workflow in ".github/workflows/native-gtk-ui.yml" "$mode_b"; do
-  grep -Fq 'scripts/ci-native-gtk-test-groups.sh stable' "$workflow" ||
-    fail "$workflow does not run native GTK stable once"
-  grep -Fq 'scripts/ci-native-gtk-test-groups.sh stress' "$workflow" ||
-    fail "$workflow does not run native GTK selected stress ten times"
+  fail 'Standard Core CI must run all unit and integration tests once'
+grep -Fq 'scripts/ci-native-gtk-test-groups.sh stable' .github/workflows/native-gtk-ui.yml ||
+  fail 'Standard Native GTK CI must run all tests once'
+for workflow in "$preflight" ".github/workflows/native-gtk-ui.yml" .github/workflows/native-tag-publish.yml; do
+  if grep -Fq 'scripts/ci-core-test-groups.sh stress' "$workflow" ||
+     grep -Fq 'scripts/ci-native-gtk-test-groups.sh stress' "$workflow"; then
+    fail "$workflow must not run episodic Mode B stress loops"
+  fi
 done
-grep -Fq 'scripts/ci-core-test-groups.sh stable' "$mode_b" ||
-  fail 'Release Mode B omits Core stable once'
-grep -Fq 'scripts/ci-core-test-groups.sh stress' "$mode_b" ||
-  fail 'Release Mode B omits Core risk-probe stress ten times'
-if grep -Fq 'for attempt in $(seq 1 10)' "$mode_b"; then
-  fail 'Release Mode B still repeats stable suites ten times'
-fi
+for script in scripts/ci-core-test-groups.sh scripts/ci-native-gtk-test-groups.sh; do
+  grep -Fq 'for attempt in $(seq 1 10)' "$script" ||
+    fail "Explicit stress tool has lost its risk-probe execution contract: $script"
+  if grep -Fq -- '--skip "$test_name"' "$script" ||
+     grep -Fq -- '--skip "$method"' "$script"; then
+    fail "Standard suite cannot exclude selected risk-probe tests: $script"
+  fi
+done
 
 for file in .github/workflows/p0-*.yml; do
   grep -Fq "if: github.ref_type == 'tag'" "$file" ||
@@ -112,4 +99,4 @@ for file in .github/workflows/p0-*.yml; do
     fail "$file lacks mainline HEAD verification"
 done
 
-printf 'PASS: CFVigil-style deliberate dev CI and coverage-free protected release verification\n'
+printf 'PASS: standard CI runs complete suites once; periodic Mode B is outside GitHub Actions\n'

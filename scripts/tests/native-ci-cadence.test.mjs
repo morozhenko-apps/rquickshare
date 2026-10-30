@@ -4,35 +4,32 @@ import { existsSync, readFileSync } from "node:fs";
 
 const read = path => readFileSync(new URL("../../" + path, import.meta.url), "utf8");
 
-test("Given release Mode B When inspected Then stable suites do not run ten times", () => {
-  const mode = read(".github/workflows/mode-b.yml");
+test("Given ordinary CI and a release Then Mode B cannot be triggered or run as a workflow", () => {
+  const preflight = read(".github/workflows/lint.yml");
+  const gtk = read(".github/workflows/native-gtk-ui.yml");
   const release = read(".github/workflows/native-tag-publish.yml");
-  for (const selector of [
-    "scripts/ci-core-test-groups.sh stable",
-    "scripts/ci-core-test-groups.sh stress",
-    "scripts/ci-native-gtk-test-groups.sh stable",
-    "scripts/ci-native-gtk-test-groups.sh stress",
-  ]) assert.ok(mode.includes(selector), selector);
-  assert.ok(!mode.includes("for attempt in $(seq 1 10)"));
-  assert.ok(mode.includes("pnpm exec vitest run"));
-  assert.ok(mode.includes("unittest discover -s scripts/tests"));
-  assert.ok(!mode.includes("\n  coverage:"), "Release Mode B must never run coverage");
-  assert.ok(!mode.includes("llvm-cov"), "Release must not install instrumentation");
-  const gtk = mode.split("\n  native_gtk:\n")[1];
-  assert.ok(gtk, "Native GTK validation job must exist");
-  assert.ok(!gtk.includes("needs: full_suite"), "Independent Core and GTK checks should run in parallel");
   for (const path of [
+    ".github/workflows/mode-b.yml",
     ".github/workflows/coverage.yml",
     ".github/workflows/native-gtk-coverage.yml",
-  ]) {
-    assert.equal(existsSync(new URL("../../" + path, import.meta.url)), false,
-      "Coverage is offline analysis, not another GitHub Actions workflow: " + path);
+  ]) assert.equal(existsSync(new URL("../../" + path, import.meta.url)), false,
+    "Episodic Mode B and coverage are not GitHub Actions jobs: " + path);
+  for (const workflow of [preflight, gtk, release]) {
+    assert.doesNotMatch(workflow, /scripts\\/ci-(?:core|native-gtk)-test-groups\\.sh stress/);
+    assert.doesNotMatch(workflow, /uses: \\.\\/\\.github\\/workflows\\/mode-b\\.yml/);
   }
-  assert.match(mode, /workflow_dispatch:/);
-  assert.doesNotMatch(mode, /workflow_call:|^  push:/m);
-  assert.doesNotMatch(release, /mode-b|mode_b|\.\/\.github\/workflows\/mode-b\.yml/);
-  assert.ok(release.includes("needs: admission"));
-  assert.ok(release.includes("environment: apt-release"));
+  assert.match(preflight, /scripts\\/ci-core-test-groups\\.sh stable/);
+  assert.match(gtk, /scripts\\/ci-native-gtk-test-groups\\.sh stable/);
+  for (const script of [
+    "scripts/ci-core-test-groups.sh",
+    "scripts/ci-native-gtk-test-groups.sh",
+  ]) {
+    const source = read(script);
+    assert.match(source, /for attempt in \\$\\(seq 1 10\\)/);
+    assert.doesNotMatch(source, /--skip "\\$test_name"|--skip "\\$method"/);
+  }
+  assert.match(release, /needs: admission/);
+  assert.match(release, /environment: apt-release/);
 });
 
 test("Given native GTK selectors When inspected Then test admission is exact and fail closed", () => {
@@ -51,14 +48,11 @@ test("Given native GTK selectors When inspected Then test admission is exact and
   assert.ok(!script.includes('"--$target"'));
   assert.ok(script.includes("--exact"));
   assert.ok(script.includes("test result: ok. 1 passed; 0 failed; 0 ignored;"));
-  for (const group of ["stable", "stress"]) {
-    assert.ok(ui.includes("scripts/ci-native-gtk-test-groups.sh " + group));
-    assert.ok(modeHas(group), group);
-    assert.ok(preflight.includes("scripts/ci-core-test-groups.sh " + group));
-  }
-  function modeHas(group) {
-    return read(".github/workflows/mode-b.yml").includes("scripts/ci-native-gtk-test-groups.sh " + group);
-  }
+  assert.ok(ui.includes("scripts/ci-native-gtk-test-groups.sh stable"));
+  assert.ok(preflight.includes("scripts/ci-core-test-groups.sh stable"));
+  assert.ok(!ui.includes("scripts/ci-native-gtk-test-groups.sh stress"));
+  assert.ok(!preflight.includes("scripts/ci-core-test-groups.sh stress"));
+
 });
 
 test("Given broken stdin and oversized decoder stdout Then output bounds win deterministically", () => {
@@ -73,9 +67,8 @@ test("Given broken stdin and oversized decoder stdout Then output bounds win det
   assert.ok(regressions.includes("probe.stdout.len() == MAX_OUTPUT + 1"));
 });
 
-test("Given Mode B admitted one commit When packaging Then no source suite is repeated before signing", () => {
+test("Given successful source review When packaging Then no source suite is repeated before signing", () => {
   const workflow = read(".github/workflows/native-tag-publish.yml");
-  const modeB = read(".github/workflows/mode-b.yml");
   const packageStep = workflow.split("\n  package:\n")[1]?.split("\n  publish:\n")[0];
   const publishStep = workflow.split("\n  publish:\n")[1]?.split("\n  cleanup:\n")[0];
   assert.ok(packageStep && publishStep, "Package and publish jobs must exist");
@@ -90,9 +83,6 @@ test("Given Mode B admitted one commit When packaging Then no source suite is re
   assert.doesNotMatch(packageStep, /cargo (?:\+stable )?(?:test|clippy)\b/);
   assert.doesNotMatch(packageStep, /unittest discover|pip install|native_apt\.py prepare/);
   assert.doesNotMatch(packageStep, /xvfb-run|dbus-run-session|bwrap --die-with-parent/);
-  assert.match(modeB, /scripts\/ci-native-gtk-test-groups\.sh stress/);
-  assert.match(modeB, /scripts\/ci-native-gtk-test-groups\.sh stable/);
-  assert.match(modeB, /unittest discover -s scripts\/tests/);
   assert.match(publishStep, /native_apt\.py prepare/);
   assert.match(publishStep, /environment: apt-release/);
   assert.match(publishStep, /native_apt\.py verify/);
