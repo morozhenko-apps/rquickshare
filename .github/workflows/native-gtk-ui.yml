@@ -1,18 +1,22 @@
 name: Native GTK UI verification
 
+# Deliberate dev verification like CFVigil. A marker or relevant PR
+# runs real GTK/Bubblewrap tests; ordinary pushes do not.
 on:
   push:
     branches: [dev]
     paths:
-      - "native_desktop/**"
-      - "core_lib/**"
-      - ".github/workflows/native-gtk-ui.yml"
+      - 'ci/run-preflight.txt'
   pull_request:
-    branches: [dev]
+    branches: [dev, master]
     paths:
-      - "native_desktop/**"
-      - "core_lib/**"
-      - ".github/workflows/native-gtk-ui.yml"
+      - 'native_desktop/**'
+      - 'core_lib/**'
+      - 'scripts/ci-native-gtk-test-groups.sh'
+      - 'scripts/tests/native-ci-cadence.test.mjs'
+      - '.github/workflows/native-gtk-ui.yml'
+      - '.github/workflows/mode-b.yml'
+      - '.github/workflows/native-tag-publish.yml'
   workflow_dispatch:
 
 permissions:
