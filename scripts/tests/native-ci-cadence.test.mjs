@@ -16,7 +16,18 @@ test("Given release Mode B When inspected Then stable suites do not run ten time
   assert.ok(!mode.includes("for attempt in $(seq 1 10)"));
   assert.ok(mode.includes("pnpm exec vitest run"));
   assert.ok(mode.includes("unittest discover -s scripts/tests"));
-  assert.ok(mode.includes("needs: [full_suite, native_gtk]"));
+  assert.ok(!mode.includes("\n  coverage:"), "Release Mode B must never run coverage");
+  assert.ok(!mode.includes("llvm-cov"), "Release must not install instrumentation");
+  const gtk = mode.split("\n  native_gtk:\n")[1];
+  assert.ok(gtk, "Native GTK validation job must exist");
+  assert.ok(!gtk.includes("needs: full_suite"), "Independent Core and GTK checks should run in parallel");
+  const manualCoverage = read(".github/workflows/coverage.yml");
+  const manualGTKCoverage = read(".github/workflows/native-gtk-coverage.yml");
+  for (const diagnostic of [manualCoverage, manualGTKCoverage]) {
+    assert.match(diagnostic, /workflow_dispatch:/);
+    assert.doesNotMatch(diagnostic, /^  push:/m);
+    assert.doesNotMatch(diagnostic, /^  pull_request:/m);
+  }
   assert.ok(release.includes("needs: [admission, mode-b]"));
   assert.ok(release.includes("environment: apt-release"));
 });
@@ -82,4 +93,16 @@ test("Given Mode B admitted one commit When packaging Then no source suite is re
   assert.match(publishStep, /native_apt\.py verify/);
   assert.match(publishStep, /scripts\/native_r2\.py publish/);
   assert.equal((workflow.match(/native_apt\.py prepare/g) || []).length, 1);
+});
+
+test("Given normal dev changes Then only explicit verification marker or PR can launch CI", () => {
+  const core = read(".github/workflows/lint.yml");
+  const native = read(".github/workflows/native-gtk-ui.yml");
+  for (const workflow of [core, native]) {
+    assert.match(workflow, /push:\n    branches: \[dev\]\n    paths:\n      - 'ci\/run-preflight\.txt'/);
+    assert.match(workflow, /pull_request:\n    branches: \[dev, master\]/);
+    assert.match(workflow, /workflow_dispatch:/);
+    assert.doesNotMatch(workflow, /branches: \[ ?["']?dev["']?, ?["']?master["']? ?\]/);
+  }
+  assert.doesNotMatch(core, /if: github\.event_name != 'pull_request'/);
 });
