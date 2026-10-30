@@ -4,11 +4,11 @@ name: Preflight
 # Code and docs pushes do not start CI; only marker changes or PRs do.
 on:
   push:
-    branches: [dev]
+    branches: [master]
     paths:
       - 'ci/run-preflight.txt'
   pull_request:
-    branches: [dev, master]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -141,7 +141,7 @@ jobs:
         with:
           workspaces: core_lib -> target
           shared-key: preflight-core-tests
-          save-if: ${{ github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' }}
+          save-if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request' }}
 
       - name: Install core dependencies
         run: |
@@ -179,7 +179,7 @@ jobs:
         with:
           workspaces: ${{ matrix.directory }} -> target
           shared-key: preflight-clippy-${{ matrix.directory }}
-          save-if: ${{ github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' }}
+          save-if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request' }}
 
       - name: Install Linux dependencies
         run: |

@@ -9,7 +9,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TRUSTED_CACHE_WRITER = "${{ github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' }}"
+TRUSTED_CACHE_WRITER = "${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request' }}"
 
 
 def workflow(name):
@@ -65,7 +65,7 @@ class CIWorkflowPolicyTests(unittest.TestCase):
             GTK_REQUIRED='${{ needs.scope.outputs.gtk }}',
             GTK_RESULT='${{ needs.native_gtk.result }}'))
 
-    def test_GivenRustCaches_WhenRestored_ThenOnlyTrustedDevCanSaveAndConfigurationsStaySeparate(self):
+    def test_GivenRustCaches_WhenRestored_ThenOnlyTrustedMainlineCanSaveAndConfigurationsStaySeparate(self):
         caches = []
         for doc in (self.preflight, self.gtk):
             for job in doc['jobs'].values():
