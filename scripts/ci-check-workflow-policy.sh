@@ -13,7 +13,7 @@ fail() {
 # must never be activated by editing their YAML during a dev push.
 for name in \
   p0-bwu-router.yml p0-client-introduction.yml p0-weave-worker.yml \
-  native-gtk-coverage.yml native-package-smoke.yml native-release-check.yml
+  native-package-smoke.yml native-release-check.yml
 do
   file=".github/workflows/$name"
   [[ -f "$file" ]] || fail "missing $file"
@@ -22,6 +22,10 @@ do
   fi
   grep -Eq '^  workflow_dispatch:' "$file" ||
     fail "$name is no longer manually accessible"
+done
+
+for file in .github/workflows/coverage.yml .github/workflows/native-gtk-coverage.yml; do
+  [[ ! -e "$file" ]] || fail "CFVigil-style CI must not contain coverage Actions workflows: $file"
 done
 
 mode_b=".github/workflows/mode-b.yml"
