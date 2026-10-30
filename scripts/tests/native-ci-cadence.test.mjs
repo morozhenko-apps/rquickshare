@@ -110,7 +110,8 @@ test("Given a signing keyring path from CI Then it is normalized before strict k
     "The Python API requires a Path rather than the raw argv string");
   assert.ok(signingStep.includes("scripts/native_ci_signing_key.py"),
     "The secret subkey-only authorization gate must remain intact");
-  assert.doesNotMatch(signingStep, /apt\\.public_key\\(sys\\.argv\\[1\\],/);
+  assert.ok(!signingStep.includes("apt.public_key(sys.argv[1],"),
+    "A raw argv string must never reach the pathlib-only keyring validator");
 });
 
 test("Given normal dev changes Then only explicit verification marker or PR can launch CI", () => {
