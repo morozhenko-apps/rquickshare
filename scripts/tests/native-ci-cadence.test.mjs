@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 const read = path => readFileSync(new URL("../../" + path, import.meta.url), "utf8");
 
-test("Given ordinary CI and a release Then Mode B cannot be triggered or run as a workflow", () => {
+test("Given ordinary CI and a release Then Mode B is not a GitHub Actions workflow", () => {
   const preflight = read(".github/workflows/lint.yml");
   const gtk = read(".github/workflows/native-gtk-ui.yml");
   const release = read(".github/workflows/native-tag-publish.yml");
@@ -13,23 +13,25 @@ test("Given ordinary CI and a release Then Mode B cannot be triggered or run as 
     ".github/workflows/coverage.yml",
     ".github/workflows/native-gtk-coverage.yml",
   ]) assert.equal(existsSync(new URL("../../" + path, import.meta.url)), false,
-    "Episodic Mode B and coverage are not GitHub Actions jobs: " + path);
+    "Periodic Mode B and coverage must not be GitHub Actions jobs: " + path);
   for (const workflow of [preflight, gtk, release]) {
-    assert.doesNotMatch(workflow, /scripts\\/ci-(?:core|native-gtk)-test-groups\\.sh stress/);
-    assert.doesNotMatch(workflow, /uses: \\.\\/\\.github\\/workflows\\/mode-b\\.yml/);
+    assert.ok(!workflow.includes("ci-core-test-groups.sh stress"));
+    assert.ok(!workflow.includes("ci-native-gtk-test-groups.sh stress"));
+    assert.ok(!workflow.includes("uses: ./.github/workflows/mode-b.yml"));
   }
-  assert.match(preflight, /scripts\\/ci-core-test-groups\\.sh stable/);
-  assert.match(gtk, /scripts\\/ci-native-gtk-test-groups\\.sh stable/);
+  assert.ok(preflight.includes("scripts/ci-core-test-groups.sh stable"));
+  assert.ok(gtk.includes("scripts/ci-native-gtk-test-groups.sh stable"));
   for (const script of [
     "scripts/ci-core-test-groups.sh",
     "scripts/ci-native-gtk-test-groups.sh",
   ]) {
     const source = read(script);
-    assert.match(source, /for attempt in \\$\\(seq 1 10\\)/);
-    assert.doesNotMatch(source, /--skip "\\$test_name"|--skip "\\$method"/);
+    assert.ok(source.includes("for attempt in $(seq 1 10)"));
+    assert.ok(!source.includes('--skip "$test_name"'));
+    assert.ok(!source.includes('--skip "$method"'));
   }
-  assert.match(release, /needs: admission/);
-  assert.match(release, /environment: apt-release/);
+  assert.ok(release.includes("needs: admission"));
+  assert.ok(release.includes("environment: apt-release"));
 });
 
 test("Given native GTK selectors When inspected Then test admission is exact and fail closed", () => {
