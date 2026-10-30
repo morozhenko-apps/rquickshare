@@ -40,7 +40,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../core_lib"
 
 # Rust's --exact test filter can silently run zero tests. Validate the
 # inventory and the names before launching either suite.
-inventory="$(cargo test --all-features --lib -- --list)"
+inventory="$(cargo test --locked --all-features --lib -- --list)"
 test_count="$(printf '%s\n' "$inventory" | grep -cE ': test$' || true)"
 if (( test_count <= ${#RACE_SENSITIVE[@]} )); then
   echo "Core unit-test inventory is unexpectedly empty or smaller than the stress group" >&2
@@ -58,7 +58,7 @@ done
 if [[ "$group" == stable ]]; then
   expected=$test_count
   echo "Core standard group: all $expected unit tests once, including risk probes; integration binaries retained."
-  output="$(cargo test --all-features 2>&1)" || {
+  output="$(cargo test --locked --all-features 2>&1)" || {
     printf '%s\n' "$output"
     exit 1
   }
@@ -74,7 +74,7 @@ echo "Core race-sensitive group: ${#RACE_SENSITIVE[@]} exact tests, ten consecut
 for attempt in $(seq 1 10); do
   echo "=== Core race-sensitive attempt $attempt/10 ==="
   for test_name in "${RACE_SENSITIVE[@]}"; do
-    output="$(cargo test --all-features --lib -- "$test_name" --exact 2>&1)" || {
+    output="$(cargo test --locked --all-features --lib -- "$test_name" --exact 2>&1)" || {
       printf '%s\n' "$output"
       echo "Race-sensitive failure on attempt $attempt/10: $test_name" >&2
       exit 1
