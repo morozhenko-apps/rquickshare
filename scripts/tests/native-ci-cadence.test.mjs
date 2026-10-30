@@ -100,6 +100,19 @@ test("Given Mode B admitted one commit When packaging Then no source suite is re
   assert.equal((workflow.match(/native_apt\.py prepare/g) || []).length, 1);
 });
 
+test("Given a signing keyring path from CI Then it is normalized before strict key admission", () => {
+  const workflow = read(".github/workflows/native-tag-publish.yml");
+  const signingStep = workflow.split("      - name: Import encrypted signing subkey, forbid primary secret\n")[1]
+    ?.split("      - name: Restore authenticated previous archive from private R2\n")[0];
+  assert.ok(signingStep, "Signing key admission step must be present");
+  assert.ok(signingStep.includes("from pathlib import Path"), "CI must import Path");
+  assert.ok(signingStep.includes("apt.public_key(Path(sys.argv[1]), sys.argv[2])"),
+    "The Python API requires a Path rather than the raw argv string");
+  assert.ok(signingStep.includes("scripts/native_ci_signing_key.py"),
+    "The secret subkey-only authorization gate must remain intact");
+  assert.doesNotMatch(signingStep, /apt\\.public_key\\(sys\\.argv\\[1\\],/);
+});
+
 test("Given normal dev changes Then only explicit verification marker or PR can launch CI", () => {
   const core = read(".github/workflows/lint.yml");
   const native = read(".github/workflows/native-gtk-ui.yml");
