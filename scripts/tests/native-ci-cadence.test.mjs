@@ -102,7 +102,7 @@ test("Given normal dev changes Then only explicit verification marker or PR can 
     assert.match(workflow, /push:\n    branches: \[dev\]\n    paths:\n      - 'ci\/run-preflight\.txt'/);
     assert.match(workflow, /pull_request:\n    branches: \[dev, master\]/);
     assert.match(workflow, /workflow_dispatch:/);
-    const pushBlock = workflow.split("\\n  push:\\n")[1]?.split("\\n  pull_request:\\n")[0];
+    const pushBlock = workflow.split("\n  push:\n")[1]?.split("\n  pull_request:\n")[0];
     assert.ok(pushBlock && !pushBlock.includes("master"), "A master push must not create redundant CI");
   }
   assert.doesNotMatch(core, /if: github\.event_name != 'pull_request'/);
