@@ -9,13 +9,6 @@ on:
       - 'ci/run-preflight.txt'
   pull_request:
     branches: [dev, master]
-    paths:
-      - 'native_desktop/**'
-      - 'core_lib/**'
-      - 'scripts/ci-native-gtk-test-groups.sh'
-      - 'scripts/tests/native-ci-cadence.test.mjs'
-      - '.github/workflows/native-gtk-ui.yml'
-      - '.github/workflows/native-tag-publish.yml'
   workflow_dispatch:
 
 permissions:
@@ -26,8 +19,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Resolve native GTK PR scope
+    runs-on: ubuntu-latest
+    outputs:
+      gtk: ${{ steps.classify.outputs.gtk }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Detect native production or CI changes
+        id: classify
+        run: bash scripts/ci-pr-scope.sh
+
   native_gtk:
     name: Native GTK widget tests and strict lint
+    needs: scope
+    if: needs.scope.outputs.gtk == 'true'
     runs-on: ubuntu-26.04
     steps:
       - name: Install native test prerequisites
@@ -82,3 +90,24 @@ jobs:
             dbus-run-session --config-file docs/prototypes/preview-bus.conf -- \
             xvfb-run -a bash scripts/ci-native-gtk-test-groups.sh stable
 
+
+  admission:
+    name: Native GTK admission
+    if: always()
+    needs: [scope, native_gtk]
+    runs-on: ubuntu-latest
+    env:
+      SCOPE_RESULT: ${{ needs.scope.result }}
+      GTK_REQUIRED: ${{ needs.scope.outputs.gtk }}
+      GTK_RESULT: ${{ needs.native_gtk.result }}
+    steps:
+      - name: Require native GTK success or an audited non-native skip
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SCOPE_RESULT" == success ]] || exit 1
+          case "$GTK_REQUIRED" in
+            true) [[ "$GTK_RESULT" == success ]] ;;
+            false) [[ "$GTK_RESULT" == skipped ]] ;;
+            *) exit 1 ;;
+          esac
