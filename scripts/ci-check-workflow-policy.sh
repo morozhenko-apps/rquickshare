@@ -27,7 +27,13 @@ done
 mode_b=".github/workflows/mode-b.yml"
 grep -Eq '^  workflow_call:' "$mode_b" || fail 'Mode B reusable entry is missing'
 if grep -Eq '^  (push|workflow_dispatch):' "$mode_b"; then
-  fail 'Full 10x Mode B must not run directly from development'
+  fail 'Release-only Mode B must not run directly from development'
+fi
+if grep -Eq '^  coverage:' "$mode_b" || grep -Eq 'llvm-cov|--coverage|coverage.provider' "$mode_b"; then
+  fail 'CFVigil cadence forbids a coverage job or instrumentation in the release gate'
+fi
+if grep -Fq 'needs: full_suite' "$mode_b"; then
+  fail 'Independent native GTK and Core validation should run concurrently'
 fi
 # Pinned actionlint predates the newly available GitHub-hosted Ubuntu 26.04.
 # Admit only this verified label through its narrow compatibility config;
@@ -66,6 +72,14 @@ grep -Fq "cancel-in-progress: false" .github/workflows/native-tag-publish.yml ||
   fail 'Release publication may cancel a previous tag'
 
 preflight=".github/workflows/lint.yml"
+for workflow in "$preflight" ".github/workflows/native-gtk-ui.yml"; do
+  grep -Fq "      - 'ci/run-preflight.txt'" "$workflow" ||
+    fail "$workflow must be triggered deliberately by a verification marker"
+  grep -Fq 'branches: [dev, master]' "$workflow" ||
+    fail "$workflow must support reviewed PR verification against dev/master"
+  grep -Fq 'workflow_dispatch:' "$workflow" ||
+    fail "$workflow must allow explicit operator verification"
+done
 grep -Fq 'scripts/ci-core-test-groups.sh stable' "$preflight" ||
   fail 'Dev core stable tests have disappeared'
 grep -Fq 'scripts/ci-core-test-groups.sh stress' "$preflight" ||
@@ -91,4 +105,4 @@ for file in .github/workflows/p0-*.yml; do
     fail "$file lacks mainline HEAD verification"
 done
 
-printf 'PASS: dev fast-test and protected tag-only stress workflow contracts\n'
+printf 'PASS: CFVigil-style deliberate dev CI and coverage-free protected release verification\n'
