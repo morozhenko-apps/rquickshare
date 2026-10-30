@@ -106,6 +106,20 @@ test("Given a signing keyring path from CI Then it is normalized before strict k
     "A raw argv string must never reach the pathlib-only keyring validator");
 });
 
+test("Given APT refresh When importing the signing subkey Then keyring argv is a Path", () => {
+  const workflow = read(".github/workflows/native-apt-refresh.yml");
+  const signingStep = workflow.split("      - name: Import protected release signing subkey only\n")[1]
+    ?.split("      - name: Authenticate current R2 and regenerate the same package metadata\n")[0];
+  assert.ok(signingStep, "APT refresh signer admission step must exist");
+  assert.ok(signingStep.includes("from pathlib import Path"), "refresh must import Path");
+  assert.ok(signingStep.includes("apt.public_key(Path(sys.argv[1]), sys.argv[2])"),
+    "refresh must normalize keyring argv to Path before strict validation");
+  assert.ok(!signingStep.includes("apt.public_key(sys.argv[1],"),
+    "the raw argv string must never reach the pathlib-only keyring validator");
+  assert.ok(signingStep.includes("scripts/native_ci_signing_key.py"),
+    "the existing signer-only subkey admission check must remain enforced");
+});
+
 test("Given normal dev changes Then only explicit verification marker or PR can launch CI", () => {
   const core = read(".github/workflows/lint.yml");
   const native = read(".github/workflows/native-gtk-ui.yml");

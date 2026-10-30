@@ -93,7 +93,7 @@ jobs:
           printf '%s' "$SUBKEY_PASSPHRASE" > "$private/passphrase"
           gpg --no-options --homedir "$private/gnupg" --batch --import "$private/import.gpg" >/dev/null 2>&1
           rm -f "$private/import.gpg"
-          python3 -c 'import sys; sys.path.insert(0, "scripts"); import native_apt as apt; apt.public_key(sys.argv[1], sys.argv[2])' \
+          python3 -c 'import sys; from pathlib import Path; sys.path.insert(0, "scripts"); import native_apt as apt; apt.public_key(Path(sys.argv[1]), sys.argv[2])' \
             "$private/keyring.gpg" "$SIGNING_FINGERPRINT"
           gpg --no-options --homedir "$private/gnupg" --batch --with-colons --list-secret-keys \
             "$SIGNING_FINGERPRINT" > "$private/keys.txt"
