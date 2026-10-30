@@ -1,10 +1,17 @@
 # Flat R2 distribution
 
-**Current status:** source refactor is merged into dev and live download Worker
-retirement is verified. Both exact routes/Workers are absent; existing public
-objects and all sibling routes are preserved. Git disconnection and the RQS
-app-dist token replacement are owner-confirmed. No new application release,
-version/tag change or R2 object upload was performed.
+**Current status:** Native **1.0.0-1** is published through the signed flat
+distribution. The public DEB, checksum, indexes, InRelease signature and pinned
+public key were verified. The completed release also passed isolated APT
+acquisition and receipt-gated temporary-artifact cleanup. The
+[GitHub release](https://github.com/morozhenko-apps/rquickshare/releases/tag/native/v1.0.0)
+contains release notes; installers are served from the existing public domain.
+
+The release used the corrected tagged publisher. The additional ordinary-CI
+pilot hardening is accepted in dev and has not yet been promoted to master;
+see [pilot scope](ci-pilot.md). Published tag/package identities are immutable.
+The historical refactor and cutover checkpoints below retain their original
+scope and must not be read as the latest publication status.
 
 ## Approved contract (2026-10-27)
 

@@ -1,5 +1,20 @@
 # Bounded CI pilot
 
+**Current status:** the ordinary-CI pilot passed its full applicable source
+and real GTK/Bubblewrap checks and is merged into dev. Native **1.0.0-1** was
+[published successfully](https://github.com/morozhenko-apps/rquickshare/releases/tag/native/v1.0.0)
+from the separately reviewed release-repair source on master. Public package
+bytes, checksum and the signed APT index were independently verified.
+
+The published workflow includes removal of Mode B/coverage/source-test replay
+from tag publication and the signer Path correction. The additional pilot
+timeouts, ordinary Rust caches, checkout/token restrictions, locked resolution,
+scope fixes and semantic CI contracts remain in dev; they are not present in
+the released master source yet. Product/package/publisher bytes match between
+these lines, but their ordinary CI configuration differs. Do not report full
+master/dev CI parity or rewrite the published tag to change that distinction.
+The planning and local-only receipts below are earlier checkpoints.
+
 Mode A. Owner scope: use rQuickShare as the first CI pilot; transfer the proven
 recipe to RepoTicker, CFVigil, ArcVault and Picturix only after pilot acceptance.
 This is workflow/helper engineering, not a new product test-coverage audit.
@@ -76,7 +91,7 @@ fix. Do not run domain suites as diagnostics or change product assertions.
    existing full source/native checks on the final pilot PR. Record exact
    commands, results and unverified native scope. No repeated full local Rust
    build merely to duplicate the PR's platform-specific execution evidence.
-7. [ ] Complete remote pilot acceptance: commit docs separately from executable changes, push the isolated branch
+7. [x] Complete remote pilot acceptance: commit docs separately from executable changes, push the isolated branch
    and create a PR to dev. Trigger only this final gate. Per AGENTS.md, stop at
    the handoff URL; do not poll an active CI or roll out other repositories
    before a completion event or a new owner instruction supplies the result.
@@ -159,13 +174,15 @@ assertions. No instrumented mutation run or product coverage claim is made.
 
 No separate known-FLAKY inventory is registered by this pilot; it neither
 quarantines failures nor labels risk probes flaky. Repetition was not run.
-Complete Rust/frontend/Tauri and real GTK/Bubblewrap execution on the final PR
-remain PENDING. Native product logic, live packages, device state, protected
+At this earlier local checkpoint, complete Rust/frontend/Tauri and real
+GTK/Bubblewrap execution on the final PR were PENDING; the current accepted
+status is recorded above. Native product logic, live packages, device state, protected
 master, tag/signing/R2 operations and the other four products were not changed.
 All owned local commands completed; terminal closed.
 
-Continuation: find the final PR by head `ci/rquickshare-pilot-20261030` and base
-`dev` before creating or dispatching anything. The branch intentionally
-includes the independent PR #39 source as its baseline; the incremental pilot
-diff starts at `74ec3d7e`. Require final applicable source and native outcomes
-before declaring this pilot accepted or transferring the recipe elsewhere.
+Source acceptance is complete through merged PR #42; release repair PR #39 is
+also merged. The incremental pilot diff starts at `74ec3d7e`. Any subsequent
+promotion must preserve required checks, source identity and the immutable
+published release; do not treat the existing publication as proof that the
+extra ordinary-CI hardening is already on master. Other-product rollout is
+not performed by this documentation update.
