@@ -5,7 +5,7 @@
 > Older full-suite-10x requirements and historical run notes below are superseded for new releases.
 > Full test inventory, independently requested coverage analysis, physical Linux/Android
 > acceptance, signed release authorization and Stage 12 remain separate requirements.
-> **Coverage is manual-only** and never blocks tagged release publication (2026-10-30).
+> **Coverage is offline/local only**; there are no coverage GitHub Actions jobs (2026-10-30).
 
 _Last updated: 2026-10-12_
 
