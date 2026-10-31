@@ -70,7 +70,7 @@ class CIWorkflowPolicyTests(unittest.TestCase):
         for doc in (self.preflight, self.gtk):
             for job in doc['jobs'].values():
                 caches.extend(step['with'] for step in job.get('steps', [])
-                              if step.get('uses') == 'Swatinem/rust-cache@v2.9.0')
+                              if step.get('uses') == 'Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0')
         self.assertEqual(len(caches), 3)
         self.assertEqual(len({cache['shared-key'] for cache in caches}), 3)
         for cache in caches:

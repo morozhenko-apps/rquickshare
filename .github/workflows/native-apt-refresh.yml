@@ -20,7 +20,7 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned private archive client without signing material
@@ -56,7 +56,7 @@ jobs:
       SIGNING_FINGERPRINT: 6D8854762CF0C86881138A56695A0888D09FA616
       RQS_R2_ACCOUNT_ID: ${{ vars.RQS_R2_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false

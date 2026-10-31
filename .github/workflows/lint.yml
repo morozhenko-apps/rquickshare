@@ -29,7 +29,7 @@ jobs:
     outputs:
       preflight: ${{ steps.classify.outputs.preflight }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@nightly
@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -131,13 +131,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2.9.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # Swatinem/rust-cache@v2.9.3
         with:
           workspaces: core_lib -> target
           shared-key: preflight-core-tests
@@ -167,7 +167,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -175,7 +175,7 @@ jobs:
         with:
           components: clippy
 
-      - uses: Swatinem/rust-cache@v2.9.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # Swatinem/rust-cache@v2.9.3
         with:
           workspaces: ${{ matrix.directory }} -> target
           shared-key: preflight-clippy-${{ matrix.directory }}
