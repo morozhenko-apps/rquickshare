@@ -41,3 +41,17 @@ Revert CI commits on dev, retain the protected master SHA and immutable release 
 - Completed on `dev`: normal Preflight now runs stable Core once; full Mode B is callable only by the master-HEAD tagged release workflow. Three P0 10x jobs reject dev refs and have no push triggers. Heavy native package, coverage and release syntax checks are manual. Native GTK scoped widget tests remain single-pass when native sources change. Per-ref cancellation preserves new pushes, while protected publication is non-cancelable.
 - Added `scripts/ci-check-workflow-policy.sh`, invoked automatically by Preflight. The exact development Preflight SHA `aec1f1f7bb7579b88ab5980eab32ba0ec1ce78cc` passed in GitHub Actions run `39091401200`; native GTK gate also passed at preceding SHA.
 - **Not yet complete:** no fresh valid release-tag 10x run, no bundled Windows/macOS acceptance, no master promotion. The very large outstanding development branch contains product changes beyond this CI scope. Public hosted runners remain deliberate for untrusted repository safety.
+
+## Build toolchain maintenance integration
+
+The owner approved a scoped integration of the already validated maintenance into the current release branch through a reviewable PR. This authorization supersedes ordinary temporary-branch restrictions for this integration only. Build/CI tool versions change; application behavior, public contracts, data, credentials and immutable release identities remain unchanged. Upstream Actions keep their supported internal runtime; project Node tooling uses the exact maintained LTS pin.
+
+Plan:
+
+- [x] Inspect current release source, owning instructions, prior maintenance evidence and deployment triggers. Start from the current release head to preserve its unique commits.
+- [x] Record this plan before executable edits, with documentation and executable changes committed separately.
+- [ ] Apply only the reviewed Actions, Node and required compatibility/security corrections; adapt references to existing release workflows. Exclude unrelated accumulated development work.
+- [ ] Review complete diff and source invariants, run applicable final stable checks once, and reuse previous suite evidence only with exact source/lock equivalence. Keep native/store and release-only acceptance separate.
+- [ ] Create the scoped PR; integrate only after its exact-head required checks and existing production-admission conditions pass. Preserve concurrent release changes and never bypass branch protection.
+
+Rollback uses an ordinary revert of the scoped maintenance commits; no tag movement, resource recreation or provider/data rollback is part of this task. Existing automatic Git deployment ownership and triggers are preserved. A source/PR pass alone does not establish effective production Node or native/store acceptance.
