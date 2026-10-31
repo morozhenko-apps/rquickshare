@@ -41,3 +41,52 @@ Revert CI commits on dev, retain the protected master SHA and immutable release 
 - Completed on `dev`: normal Preflight now runs stable Core once; full Mode B is callable only by the master-HEAD tagged release workflow. Three P0 10x jobs reject dev refs and have no push triggers. Heavy native package, coverage and release syntax checks are manual. Native GTK scoped widget tests remain single-pass when native sources change. Per-ref cancellation preserves new pushes, while protected publication is non-cancelable.
 - Added `scripts/ci-check-workflow-policy.sh`, invoked automatically by Preflight. The exact development Preflight SHA `aec1f1f7bb7579b88ab5980eab32ba0ec1ce78cc` passed in GitHub Actions run `39091401200`; native GTK gate also passed at preceding SHA.
 - **Not yet complete:** no fresh valid release-tag 10x run, no bundled Windows/macOS acceptance, no master promotion. The very large outstanding development branch contains product changes beyond this CI scope. Public hosted runners remain deliberate for untrusted repository safety.
+
+## CI toolchain maintenance
+
+Scope: refresh maintained GitHub Actions implementations while preserving existing
+permissions, triggers, runner routing, cache intent and release/publication gates.
+JavaScript action internals use supported Node24; this is distinct from project Node.
+Project development/build/test tooling targets exact Node26.13.0 LTS. Update
+active pins and exact-version source guards together; compatible broader engine
+floors and immutable historical receipts remain unchanged. Keep Linux libatomic
+prerequisites where Node26 runs in a minimal container.
+Node26 does not bundle Corepack. Install the existing pnpm9.7.0 into a job-local
+RUNNER_TEMP prefix, expose its bin directory through GITHUB_PATH, and keep the
+frozen lockfile and package-manager version unchanged.
+
+Maintained action targets:
+
+- `Swatinem/rust-cache`: `v2.9.3` (`d1527c8f67ef9af357290475d4af4b0fab8f12e0`).
+- `actions/checkout`: `v7.0.1` (`3d3c42e5aac5ba805825da76410c181273ba90b1`).
+- `actions/download-artifact`: `v8.0.2` (`9000827ccba6bdab643e8b6fd33ac0654aef8333`).
+- `actions/setup-go`: `v7.0.0` (`b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`).
+- `actions/upload-artifact`: `v7.0.2` (`cf430e030ddbb5b0abf93d22962f4752f3646cd9`).
+
+Milestones:
+
+- [x] Read current source, agent/CI owners, permanent refs and concurrent work.
+- [x] Record scope, compatibility decisions, validation and rollback before code.
+- [ ] Apply scoped action/toolchain and directly related source-contract changes.
+- [ ] Execute applicable stable checks once at the final gate; report separate
+  known-flaky/stability outcomes and unexecuted native/provider gates.
+- [ ] Record the final source/verification boundary and publish validated dev work.
+
+Planned validation:
+
+- Parse all affected workflow YAML and verify maintained action SHA/runtime identities.
+- Review diffs and preserve permissions, events, routing, signing/publication admission,
+  artifact names/paths and existing non-Node SDK versions.
+- `bash scripts/ci-check-workflow-policy.sh`.
+- `Existing source-contract suites: scripts/tests/test_ci_workflow_policy.py`.
+- `npm run test --prefix app/main`.
+- `python3 -m unittest discover -s scripts/tests -v`.
+- `node --test scripts/tests/*.test.mjs`.
+- `pnpm lint / pnpm ts-check / pnpm exec vitest run in app/main`.
+
+Risk and rollback: action majors may change auth/cache/artifact or build-wrapper
+behavior; Node-major transitions require the existing tooling checks. Revert the
+scoped executable commit and its documentation update separately if needed. This
+maintenance does not authorize protected-branch promotion, tags, store upload,
+runner changes or cloud deployment. Native/device/provider acceptance remains
+independent of local checks. No architecture or application contract changes.
