@@ -1,6 +1,6 @@
 # Installed native acceptance: host readiness and rollback
 
-2026-10-16. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-16. Mode A, direct dev. Guide: AGENTS.md,
 sections3/3.1/11/12/13. Continue the essential current-peer/installed-desktop gate
 after native12 source/offline verification. No preview or advanced parity work.
 
@@ -64,7 +64,7 @@ change has occurred. All owned inspection commands exited: Terminal closed.
 ## I2 actual recovery result
 
 A private installed-state recovery package was built and verified successfully:
-/home/morozhenko/Documents/Codex/rquickshare-acceptance/2026-10-16/rollback/
+<private-verification-path>
 rquickshare_0.11.5_installed-snapshot_amd64.deb
 
 Size80,994,242 bytes, SHA256
@@ -80,7 +80,7 @@ not original release provenance. It has not been installed as a rollback test.
 ## I3 reviewed installation and rollback commands
 
 Native candidate:
-/home/morozhenko/Documents/GitHub/rquickshare/native_desktop/target/packages/
+./native_desktop/target/packages/
 rquickshare_0.11.5+native12_amd64.deb
 SHA256 b4ef947385b46a2b16f2dc625f1cfc216205672b1df75478f821bb4a857962f0.
 
@@ -90,7 +90,7 @@ No unrelated upgrade, APT-source/key change or publication. Authentication stays
 in the system prompt, never in chat. The concrete command is:
 
 ```sh
-pkexec /usr/bin/apt-get install --yes /home/morozhenko/Documents/GitHub/rquickshare/native_desktop/target/packages/rquickshare_0.11.5+native12_amd64.deb
+pkexec /usr/bin/apt-get install --yes ./native_desktop/target/packages/rquickshare_0.11.5+native12_amd64.deb
 ```
 
 Then reload the user's unit metadata without enabling login start, validate the

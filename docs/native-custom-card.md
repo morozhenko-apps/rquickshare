@@ -14,7 +14,7 @@ checks. Earlier pending-C3 observations below are historical, not current blocke
 2026-10-13. Mode A. User selected the fully custom popup presentation and requested
 full/compact modes, a secondary settings menu and right-click actions. This
 supersedes the previous native-notification-review.md system-notification proposal.
-The global guide remains /home/morozhenko/.codex/AGENTS.md, including quality-first
+The global guide remains AGENTS.md, including quality-first
 recommendations and one-run development verification. Work stays on dev.
 
 ## Analysis and approved direction

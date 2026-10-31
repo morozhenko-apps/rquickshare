@@ -6,7 +6,7 @@ Date: 2026-10-22. **MODE A (refactor of release/public source identity)**. User 
 
 - The native Linux product is independently versioned; current planned product SemVer is **0.9.0**, Debian artifact **rquickshare-native_0.9.0-1_amd64.deb**, with stable native **1.0.0** later. Upstream Tauri/RQuickShare tags include `v0.9.0` (commit `f850713a75c219299ba797742f4269c6e61a0c84`) and `v0.11.5`. They belong to preserved historical source and must never be moved/deleted/reused.
 - Native release *Git ref* is now **`refs/tags/native/vX.Y.Z`** (for example `native/v0.9.0`, later `native/v1.0.0`). Public GitHub Release uses that same tag; display title can remain rQuickShare 0.9.0. Original `vX.Y.Z` tags must be ignored by native publication/recovery workflows.
-- The *production delivery channel* is unchanged by this migration: existing protected `master`, `apt-release` GitHub Environment with Required reviewer, private `rquickshare-native-apt` R2 bucket, HTTPS Worker `download.morozhenko.com/dist/rQuickShare/`, signed APT suite `rquickshare-native-ubuntu26.04`, immutable package paths, ABI Ubuntu 26.04 amd64. Only namespace of the Git source marker changes. No new GPG key or R2 secret, and no early tag/publication is authorized.
+- The *production delivery channel* is unchanged by this migration: existing protected `master`, `apt-release` GitHub Environment with Required reviewer, private `<legacy-dedicated-bucket>` R2 bucket, HTTPS Worker `download.morozhenko.com/dist/rQuickShare/`, signed APT suite `rquickshare-native-ubuntu26.04`, immutable package paths, ABI Ubuntu 26.04 amd64. Only namespace of the Git source marker changes. No new GPG key or R2 secret, and no early tag/publication is authorized.
 
 ## Repository scan and per-owner plan
 

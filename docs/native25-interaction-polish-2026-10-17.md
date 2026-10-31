@@ -1,6 +1,6 @@
 # Native24 feedback: interaction and completion polish
 
-2026-10-17, Mode A, dev only. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-17, Mode A, dev only. Guide: AGENTS.md,
 sections3/3.1/11/12/13. Current installed native24 remains unchanged during
 analysis. User approved the general visual direction, but reported discovery
 still slow and supplied a real Transfers screenshot with duplicated controls.

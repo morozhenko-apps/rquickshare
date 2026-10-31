@@ -1,6 +1,6 @@
 # Native28 accepted mainline integration
 
-2026-10-17, Mode A. Guide: /home/morozhenko/.codex/AGENTS.md. User accepted the
+2026-10-17, Mode A. Guide: AGENTS.md. User accepted the
 current installed UI and explicitly authorized merging into the mainline and
 reviewing the next priorities. Actual GitHub default branch is master. Work stays
 on existing dev, with no new branch/worktree, force push or branch deletion.

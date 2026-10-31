@@ -2,7 +2,7 @@
 
 2026-10-15. Mode A, direct dev. User selected option1: Google-protocol
 authentication foundation and provider research. Guide:
-/home/morozhenko/.codex/AGENTS.md sections3,3.1,11,13. This selection does not
+AGENTS.md sections3,3.1,11,13. This selection does not
 authorize an auto-accept boundary, account access, enrollment or new pairing UX.
 T1–T5, source checks and verified native7/public artifact handoff are complete.
 Operational provider/identity and
@@ -356,7 +356,7 @@ unsigned APT ZIP SHA256
 CRC/inventory/selected exact bytes, package/request digests and unchanged binary
 inputs sincec286e20 passed. Exported native7/checksum, immutable source ZIP,
 unsigned7-file APT, public unapproved request, docs and truthful progress/readiness
-to `/home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs`.
+to `<private-evidence-directory>`.
 The older generic source ZIP was preserved before refresh. Completion docs are
 intentionally later than the immutable source ZIP; binary source staysc286e20.
 All owned commands/test brokers/build/export sessions ended; Terminal closed.

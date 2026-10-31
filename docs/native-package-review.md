@@ -1,7 +1,7 @@
 # Native package and daemon activation review
 
 2026-10-14. Mode A analysis, after completed native-reveal.md. Direct dev only.
-Guide /home/morozhenko/.codex/AGENTS.md sections3/3.1 requires a user choice for the
+Guide AGENTS.md sections3/3.1 requires a user choice for the
 new installed process owner/activation boundary. No package production change,
 activation asset installation, live manager call, autostart or transport start here.
 

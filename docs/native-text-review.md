@@ -1,6 +1,6 @@
 # Native text and clipboard acceptance review
 
-2026-10-13. Mode A. Guide /home/morozhenko/.codex/AGENTS.md sections 3/3.1.
+2026-10-13. Mode A. Guide AGENTS.md sections 3/3.1.
 User selected 1/A: explicit Copy after receipt; R1-R4 are implemented in source. Implementation SSOT is
 [native-text.md](native-text.md). Settings and separate tray menu source are complete.
 The analysis below describes the historical review before R1-R4 implementation.

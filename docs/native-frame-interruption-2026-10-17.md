@@ -79,7 +79,7 @@ and strict Clippy passed again in4.53s. No repeated stability loop was run.
 Stable rustfmt reports unsupported nightly configuration options, as before.
 
 Local source-only fixtures are at
-`/home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs/rquickshare-peer-check-2026-10-17`.
+`<private-evidence-directory>/rquickshare-peer-check-2026-10-17`.
 Five files total65935 bytes: single file, two-file selection including space/UTF-8
 names and a two-level folder. `manifest.json` holds independently reread sizes
 and SHA-256; `text-to-copy.txt` covers multiline UTF-8 text and a non-opening URL.

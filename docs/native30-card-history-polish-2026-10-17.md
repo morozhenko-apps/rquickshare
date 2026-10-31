@@ -1,6 +1,6 @@
 # Native30 card and history polish
 
-Mode A,2026-10-17, dev after f20e6d9. Guide: /home/morozhenko/.codex/AGENTS.md.
+Mode A,2026-10-17, dev after f20e6d9. Guide: AGENTS.md.
 The user reports successful Android -> Linux text receipt after explicit Accept,
 with a noticeable unmeasured delay before consent appeared. Do not represent that
 delay as fixed or measured. Native29 remains installed during source work.

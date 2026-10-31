@@ -27,7 +27,7 @@ as history; their earlier recommendation/pending choice is superseded.
   notifications and one lifecycle per transfer. GUI ownership is not an alternative
   proposed here: it would lose background requests on GTK Quit.
 
-Applicable guide: /home/morozhenko/.codex/AGENTS.md, sections 3/3.1 and 13. The user
+Applicable guide: AGENTS.md, sections 3/3.1 and 13. The user
 explicitly delegated the preceding ingress ownership choice, now implemented.
 This next material consent UX choice is outside that concrete delegation. Present
 both options with the quality recommendation, then wait before notification code.

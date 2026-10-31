@@ -1,6 +1,6 @@
 # Native live visibility and quick controls
 
-2026-10-16. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md.
+2026-10-16. Mode A, direct dev. Guide: AGENTS.md.
 User selected option1 in native-completion-audit.md: daemon-owned visibility
 facade, existing single settings writer, core-owned expiry. This implements that
 selection; no account mode, auto-accept, new duration or radio acknowledgement.

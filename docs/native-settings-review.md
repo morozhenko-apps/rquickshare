@@ -3,7 +3,7 @@
 2026-10-13. Mode A. Accepted: user selected 1/A, daemon-owned settings, including
 the scoped receive-policy ownership refactor. Current implementation SSOT:
 [native-settings.md](native-settings.md). The analysis below is historical.
-Guide: /home/morozhenko/.codex/AGENTS.md, sections 3/3.1/11/12/13. Work on dev.
+Guide: AGENTS.md, sections 3/3.1/11/12/13. Work on dev.
 The preceding option A/1 selected notification ownership, not settings ownership.
 No native settings write API or migration is implemented by this review.
 

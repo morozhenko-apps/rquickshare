@@ -145,7 +145,7 @@ succeeds with parent nlink=0; the identical syscall in workspace storage fails
 EPERM. The storage test assumes the latter. This environment-dependent existing
 storage defect remains visible; do not call it a flaky test or a BWU regression.
 The native CI already uses a workspace TMPDIR. Repeat the final Core gate with
-`TMPDIR=/home/morozhenko/Documents/GitHub/rquickshare/core_lib/target/bwu-ci-tmp`
+`TMPDIR=./core_lib/target/bwu-ci-tmp`
 to validate on the same filesystem class, while retaining the tmpfs failure above.
 
 `cargo +stable clippy --manifest-path core_lib/Cargo.toml --all-features --all-targets
@@ -204,14 +204,14 @@ Issue evidence: [comment 6413626764](https://github.com/morozhenko-apps/rquicksh
 After all six CI checks passed, executed:
 
 ```sh
-python3 scripts/native_deb.py build --profile dev --output /home/morozhenko/Downloads/rquickshare-bwu-6ae62f6
-sha256sum /home/morozhenko/Downloads/rquickshare-bwu-6ae62f6/*.deb
+python3 scripts/native_deb.py build --profile dev --output <candidate-output>/rquickshare-bwu-6ae62f6
+sha256sum <candidate-output>/rquickshare-bwu-6ae62f6/*.deb
 git diff --check
 ```
 
 All exit 0. Builder compiled all three binaries, verified Debian structure,
 runtime dependencies and isolated help/settings smoke checks. Artifact:
-`/home/morozhenko/Downloads/rquickshare-bwu-6ae62f6/rquickshare-native_0.9.0-1.debug_amd64.deb`.
+`<candidate-output>/rquickshare-bwu-6ae62f6/rquickshare-native_0.9.0-1.debug_amd64.deb`.
 SHA-256: `3d8f8e608527b7b08108e25ff34e52b2ef4c761ebefa4def8aa462749ab92bcc`.
 Matching `.deb.sha256` is beside it. The source identity is `6ae62f6`; do not use
 the reused Debian debug version as binary identity. Build log retains existing

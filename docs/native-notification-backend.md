@@ -1,7 +1,7 @@
 # Daemon-owned custom-card delivery
 
 2026-10-13. Mode A. User accepted A/option 1 from the background ownership review.
-Guide: /home/morozhenko/.codex/AGENTS.md. Work on dev only, no installation/push.
+Guide: AGENTS.md. Work on dev only, no installation/push.
 This document freezes the implementation contract before production changes.
 
 ## Analysis and invariants

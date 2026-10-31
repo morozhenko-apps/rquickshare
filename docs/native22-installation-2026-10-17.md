@@ -40,7 +40,7 @@ matching; consent and clipboard policy are unchanged. No full Google parity.
 
 Initial build observation: the daemon built, but GTK compilation stopped because
 ambient pkg-config has no GTK4 development metadata. The documented existing
-private sysroot is /home/morozhenko/Documents/Codex/2026-10-12/new-chat/work/gtk-native/root.
+private sysroot is <private-verification-path>
 Reuse its PKG_CONFIG_SYSROOT_DIR, pkg-config metadata and library search paths as
 in prior native builds; no host package/config changes. This is an environment
 recovery, not a source defect or passed build. Re-run only the affected build.

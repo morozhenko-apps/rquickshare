@@ -6,7 +6,7 @@ retained as decision history, not pending implementation or user selection.
 
 2026-10-14. Mode A analysis only, following selected systemd user ownership in
 native-package.md. No login-start implementation or live user manager operation.
-Guide /home/morozhenko/.codex/AGENTS.md sections3/3.1 requires a choice for material
+Guide AGENTS.md sections3/3.1 requires a choice for material
 product UX and significant new lifecycle ownership; section11 covers small fixes,
 not silently introducing this broader startup refactor.
 

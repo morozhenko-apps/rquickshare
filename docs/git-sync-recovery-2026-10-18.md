@@ -27,7 +27,7 @@ Repository-local pull.rebase=true makes future pulls replay private docs commits
 undo with `git config --local --unset pull.rebase` (previous setting absent).
 
 Exact original Git directory, changed files, patches, manifests and checksums:
-`/home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs/git-recovery-2026-10-18/`.
+`<private-evidence-directory>/git-recovery-2026-10-18/`.
 Read RECOVERY.md and SHA256SUMS there. Extract archives into a separate recovery
 directory to inspect original merge/index/refs without overwriting newer work.
 Revert a recovery documentation commit for content rollback. Do not restore old

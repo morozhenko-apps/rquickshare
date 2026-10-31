@@ -2,7 +2,7 @@
 
 2026-10-14. Mode A. User selected1/A from native-image-review.md: immutable
 anonymous memory-backed file, explicit bounded capture and shared Files preparation.
-Guide /home/morozhenko/.codex/AGENTS.md. Direct dev; no user's real clipboard,
+Guide AGENTS.md. Direct dev; no user's real clipboard,
 config/install/tray registration/physical peer/push/branch. Tests use isolated display.
 
 ## Analysis and milestones before implementation

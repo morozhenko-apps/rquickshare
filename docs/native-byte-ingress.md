@@ -1,6 +1,6 @@
 # Bounded byte ingress before preview support
 
-2026-10-15. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-15. Mode A, direct dev. Guide: AGENTS.md,
 sections3.1/11/12. User selected supported authorization only and continuing
 independent sharing work. This is a scoped internal root-cause fix; no new
 preview decoder, account authority, wire field, IPC, settings or consent UX.

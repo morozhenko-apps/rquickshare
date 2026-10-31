@@ -1,6 +1,6 @@
 # Native tray menu
 
-2026-10-13. Mode A. Guide /home/morozhenko/.codex/AGENTS.md. The user already
+2026-10-13. Mode A. Guide AGENTS.md. The user already
 selected secondary right-click actions and now requested continuation. Direct dev
 commits, no live tray install, push or separate agent. Settings slice is complete.
 

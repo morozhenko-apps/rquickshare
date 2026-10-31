@@ -1,6 +1,6 @@
 # Card, tray and settings usability follow-up
 
-2026-10-16. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-16. Mode A, direct dev. Guide: AGENTS.md,
 sections 3/3.1/11/12/13. This supersedes the pending generic native15 visual
 review with the user's concrete usability feedback. Native15 remains installed;
 no source/runtime/package change has been made for this follow-up yet.
@@ -401,7 +401,7 @@ All owned commands exited: Terminal closed; normal native15 app services remain.
 ## Immutable export and continuation
 
 Exported the verified6,502,012-byte native16 package/checksum and seven actual
-widget frames to /home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs.
+widget frames to <private-evidence-directory>.
 Immutable497-file source archive:rquickshare-native16-source.zip, source commit
 23adf00cb30ed9e826314451c0bcf27e6b6b9942, SHA256
 faeedae18b84d9d6541c3f5671bb0412459f7da374d3c86980defdc527c673c1.
