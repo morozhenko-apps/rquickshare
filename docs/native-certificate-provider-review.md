@@ -1,7 +1,7 @@
 # Google certificate provider: authorization and implementation review
 
 2026-10-15. Mode A; direct dev. Scope: read-only primary-source research after the
-completed native7 PairedKey foundation. Guide: /home/morozhenko/.codex/AGENTS.md
+completed native7 PairedKey foundation. Guide: AGENTS.md
 sections3/3.1/11/13. No login, credential read, account API request, installation
 or runtime change in the review. The user selected option1: supported authorization
 only; continue independent parity with manual consent.

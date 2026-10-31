@@ -1,6 +1,6 @@
 # Native28 history, idle dismissal and movement
 
-2026-10-17, Mode A, dev only. Guide: /home/morozhenko/.codex/AGENTS.md.
+2026-10-17, Mode A, dev only. Guide: AGENTS.md.
 User confirmed native27 incoming inline consent works as intended. New feedback:
 remove Show in folder from the card because completion already reveals the result;
 keep manual result access in Transfers. Screenshot crosses out redundant title/

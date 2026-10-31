@@ -7,7 +7,7 @@ uninstalled package passed. The schema1/Settings1 contracts and dated checks bel
 the original implementation and remain historical where this extension supersedes them.
 
 2026-10-13. Mode A. User selected 1/A from native-settings-review.md. Guide:
-/home/morozhenko/.codex/AGENTS.md. Direct dev commits; no install/live migration/push.
+AGENTS.md. Direct dev commits; no install/live migration/push.
 The accepted scope includes transactional native persistence, typed service/client
 settings, secondary GTK editor and replacement of process-global receive policy.
 

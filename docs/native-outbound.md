@@ -3,7 +3,7 @@
 2026-10-13. Mode A. User replied to the concrete outgoing review with permission
 to check as needed and continue. Proceed with recommended A: shared Files/Text
 source lifecycle. Work on dev; no live clipboard/config/install or physical peer
-needed for deterministic checks. Guide /home/morozhenko/.codex/AGENTS.md.
+needed for deterministic checks. Guide AGENTS.md.
 
 ## Analysis, milestones and rollback
 

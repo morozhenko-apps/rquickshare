@@ -1,7 +1,7 @@
 # Native received text and explicit clipboard copy
 
 2026-10-13. Mode A. User selected 1/A from native-text-review.md. Guide:
-/home/morozhenko/.codex/AGENTS.md. Work directly on dev; no live clipboard/config,
+AGENTS.md. Work directly on dev; no live clipboard/config,
 peer connection, install, push or branch creation. Plans/contracts precede code.
 
 ## Analysis and stages

@@ -2,7 +2,7 @@
 
 2026-10-14. Mode A. User selected option1 from native-reveal-review.md: explicit
 Show in folder bound to the actual completed inbound file and original directory.
-Guide /home/morozhenko/.codex/AGENTS.md. Direct dev; no subagent/branch/push/install,
+Guide AGENTS.md. Direct dev; no subagent/branch/push/install,
 real user clipboard/config/portal/file-manager or physical peer operations.
 
 ## Analysis and milestones before code

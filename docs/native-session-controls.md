@@ -1,6 +1,6 @@
 # Common managed TCP/BLE session controls
 
-2026-10-12, Mode A. Status: U0–U4 implemented and verified offline. The plan was recorded before code in `b774770`. The user selected option 1 in [native-session-control-review.md](native-session-control-review.md). Applicable guide: `/home/morozhenko/.codex/AGENTS.md`; one appropriate development verification run, not ten repetitions.
+2026-10-12, Mode A. Status: U0–U4 implemented and verified offline. The plan was recorded before code in `b774770`. The user selected option 1 in [native-session-control-review.md](native-session-control-review.md). Applicable guide: `AGENTS.md`; one appropriate development verification run, not ten repetitions.
 
 ## Analysis and accepted implementation contract
 

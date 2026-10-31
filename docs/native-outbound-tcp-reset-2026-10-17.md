@@ -12,7 +12,7 @@ Relevant SSOT: `docs/native-essential-priorities.md`,
 `docs/native-transfer-supervision.md`,
 `docs/native-managed-dispatch.md`, and the user-maintained
 `agent.md` testing mode. The older guide referenced by repository docs at
-`/home/morozhenko/.codex/AGENTS.md` is not inside this repo or available
+`AGENTS.md` is not inside this repo or available
 to the remote connector. This ledger supplies the scope-specific inventory.
 
 Existing tests use Rust `#[tokio::test]`, real TCP loopback and

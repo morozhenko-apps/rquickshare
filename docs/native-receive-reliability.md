@@ -1,6 +1,6 @@
 # Receive reliability: incomplete-file publication review
 
-2026-10-16. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-16. Mode A, direct dev. Guide: AGENTS.md,
 sections3/3.1/11/12/13. Active scope: essential ordinary sharing, no previews,
 resume, account or advanced-payload expansion.
 

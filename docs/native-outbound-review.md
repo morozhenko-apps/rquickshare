@@ -1,6 +1,6 @@
 # Native outgoing text / clipboard ownership review
 
-2026-10-13. Mode A. Direct dev checkout. Guide /home/morozhenko/.codex/AGENTS.md
+2026-10-13. Mode A. Direct dev checkout. Guide AGENTS.md
 sections 3.1,11,13. Status: user authorized continuation after the concrete recommendation; implement A. This is an
 analysis/proposal, not implemented source or a new compatibility claim.
 

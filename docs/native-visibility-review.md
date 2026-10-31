@@ -3,7 +3,7 @@
 2026-10-15. Mode A, direct dev. User selected option1 after the review. One core
 visibility owner, corrected native6 package and public handoff are complete.
 No new duration/UX/storage contract. Guide:
-/home/morozhenko/.codex/AGENTS.md, sections3/3.1/11.
+AGENTS.md, sections3/3.1/11.
 
 ## Current behavior and evidence
 
@@ -324,7 +324,7 @@ ZIP SHA256bf1c88e896aa8990b47d7b117edb38690e1259d8916d2a25ac8901dd42bed1d7;
 unsigned7-file APT ZIP SHA256
 161cb49eea01da7fb452ddc6874cf665bca67c3eba4e542d1129258a539c2e07.
 Exact public receipts, package/checksum, request, current docs and progress/readiness
-are in `/home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs`.
+are in `<private-evidence-directory>`.
 The final documentation-only completion commit is intentionally later than that
 immutable source ZIP; binary provenance remains32fc64f. All owned build/export
 commands finished; Terminal closed. No user services/authorization changed.

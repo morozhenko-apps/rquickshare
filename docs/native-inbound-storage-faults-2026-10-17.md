@@ -9,7 +9,7 @@ The repository-wide MODE B 10-repeat/coverage completion remains OPEN.
 ## Repository scan and selected gap
 
 The test SSOT is the user-provided universal agent guide (`agent.md`);
-repository references to `/home/morozhenko/.codex/AGENTS.md` are not
+repository references to `AGENTS.md` are not
 available through the GitHub connector. Read
 `docs/native-essential-priorities.md`,
 `docs/native-receive-reliability.md`,

@@ -1,7 +1,7 @@
 # Atomic extension of an unsent native file selection
 
 2026-10-16. Mode A, direct dev. User selected daemon-owned atomic updates in the
-card-usability follow-up. Guide: /home/morozhenko/.codex/AGENTS.md. This is the
+card-usability follow-up. Guide: AGENTS.md. This is the
 source/API milestone of the approved mockup, not a new peer wire protocol.
 
 ## Analysis and contract before code

@@ -1,6 +1,6 @@
 # Card and tray cleanup
 
-2026-10-16. Mode A, direct dev. Guide:/home/morozhenko/.codex/AGENTS.md,
+2026-10-16. Mode A, direct dev. Guide:AGENTS.md,
 sections3.1/11/12/13. The user explicitly requested eight presentation changes
 after the first user-confirmed Android outgoing transfer. Layout choices within
 those concrete requests are delegated; no daemon/protocol/security redesign.
@@ -255,7 +255,7 @@ committed source/evidence checkpoint; signing/production APT remain separate.
 ## Immutable native15 export
 
 Public output package/checksum, four inert visual fixtures and492-file source
-archive are saved under /home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs.
+archive are saved under <private-evidence-directory>.
 Archive commit:f3441d0f93b62f041af8ea86a7da847d81266fd3; SHA256
 d21e61379baf30ac512b849f18ed9bf854c6800d64b9f56c26f0381d7eaa5160.
 Binary source remains344909f36bc06a3cd4582e3cb1c697a549f5a203. Exact receipt:

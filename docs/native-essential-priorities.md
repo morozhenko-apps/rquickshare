@@ -3,7 +3,7 @@
 > **Current technical issue queue:** [Active backlog and release handoff](active-backlog.md). This file specifies the essential product scope and acceptance order; its original 2026-10-16 observations are historical. Issue #8 is owner-deferred A2.2; #11 and #9 are the next scoped engineering work before a combined current-source KDE/Pixel verification.
 
 2026-10-16. Mode A, documentation-only scope change on direct dev.
-Guide: /home/morozhenko/.codex/AGENTS.md, sections3.1/11/12/13.
+Guide: AGENTS.md, sections3.1/11/12/13.
 The user explicitly excluded previews and requested only necessary work, ordered
 by actual need. This supersedes the broader execution order, not the historical
 implementation/verification evidence. Full Google feature parity remains a

@@ -1,7 +1,7 @@
 # Native opt-in login-start and single GUI process ownership
 
 2026-10-14. Mode A. User selected1: enabled login-start launches daemon and tray
-client, card hidden. Guide /home/morozhenko/.codex/AGENTS.md. Direct dev, no install/
+client, card hidden. Guide AGENTS.md. Direct dev, no install/
 enable/live user manager/config/clipboard/peer, branch/push or sibling edits.
 
 ## Analysis and staged plan before code

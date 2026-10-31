@@ -5,7 +5,7 @@ See [essential priorities](native-essential-priorities.md). The foundation and
 observations below are historical; do not resume codec research, UI/IPC binding
 or thumbnail implementation. Existing bounded opaque routing remains input safety.
 
-2026-10-16. Mode A; direct dev. Guide: /home/morozhenko/.codex/AGENTS.md.
+2026-10-16. Mode A; direct dev. Guide: AGENTS.md.
 Continue P2 in native-preview-review.md after completed native9 live visibility.
 The user already selected sandboxed decoding; do not reopen that boundary.
 

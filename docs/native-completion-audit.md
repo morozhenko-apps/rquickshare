@@ -9,7 +9,7 @@ desktop lifecycle and signed-release gates are listed in
 [essential priorities](native-essential-priorities.md). Full Google parity is not
 accepted, and previews remain excluded.
 
-2026-10-16. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-16. Mode A, direct dev. Guide: AGENTS.md,
 sections3/3.1/11/12/13. User requested continuing implementation and an honest
 assessment of whether basic features and UI are complete. No installation,
 physical peer, account/cloud call, package rebuild or runtime change in this audit.

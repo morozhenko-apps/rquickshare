@@ -11,7 +11,7 @@ installs, enables or starts a user service.
 
 2026-10-14. Mode A. User selected option1 in native-package-review.md: a systemd
 user service owns the daemon process; D-Bus requests its launch; GTK remains a
-client. Guide /home/morozhenko/.codex/AGENTS.md. Direct dev, no install/enable/live
+client. Guide AGENTS.md. Direct dev, no install/enable/live
 user manager/peer/config/clipboard, branch, push or NativePair edits.
 
 ## Analysis and plan before code

@@ -5,7 +5,7 @@ is complete in [native-image.md](native-image.md). The review and primitive-only
 observations below are historical; use that SSOT for actual PNG/SDK/GTK verification.
 
 2026-10-13. Mode A. Work on dev. Status: user selected1/A on2026-10-14. Implementation SSOT: native-image.md.
-The proposal below is historical. Guide /home/morozhenko/.codex/AGENTS.md sections3.1/11: significant new
+The proposal below is historical. Guide AGENTS.md sections3.1/11: significant new
 storage/resource/security boundary requires explicit selection. This review follows
 completed native-outbound.md O1-O4; it does not reopen accepted text decisions.
 

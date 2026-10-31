@@ -259,13 +259,13 @@ The package build ran only after all six exact-source CI checks succeeded:
 
 ```sh
 git diff --quiet 088d543 -- core_lib native_desktop app scripts .github
-python3 scripts/native_deb.py build --profile dev --output /home/morozhenko/Downloads/rquickshare-connections-088d543
+python3 scripts/native_deb.py build --profile dev --output <candidate-output>/rquickshare-connections-088d543
 ```
 
 Both commands exited 0; the builder compiled all three binaries with stable
 Cargo `--locked`, verified Debian metadata/archive/ELF smoke contracts and wrote:
 
-- Candidate: `/home/morozhenko/Downloads/rquickshare-connections-088d543/rquickshare-native_0.9.0-1.debug_amd64.deb`.
+- Candidate: `<candidate-output>/rquickshare-connections-088d543/rquickshare-native_0.9.0-1.debug_amd64.deb`.
 - SHA-256: `5e575d3cd6e242587da477e52b2488cf3058df6d9ee7cdafba926f58c5fb2525`.
 - Package identity remains `rquickshare-native 0.9.0-1.debug`; no release bump/tag.
 - Build disclosed existing bluer future-compatibility and nine warnings in the

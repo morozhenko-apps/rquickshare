@@ -1,6 +1,6 @@
 # Named tmpfs source acceptance and memory accounting review
 
-2026-10-16. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-16. Mode A, direct dev. Guide: AGENTS.md,
 sections3/3.1/11/12/13. The user selected option1 on2026-10-16; implementation
 of that scoped contract change is authorized. Scope is an installed ordinary-file acceptance limitation,
 not previews, a new payload type or an unrelated storage refactor.
@@ -152,7 +152,7 @@ All owned checks/probes exited: Terminal closed.
 
 ## Prepared Android fixture (not sent)
 
-Owned private fixture: /home/morozhenko/Documents/Codex/rquickshare-acceptance/2026-10-16/peer-fixtures/rquickshare-android-check.txt,123 bytes, SHA256
+Owned private fixture: <private-verification-path>,123 bytes, SHA256
 36f53d9c2376e0c6c8f911327ab0a3cd067afa1e24989b6c34fbf1a8f2f3230d.
 Its private receipt records sent=false/received=false. This is a plain ASCII
 interoperability sample with no personal contents or device identifiers, prepared
@@ -208,7 +208,7 @@ or current-Google interoperability claim follows from this check.
 ## T6 handoff and pending user-operated Android check
 
 The installed CLI prepared only the owned123-byte Android fixture, exit0:
-/usr/bin/rquickshare send -- /home/morozhenko/Documents/Codex/rquickshare-acceptance/2026-10-16/peer-fixtures/rquickshare-android-check.txt
+/usr/bin/rquickshare send -- <private-verification-path>
 
 One subsequent immutable daemon observation found1 source reservation,2 handles,
 123 selected bytes and0 transfers: preparation did not send automatically. The
@@ -256,7 +256,7 @@ is the explicit eight-point card/tray cleanup, tracked in native-card-cleanup.md
 ## Immutable native13 handoff
 
 Public output package/checksum and487-file Git source archive are exported under
-/home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs. Archive source
+<private-evidence-directory>. Archive source
 a8a082ec6f78a512781aa0d82e78357c44cda7e6; SHA256
 0d29ac4121e6c0a6da8511093be63e7e0fb669dacdcc2c797f7dbaf9602c5b3e.
 Binary source remains1607c8f95e308a533269b31e6ceb8ce7cf21a505. Export receipt:

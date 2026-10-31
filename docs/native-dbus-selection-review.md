@@ -10,7 +10,7 @@ D-Bus transports Unix FDs out of band with the corresponding message. dbus-daemo
 
 Sources checked 2026-10-12: [D-Bus specification, FD transport and credentials](https://dbus.freedesktop.org/doc/dbus-specification.html), [dbus-daemon resource-limit documentation](https://dbus.freedesktop.org/doc/dbus-daemon.1.html). These establish transport constraints, not the application API proposed below.
 
-The user's global `/home/morozhenko/.codex/AGENTS.md` section 3.1 requires a stop for significant public API/data-model/security decisions. Freezing staged resource lifetime and method contracts qualifies. This is a new wire-contract choice; it is not reopening path versus descriptor input. The explicit development verification override still permits one appropriate run, with affected reruns only.
+The user's global `AGENTS.md` section 3.1 requires a stop for significant public API/data-model/security decisions. Freezing staged resource lifetime and method contracts qualifies. This is a new wire-contract choice; it is not reopening path versus descriptor input. The explicit development verification override still permits one appropriate run, with affected reruns only.
 
 ## Options
 

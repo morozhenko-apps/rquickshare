@@ -251,7 +251,7 @@ authority. Terminal closed.
 
 ## D6 public handoff verified
 
-Output directory: `/home/morozhenko/Documents/ChatGPT/quickshare и nativepair/outputs`.
+Output directory: `<private-evidence-directory>`.
 Immutable native8 source archive exportsc3bb7f2a894fa9b63189a756af297a3114994c9d,
 461 tracked files, SHA256
 `9c7bd2a79c19754091b18fc1f95fcc6176da07d3121f8c3a0935b423bf50a7f5`.

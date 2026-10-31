@@ -1,7 +1,7 @@
 # Native update distribution review
 
 2026-10-14. Mode A analysis after completed native-autostart.md A1–A4. Guide
-/home/morozhenko/.codex/AGENTS.md sections3/3.1 requires selection for the update
+AGENTS.md sections3/3.1 requires selection for the update
 trust/distribution boundary. No updater, repository enrollment, signing key,
 external publication, package install or live manager change in this review.
 

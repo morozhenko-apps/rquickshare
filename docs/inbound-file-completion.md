@@ -1,6 +1,6 @@
 # Inbound file completion invariant repair
 
-2026-10-14. Mode A, direct dev. Guide /home/morozhenko/.codex/AGENTS.md and the
+2026-10-14. Mode A, direct dev. Guide AGENTS.md and the
 user's cross-project maintenance authorization apply. Found while analyzing the
 next native received-file reveal slice after completing clipboard images.
 

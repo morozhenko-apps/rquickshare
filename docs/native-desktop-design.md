@@ -19,7 +19,7 @@ open. The original foundation/design analysis below is historical.
 
 [product-direction.md](product-direction.md) records the product goals. The user selected the compact tray panel plus native notifications and requested file-manager context-menu sending. The existing oversized drop-zone window must be replaced. NativePair's Rust daemon, D-Bus and GTK4/gtk-rs direction is accepted; this document proposes the remaining process/API/security contract.
 
-The applicable agent guide is `/home/morozhenko/.codex/AGENTS.md`, also supplied by the user in the chat. Sections 3 and 3.1 require approval for significant public API/security decisions. Naming, crate layout and other reversible implementation details are autonomous. Repository policy remains direct atomic commits on `dev`, with no feature branch or standing release PR.
+The applicable agent guide is `AGENTS.md`, also supplied by the user in the chat. Sections 3 and 3.1 require approval for significant public API/security decisions. Naming, crate layout and other reversible implementation details are autonomous. Repository policy remains direct atomic commits on `dev`, with no feature branch or standing release PR.
 
 ## Analysis of the current implementation
 

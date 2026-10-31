@@ -1,6 +1,6 @@
 # Native multi-recipient sharing: ownership review
 
-2026-10-16. Mode A, direct dev. Guide: /home/morozhenko/.codex/AGENTS.md,
+2026-10-16. Mode A, direct dev. Guide: AGENTS.md,
 sections3/3.1/11/12/13. This is the next independent parity slice while canonical
 preview codec/mapping remains unestablished. Implementation follows selected option1. The user chose daemon-owned
 queue/results on2026-10-16.

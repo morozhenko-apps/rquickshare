@@ -234,7 +234,7 @@ daemon validation through a mock settings owner or adding a per-field E2E suite.
 N4 GTK run initially stopped at pkg-config: host development GTK4 is not installed.
 Recovered the previous task-private sysroot location from successful Cargo GTK
 fingerprints, rather than installing host packages or inventing another SDK.
-Existing root: /home/morozhenko/Documents/Codex/2026-10-12/new-chat/work/gtk-native/root.
+Existing root: <private-verification-path>
 Set PKG_CONFIG_SYSROOT_DIR to that root, PKG_CONFIG_PATH to its
 usr/lib/x86_64-linux-gnu/pkgconfig, and LD_LIBRARY_PATH to its library directory.
 Observed private GTK4 version4.22.4 and Layer Shell1.3.0. These are local verification

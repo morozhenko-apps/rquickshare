@@ -1,6 +1,6 @@
 # Native26 flat transfer rows
 
-2026-10-17, Mode A, dev only. Guide: /home/morozhenko/.codex/AGENTS.md.
+2026-10-17, Mode A, dev only. Guide: AGENTS.md.
 User authorized continuing the native25 follow-up. Native25 is installed; Android
 fast discovery and successful sending were confirmed by the user. Preserve that
 receiver implementation and its package rollback.

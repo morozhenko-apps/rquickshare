@@ -2,7 +2,7 @@
 
 2026-10-14. Option1 was selected and implemented in [native-reveal.md](native-reveal.md).
 This document preserves the pre-implementation analysis and alternatives; it is
-not a pending choice. The guide /home/morozhenko/.codex/AGENTS.md sections3/3.1
+not a pending choice. The guide AGENTS.md sections3/3.1
 governed that significant security/API/product boundary selection.
 
 ## Findings
