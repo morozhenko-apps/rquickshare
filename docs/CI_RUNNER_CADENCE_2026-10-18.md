@@ -63,14 +63,21 @@ Maintained action targets:
 - `actions/setup-go`: `v7.0.0` (`b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`).
 - `actions/upload-artifact`: `v7.0.2` (`cf430e030ddbb5b0abf93d22962f4752f3646cd9`).
 
+Bootstrap regression coverage executes the actual run blocks from all four pnpm
+workflows with a contract fake for npm: normal and Unicode/spaced temp paths,
+install failures, missing RUNNER_TEMP and failed GITHUB_PATH writes. Assert the
+exact pinned package/options, job-local prefix, failure propagation and usable
+exported pnpm shim; no global install or real network is used by these tests.
+
 Milestones:
 
 - [x] Read current source, agent/CI owners, permanent refs and concurrent work.
 - [x] Record scope, compatibility decisions, validation and rollback before code.
-- [ ] Apply scoped action/toolchain and directly related source-contract changes.
-- [ ] Execute applicable stable checks once at the final gate; report separate
+- [x] Apply scoped action/toolchain and directly related source-contract changes.
+- [x] Execute applicable stable checks once at the final gate; report separate
   known-flaky/stability outcomes and unexecuted native/provider gates.
-- [ ] Record the final source/verification boundary and publish validated dev work.
+- [x] Record the final local source/verification boundary and remaining blockers.
+- [ ] Complete exact-source remote CI and the separately authorized release process.
 
 Planned validation:
 
@@ -90,3 +97,34 @@ scoped executable commit and its documentation update separately if needed. This
 maintenance does not authorize protected-branch promotion, tags, store upload,
 runner changes or cloud deployment. Native/device/provider acceptance remains
 independent of local checks. No architecture or application contract changes.
+
+### Final artifact source-contract correction
+
+The final Node source gate found two assertions coupled to the old upload-action reference. Require the maintained exact upload SHA and count actual YAML uses lines, excluding readable pin comments. Preserve the single staging upload, artifact names, retention, source-review/signing/readback and cleanup checks. Rerun the complete affected Node source-contract group; frontend and bootstrap gates already passed.
+
+### Local execution outcome
+
+Applicable local source/tooling gates completed successfully.
+Remote CI, protected release-branch promotion, native/provider/store acceptance and production deployment are not established by this local execution.
+
+Node26.13.0 with bundled npm11.20.0 was used. Non-Node SDK versions were preserved. Application dependency versions were preserved; any required test-tool compatibility correction is documented separately.
+
+Executed commands (paths are relative to this repository; glob notation abbreviates the recorded expanded file list):
+
+- `python3 -m unittest discover -s scripts/tests -v` — exit `0` (STABLE_SOURCE).
+- `bash scripts/ci-check-workflow-policy.sh` — exit `0` (STABLE_SOURCE).
+- `actionlint -config-file .github/actionlint.yaml -shellcheck= -pyflakes= .github/workflows/native-tag-publish.yml .github/workflows/native-apt-refresh.yml .github/workflows/lint.yml .github/workflows/native-gtk-ui.yml` — exit `0` (STABLE_SOURCE).
+- `bash -c 'set -euo pipefail
+pnpm_dir="$RUNNER_TEMP/rquickshare-pnpm"
+npm install --prefix "$pnpm_dir" --no-save --ignore-scripts --no-audit --no-fund pnpm@9.7.0
+echo "$pnpm_dir/node_modules/.bin" >> "$GITHUB_PATH"
+'` — exit `0` (INSTALL).
+- `[app/main] pnpm install --frozen-lockfile` — exit `0` (INSTALL).
+- `[app/main] pnpm lint` — exit `0` (STABLE_NODE).
+- `[app/main] pnpm ts-check` — exit `0` (STABLE_NODE).
+- `[app/main] pnpm exec vitest run` — exit `0` (STABLE_NODE).
+- `node --test scripts/tests/flat-distribution.test.mjs scripts/tests/native-ci-cadence.test.mjs scripts/tests/pr-ci-scope.test.mjs` — exit `0` (STABLE_SOURCE).
+
+New bootstrap regression methods:4, comprising24 parameterized scenarios (Positive8; N3 external install failure8; N7 missing job-local boundary4; N12 failed PATH receipt4). The actual workflow shell blocks execute; only npm is replaced by a contract fake. Frozen pnpm9.7.0 installation and the real frontend gates were also executed independently.
+
+Publication boundary: dev maintenance may be shared with these exact outcomes. Failed gates block completion/release. Main/master, accepted tags, deployment configuration and store identities remain outside this maintenance publication. Rollback uses ordinary reverts of the separate executable commits and this documentation receipt.
