@@ -80,7 +80,7 @@ test("Given successful source review When packaging Then no source suite is repe
   assert.match(packageStep, /runs-on: ubuntu-26\.04/);
   assert.match(packageStep, /desktop-file-validate/);
   assert.match(packageStep, /python3 scripts\/native_deb\.py build/);
-  assert.match(packageStep, /actions\/upload-artifact@v6/);
+  assert.match(packageStep, /actions\/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9/);
   assert.match(packageStep, /native-packages\/\*\.deb\.sha256/);
   assert.doesNotMatch(packageStep, /cargo (?:\+stable )?(?:test|clippy)\b/);
   assert.doesNotMatch(packageStep, /unittest discover|pip install|native_apt\.py prepare/);
