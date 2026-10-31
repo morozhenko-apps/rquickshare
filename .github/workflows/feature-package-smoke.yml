@@ -16,20 +16,23 @@ jobs:
   linux_package:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26.13.0
 
       - name: Enable pnpm
+        shell: bash
         run: |
-          corepack enable
-          corepack install --global pnpm@9.7.0
+          set -euo pipefail
+          pnpm_dir="$RUNNER_TEMP/rquickshare-pnpm"
+          npm install --prefix "$pnpm_dir" --no-save --ignore-scripts --no-audit --no-fund pnpm@9.7.0
+          echo "$pnpm_dir/node_modules/.bin" >> "$GITHUB_PATH"
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2.9.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # Swatinem/rust-cache@v2.9.3
         with:
           workspaces: "app/main/src-tauri -> target"
           shared-key: linux-package-smoke
@@ -68,7 +71,7 @@ jobs:
           done
 
       - name: Upload Debian package
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact@v7.0.2
         with:
           name: rquickshare-linux-debug
           path: app/main/src-tauri/target/debug/bundle/**/*.deb
