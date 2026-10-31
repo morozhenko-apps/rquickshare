@@ -26,7 +26,7 @@ test("Given_a_flat_release_When_workflow_is_inspected_Then_tag_signing_readback_
   assert.match(workflow,/needs: \[admission, publish, cleanup\]/);
   assert.match(workflow,/scripts\/cleanup-published-artifacts.mjs/);
   assert.match(workflow,/retention-days: 1/);
-  assert.equal((workflow.match(/actions\/upload-artifact@/g)||[]).length,1);
+  assert.equal((workflow.match(/^\s+(?:-\s+)?uses:\s+actions\/upload-artifact@/gm)||[]).length,1);
   assert.doesNotMatch(workflow,/name: unsigned-apt/);
   assert.doesNotMatch(workflow,/infra\/native-download|wrangler|pool\/main|dists\/|gh release upload|apt-enrollment/);
   assert.equal(existsSync(new URL("../../infra/native-download",import.meta.url)),false);

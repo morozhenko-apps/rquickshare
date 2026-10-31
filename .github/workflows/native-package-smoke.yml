@@ -35,7 +35,7 @@ jobs:
           # The real Glycin loader needs user, PID and mount namespaces.
           bwrap --die-with-parent --unshare-user --unshare-pid \
             --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
       - name: Install isolated publication contract-test dependencies (no credentials)
         shell: bash
@@ -52,7 +52,7 @@ jobs:
         with:
           components: rustfmt
 
-      - uses: Swatinem/rust-cache@v2.9.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # Swatinem/rust-cache@v2.9.3
         with:
           workspaces: |
             core_lib -> target
@@ -101,7 +101,7 @@ jobs:
             --output "$RUNNER_TEMP/native-apt-unsigned"
 
       - name: Upload verified native release artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact@v7.0.2
         with:
           name: rquickshare-native-ubuntu-26.04
           path: |
@@ -110,7 +110,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload unsigned APT staging artifact (not a published repository)
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact@v7.0.2
         with:
           name: UNSIGNED-rquickshare-native-ubuntu26.04
           path: ${{ runner.temp }}/native-apt-unsigned/
