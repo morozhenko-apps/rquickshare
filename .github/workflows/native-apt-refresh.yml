@@ -12,47 +12,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  discover:
-    name: Identify the published immutable source tag
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
-    environment: apt-release
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install pinned private archive client without signing material
-        run: |
-          python3 -m venv "$RUNNER_TEMP/rqs-readonly-python"
-          "$RUNNER_TEMP/rqs-readonly-python/bin/python" -m pip install -r scripts/requirements-r2.txt
-      - name: Select prior release from its R2 generation
-        id: tag
-        env:
-          RQS_R2_ACCOUNT_ID: ${{ vars.RQS_R2_ACCOUNT_ID }}
-          RQS_R2_ACCESS_KEY_ID: ${{ secrets.RQS_R2_ACCESS_KEY_ID }}
-          RQS_R2_SECRET_ACCESS_KEY: ${{ secrets.RQS_R2_SECRET_ACCESS_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$RQS_R2_ACCOUNT_ID" =~ ^[a-f0-9]{32}$ ]] || exit 1
-          [[ -n "$RQS_R2_ACCESS_KEY_ID" && -n "$RQS_R2_SECRET_ACCESS_KEY" ]] || exit 1
-          tag="$("$RUNNER_TEMP/rqs-readonly-python/bin/python" scripts/native_ci_archive.py \
-            --account-id "$RQS_R2_ACCOUNT_ID" --select-tag)"
-          if [[ -n "$tag" ]]; then python3 scripts/native_release_tag.py version "$tag" >/dev/null; fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          if [[ -z "$tag" ]]; then echo "No published APT authority; refresh skipped"; fi
-
   refresh:
     name: Sign and conditionally renew the existing APT snapshot
-    needs: discover
-    if: needs.discover.outputs.tag != ''
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     environment: apt-release
     timeout-minutes: 45
     env:
-      TAG: ${{ needs.discover.outputs.tag }}
       SIGNING_FINGERPRINT: 6D8854762CF0C86881138A56695A0888D09FA616
       RQS_R2_ACCOUNT_ID: ${{ vars.RQS_R2_ACCOUNT_ID }}
     steps:
@@ -60,6 +26,31 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Install pinned SDK for authenticated R2 selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/rqs-refresh-python"
+          "$RUNNER_TEMP/rqs-refresh-python/bin/python" -m pip install -r scripts/requirements-r2.txt
+      - name: Select published source tag from protected R2
+        env:
+          RQS_R2_ACCESS_KEY_ID: ${{ secrets.RQS_R2_ACCESS_KEY_ID }}
+          RQS_R2_SECRET_ACCESS_KEY: ${{ secrets.RQS_R2_SECRET_ACCESS_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$RQS_R2_ACCESS_KEY_ID" || -z "$RQS_R2_SECRET_ACCESS_KEY" ]]; then
+            echo "::error::Protected R2 read credentials are missing"
+            exit 1
+          fi
+          tag="$("$RUNNER_TEMP/rqs-refresh-python/bin/python" scripts/native_ci_archive.py \
+            --account-id "$RQS_R2_ACCOUNT_ID" --select-tag)"
+          if [[ -z "$tag" ]]; then
+            echo "::error::No published APT authority to reissue"
+            exit 1
+          fi
+          python3 scripts/native_release_tag.py version "$tag" >/dev/null
+          printf 'TAG=%s\n' "$tag" >> "$GITHUB_ENV"
       - name: Validate released tag before executing reviewed master tooling
         shell: bash
         run: |
@@ -72,12 +63,6 @@ jobs:
           source_version="$(git show "refs/tags/$TAG^{commit}:native_desktop/Cargo.toml" |
             python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
           [[ "$(python3 scripts/native_release_tag.py tag "$source_version")" == "$TAG" ]] || exit 1
-      - name: Install pinned SDK before importing keys
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/rqs-refresh-python"
-          "$RUNNER_TEMP/rqs-refresh-python/bin/python" -m pip install -r scripts/requirements-r2.txt
       - name: Import protected release signing subkey only
         env:
           KEYRING_B64: ${{ secrets.RQS_APT_PUBLIC_KEYRING_BASE64 }}
@@ -108,25 +93,44 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$RQS_R2_ACCESS_KEY_ID" && -n "$RQS_R2_SECRET_ACCESS_KEY" ]] || exit 1
+          if [[ -z "$RQS_R2_ACCESS_KEY_ID" || -z "$RQS_R2_SECRET_ACCESS_KEY" ]]; then
+            echo "::error::Protected R2 restore credentials are missing"
+            exit 1
+          fi
           py="$RUNNER_TEMP/rqs-refresh-python/bin/python"
-          "$py" scripts/native_ci_archive.py --account-id "$RQS_R2_ACCOUNT_ID" \
+          echo "::notice::Restoring the authenticated previous signed archive"
+          if ! "$py" scripts/native_ci_archive.py --account-id "$RQS_R2_ACCOUNT_ID" \
             --keyring "$RUNNER_TEMP/rqs-refresh-private/keyring.gpg" \
             --fingerprint "$SIGNING_FINGERPRINT" --output "$RUNNER_TEMP/rqs-previous" \
-            > "$RUNNER_TEMP/rqs-refresh-baseline"
-          [[ "$(cat "$RUNNER_TEMP/rqs-refresh-baseline")" == "previous" ]] || exit 1
+            > "$RUNNER_TEMP/rqs-refresh-baseline"; then
+            echo "::error::Previous signed archive recovery failed; publication blocked"
+            exit 1
+          fi
+          baseline="$(cat "$RUNNER_TEMP/rqs-refresh-baseline")"
+          if [[ "$baseline" != "previous" ]]; then
+            echo "::error::Expected an existing authenticated APT archive; publication blocked"
+            exit 1
+          fi
+          echo "::notice::Previous signed archive authenticated"
           shopt -s nullglob
           packages=("$RUNNER_TEMP"/rqs-previous/linux/*.deb)
-          [[ "${#packages[@]}" -ge 1 && "${#packages[@]}" -le 2 ]] || exit 1
+          echo "::notice::Recovered package count: ${#packages[@]}"
+          if [[ "${#packages[@]}" -lt 1 || "${#packages[@]}" -gt 2 ]]; then
+            echo "::error::Unexpected recovered native package count; publication blocked"
+            exit 1
+          fi
           args=()
           for package in "${packages[@]}"; do args+=(--package "$package"); done
+          echo "::notice::Rebuilding unsigned APT metadata from authenticated packages"
           python3 scripts/native_apt.py prepare "${args[@]}" --output "$RUNNER_TEMP/rqs-renew-unsigned"
           private="$RUNNER_TEMP/rqs-refresh-private"
+          echo "::notice::Signing migrated APT metadata with protected subkey"
           python3 scripts/native_apt.py sign --repository "$RUNNER_TEMP/rqs-renew-unsigned" \
             --output "$RUNNER_TEMP/rqs-renew-signed" \
             --keyring "$private/keyring.gpg" --fingerprint "$SIGNING_FINGERPRINT" \
             --gnupghome "$private/gnupg" --passphrase-file "$private/passphrase" \
             --previous "$RUNNER_TEMP/rqs-previous"
+          echo "::notice::Verifying the regenerated signed archive"
           python3 scripts/native_apt.py verify --repository "$RUNNER_TEMP/rqs-renew-signed" \
             --keyring "$private/keyring.gpg" --fingerprint "$SIGNING_FINGERPRINT" \
             --previous "$RUNNER_TEMP/rqs-previous"

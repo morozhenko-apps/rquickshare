@@ -111,7 +111,19 @@ test("Given metadata reissue Then protected manual master admission preserves or
   assert.ok(workflow.includes("workflow_dispatch:"));
   assert.ok(!workflow.includes("  schedule:"));
   assert.ok(workflow.includes("github.ref == 'refs/heads/master'"));
-  assert.ok(workflow.includes("environment: apt-release"));
+  assert.equal((workflow.match(/^    environment: apt-release$/gm) || []).length, 1,
+    "Manual APT reissue must require exactly one protected approval");
+  assert.ok(workflow.includes("jobs:\n  refresh:\n"));
+  assert.ok(!workflow.includes("  discover:"));
+  assert.ok(!workflow.includes("needs: discover"));
+  assert.ok(workflow.includes("if: github.ref == 'refs/heads/master'"));
+  assert.ok(workflow.includes("Select published source tag from protected R2"));
+  assert.ok(workflow.includes("printf 'TAG=%s"));
+  assert.ok(workflow.indexOf("Select published source tag from protected R2") <
+    workflow.indexOf("Import protected release signing subkey only"));
+  assert.ok(workflow.includes("Previous signed archive authenticated"));
+  assert.ok(workflow.includes("Recovered package count:"));
+  assert.ok(workflow.includes("Previous signed archive recovery failed; publication blocked"));
   assert.ok(!workflow.includes("git checkout --detach"));
   assert.ok(workflow.includes('git rev-parse "refs/tags/$TAG^{commit}"'));
   assert.ok(workflow.includes('git show "refs/tags/$TAG^{commit}:native_desktop/Cargo.toml"'));
