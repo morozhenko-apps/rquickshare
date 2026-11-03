@@ -53,6 +53,13 @@ grep -Fq '== "$GITHUB_SHA"' .github/workflows/native-tag-publish.yml ||
   fail 'Native release admission must match the triggering tag commit'
 grep -Fq 'workflow_dispatch:' .github/workflows/native-apt-refresh.yml ||
   fail 'APT metadata reissue must remain manually accessible'
+[[ "$(grep -Fxc '    environment: apt-release' .github/workflows/native-apt-refresh.yml || true)" == 1 ]] ||
+  fail 'Manual APT reissue must require exactly one protected approval'
+grep -Fq "    if: github.ref == 'refs/heads/master'" .github/workflows/native-apt-refresh.yml ||
+  fail 'Manual APT reissue must be restricted to master'
+if grep -Fq 'needs: discover' .github/workflows/native-apt-refresh.yml; then
+  fail 'Manual APT reissue must not split protected operations across jobs'
+fi
 if grep -Eq '^  schedule:' .github/workflows/native-apt-refresh.yml; then
   fail 'APT metadata reissue must not run unattended'
 fi
