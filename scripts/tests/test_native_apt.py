@@ -78,8 +78,9 @@ class NativeAptTests(unittest.TestCase):
         result = apt.verify(self.signed, self.keyring, self.fingerprint, self.now)
         self.assertEqual(result["version"], "1.0.0-1")
         self.assertEqual(set(result["packages"]), {"amd64"})
+        self.assertNotIn(b"Valid-Until:", (self.signed / "linux/Release").read_bytes())
         for now, valid in [(self.now - timedelta(seconds=10), True), (self.now - timedelta(seconds=11), False),
-                           (self.now + apt.LIFETIME - timedelta(seconds=1), True), (self.now + apt.LIFETIME, False)]:
+                           (self.now + timedelta(days=365), True)]:
             with self.subTest(now=now):
                 if valid:
                     apt.validate_tree(self.signed, now, signed=True)
@@ -101,6 +102,25 @@ class NativeAptTests(unittest.TestCase):
             self.assertEqual({path.name for path in output.iterdir()}, {"FINGERPRINT", "rquickshare-native.sources", "rquickshare-native-archive-keyring.gpg"})
             with self.assertRaises(ValueError):
                 apt.bootstrap("https://updates.invalid.example", self.signed, self.keyring, self.fingerprint, output, self.now)
+
+    def test_given_legacy_signed_snapshot_when_migrated_then_old_authority_is_authenticated(self):
+        # Expired legacy metadata cannot serve clients, but its signed package
+        # identity remains valid as an explicitly authenticated prior baseline.
+        with tempfile.TemporaryDirectory() as temporary:
+            old = self.copy(Path(temporary))
+            (old / "linux/Release").write_bytes(
+                apt.release(old, ["amd64"], self.now, legacy_valid_until=True))
+            apt.run("gpg", "--no-options", "--homedir", str(self.home), "--batch",
+                    "--yes", "--local-user", self.fingerprint, "--digest-algo", "SHA256",
+                    "--output", str(old / "linux/InRelease"), "--clearsign",
+                    str(old / "linux/Release"))
+            self.assertIn(b"Valid-Until:", (old / "linux/Release").read_bytes())
+            self.assertEqual(apt.verify(old, self.keyring, self.fingerprint, self.now)["version"], "1.0.0-1")
+            later = self.now + apt.LEGACY_LIFETIME
+            with self.assertRaises(ValueError):
+                apt.verify(old, self.keyring, self.fingerprint, later)
+            self.assertEqual(apt.verify(self.signed, self.keyring, self.fingerprint,
+                                        later, previous=old)["version"], "1.0.0-1")
 
     def test_given_signed_snapshot_when_key_signature_index_pool_or_paths_are_tampered_then_verification_fails(self):
         # Arrange / Act / Assert: never mock the verifier or signature authority.

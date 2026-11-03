@@ -34,7 +34,10 @@ test("Given_a_flat_release_When_workflow_is_inspected_Then_tag_signing_readback_
   const refresh=read(".github/workflows/native-apt-refresh.yml");
   assert.match(refresh,/rqs-previous\/linux\/\*\.deb/);
   assert.match(refresh,/dist\/rQuickShare\/linux\/InRelease/);
-  assert.match(refresh,/--commit "\$\(git rev-parse HEAD\)" --run-id "\$GITHUB_RUN_ID"/);
+  assert.match(refresh,/--commit "\$RELEASE_COMMIT" --run-id "\$GITHUB_RUN_ID"/);
+  assert.ok(refresh.includes('git rev-parse "refs/tags/$TAG^{commit}"'));
+  assert.ok(!refresh.includes("git checkout --detach"));
+  assert.doesNotMatch(refresh,/^  schedule:/m);
   assert.doesNotMatch(refresh,/snapshots\/|pool\/|dists\//);
 });
 

@@ -21,7 +21,7 @@ import native_deb
 
 SUITE = "./"
 PRODUCTION_URI = "https://download.morozhenko.com/dist/rQuickShare/linux/"
-LIFETIME = timedelta(days=7)
+LEGACY_LIFETIME = timedelta(days=7)
 MAX_INDEX = 1024 * 1024
 MAX_PACKAGE = 1024 * 1024 * 1024
 require = native_deb.require
@@ -118,11 +118,14 @@ def index(root, architecture):
     return ("\n".join(f"{name}: {value}" for name, value in sorted(entry.items())) + "\n\n").encode()
 
 
-def release(root, architectures, date):
+def release(root, architectures, date, *, legacy_valid_until=False):
     require(date.tzinfo is not None and date.utcoffset() == timedelta(0) and date.microsecond == 0, "Expected whole-second UTC date")
     fields = ["Origin: rQuickShare", "Label: rQuickShare",
-              "Architectures: " + " ".join(architectures), "Date: " + format_datetime(date, usegmt=True),
-              "Valid-Until: " + format_datetime(date + LIFETIME, usegmt=True), "SHA256:"]
+              "Architectures: " + " ".join(architectures), "Date: " + format_datetime(date, usegmt=True)]
+    # Only authenticate old signed snapshots during migration; new releases do not expire.
+    if legacy_valid_until:
+        fields.append("Valid-Until: " + format_datetime(date + LEGACY_LIFETIME, usegmt=True))
+    fields.append("SHA256:")
     for name in ["Packages", "Packages.gz"]:
         path = root / "linux" / name
         fields.append(f" {digest(path)} {path.stat().st_size} {name}")
@@ -186,9 +189,12 @@ def validate_tree(root, now=None, signed=False, check_time=True):
         date = parsedate_to_datetime(fields["Date"])
     except (KeyError, ValueError, TypeError, OverflowError) as error:
         raise ValueError("Invalid Release date") from error
+    legacy_valid_until = "Valid-Until" in fields
     if check_time:
         now = clock() if now is None else now
-        require(date.tzinfo is not None and date <= now + timedelta(seconds=10) and now < date + LIFETIME, "Expired or future repository metadata")
+        require(date.tzinfo is not None and date <= now + timedelta(seconds=10), "Future repository metadata")
+        if legacy_valid_until:
+            require(now < date + LEGACY_LIFETIME, "Expired legacy repository metadata")
     expected = {"linux/Release", "linux/Packages", "linux/Packages.gz"}
     data = read(base / "Packages")
     entries = paragraphs(data)
@@ -211,7 +217,8 @@ def validate_tree(root, now=None, signed=False, check_time=True):
         expected |= {"linux/" + filename, "linux/" + filename + ".sha256"}
     require(data == b"".join(index(root, arch) for arch in architectures), "Package index differs from actual package metadata")
     require(read(base / "Packages.gz") == gzip.compress(data, mtime=0), "Unexpected or corrupted compressed index")
-    require(raw == release(root, architectures, date), "Release fields/hash/size differ from actual indexes")
+    require(raw == release(root, architectures, date, legacy_valid_until=legacy_valid_until),
+            "Release fields/hash/size differ from actual indexes")
     if signed:
         expected.add("linux/InRelease")
     seen = set()

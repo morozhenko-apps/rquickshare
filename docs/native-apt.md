@@ -2,7 +2,7 @@
 
 The current production channel is [platform-only flat APT](FLAT_DISTRIBUTION.md):
 one canonical versioned DEB, signed fresh authority and explicit client enrollment.
-Native revision and seven-day metadata renewal remain independent of app semver.
+Native revision and optional manual metadata reissue remain independent of app semver.
 The toolkit also retains earlier nested/by-hash offline staging support. The
 rules below describe that local verification API; they must not be read as an
 instruction to restore its old hosted pool layout or advertise another platform.
@@ -19,13 +19,15 @@ Debug artifacts are never admitted. Same source/version across architectures;
 one release package per supplied architecture, no invented missing architecture.
 
 Fresh output only, temporary sibling stage then atomic rename; no overwrite or
-symlink/special-file input/output. Release contains SHA256 hashes and sizes of
-exact Packages/Packages.gz, Acquire-By-Hash=yes, UTC Date and Valid-Until seven days
-later. The bounded validity protects against indefinitely replayed metadata; a
-publisher must refresh/sign before expiry even with no code release. Serializer
-clock is injected for tests. Verification rejects expiry/future dates, altered
-fields, unknown paths, wrong architecture/version/identity, digest/size mismatch,
-truncated gzip and dangling/mismatched by-hash copies. Package hashes are streamed.
+symlink/special-file input/output. The current flat Release contains SHA256
+hashes and sizes of exact Packages/Packages.gz plus a UTC Date. New snapshots
+omit Valid-Until; the tradeoff is losing time-bounded replay protection while
+retaining signature, package hash and future-Date checks. Previously signed
+seven-day snapshots are authenticated as historical baselines and cannot
+act as current indexes after expiry. Serializer clock is injected for tests.
+Verification rejects altered fields, unknown paths, wrong architecture/version/
+identity, digest/size mismatch and truncated gzip. Package hashes are streamed.
+The current flat archive does not use a by-hash directory.
 
 Only public key material may enter bootstrap/artifacts. Expected full primary key
 fingerprint is explicit and checked independently; signing subkeys must chain to

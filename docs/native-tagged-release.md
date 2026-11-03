@@ -37,13 +37,20 @@ verification and isolated signed APT acquisition. Cleanup needs the exact
 completed provenance-bound receipt. GitHub Releases carry explanatory metadata,
 not a second installer store. Directory names do not isolate writer grants.
 
-## Renewal and recovery
+## Metadata reissue and recovery
 
-Signed metadata expires after seven days. The existing scheduled refresh verifies
-prior signed authority and reuses identical package bytes; it does not require a
-new application version. Its protected environment may require review, so a
-schedule is not proof of timely renewal. Keep approval and failure ownership;
-never remove a reviewer or weaken signatures to avoid expiry.
+New signed metadata deliberately omits Valid-Until. GPG signatures and all
+package/index hash checks remain mandatory, but replay prevention by metadata
+expiry is no longer provided. Existing seven-day signed metadata remains
+eligible for authenticated historical recovery, even after its expiry; it
+cannot be treated as an unexpired active legacy index.
+
+Metadata-only reissue is manual, runs exclusively from reviewed master tooling
+and requires the protected apt-release environment. It verifies the original
+released tag and package identity, keeps the release's original source commit
+in the manifest and does not create a new application binary or tag. No cron
+job may use release signing secrets or silently write R2. Owner approval and
+public signed-index readback remain mandatory.
 
 Local [signing](native-local-signing.md) and [encrypted recovery](native-signing-backup.md)
 remain optional controlled tools. Key possession and source identity do not prove
@@ -51,8 +58,8 @@ build provenance or authorize release. After accepted publication, corrections
 require a new forward package/release identity. Preserve unrelated objects,
 existing signing identity and peer/native acceptance requirements.
 
-The executable owners are native-tag-publish.yml, native-apt-refresh.yml and
-scripts/native_apt.py/native_r2.py. Private credentials, custody locations and
+The executable owners are native-tag-publish.yml, the manual
+native-apt-refresh.yml and scripts/native_apt.py/native_r2.py. Private credentials, custody locations and
 provider resource wiring belong outside public documentation.
 
 [Historical design and operator record](https://github.com/morozhenko-apps/rquickshare/blob/ed0a626807711008e6ed4ddeb8bdcef564f58d59/docs/native-tagged-release.md) remains in Git history; its old nested archive,

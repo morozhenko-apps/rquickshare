@@ -1,8 +1,7 @@
-name: Refresh signed rQuickShare APT metadata
+name: Reissue signed rQuickShare APT metadata (manual)
 
+# Metadata-only migration/recovery: no unattended signing or R2 writes.
 on:
-  schedule:
-    - cron: "17 8 */3 * *"
   workflow_dispatch:
 
 permissions:
@@ -15,6 +14,7 @@ concurrency:
 jobs:
   discover:
     name: Identify the published immutable source tag
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     environment: apt-release
     outputs:
@@ -60,15 +60,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Pin the exact historical released source before touching signing keys
+      - name: Validate released tag before executing reviewed master tooling
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/native_release_tag.py version "$TAG" >/dev/null
           git fetch origin master "refs/tags/$TAG:refs/tags/$TAG"
           git merge-base --is-ancestor "refs/tags/$TAG^{commit}" "origin/master^{commit}"
-          git checkout --detach "refs/tags/$TAG^{commit}"
-          source_version="$(python3 -c 'import tomllib; print(tomllib.load(open("native_desktop/Cargo.toml", "rb"))["package"]["version"])')"
+          test "$(git rev-parse HEAD^{commit})" = "$(git rev-parse origin/master^{commit})"
+          echo "RELEASE_COMMIT=$(git rev-parse "refs/tags/$TAG^{commit}")" >> "$GITHUB_ENV"
+          source_version="$(git show "refs/tags/$TAG^{commit}:native_desktop/Cargo.toml" |
+            python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
           [[ "$(python3 scripts/native_release_tag.py tag "$source_version")" == "$TAG" ]] || exit 1
       - name: Install pinned SDK before importing keys
         shell: bash
@@ -140,7 +142,7 @@ jobs:
             --keyring "$RUNNER_TEMP/rqs-refresh-private/keyring.gpg" \
             --fingerprint "$SIGNING_FINGERPRINT" --account-id "$RQS_R2_ACCOUNT_ID" \
             --previous "$RUNNER_TEMP/rqs-previous" \
-            --commit "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
+            --commit "$RELEASE_COMMIT" --run-id "$GITHUB_RUN_ID" \
             --receipt "$RUNNER_TEMP/refresh-receipt.json"
           curl -fsS "https://download.morozhenko.com/dist/rQuickShare/linux/InRelease" \
             -o "$RUNNER_TEMP/rqs-renew-public-InRelease"
