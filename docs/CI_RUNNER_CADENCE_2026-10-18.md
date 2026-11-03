@@ -42,6 +42,93 @@ Revert CI commits on dev, retain the protected master SHA and immutable release 
 - Added `scripts/ci-check-workflow-policy.sh`, invoked automatically by Preflight. The exact development Preflight SHA `aec1f1f7bb7579b88ab5980eab32ba0ec1ce78cc` passed in GitHub Actions run `39091401200`; native GTK gate also passed at preceding SHA.
 - **Not yet complete:** no fresh valid release-tag 10x run, no bundled Windows/macOS acceptance, no master promotion. The very large outstanding development branch contains product changes beyond this CI scope. Public hosted runners remain deliberate for untrusted repository safety.
 
+## CI toolchain maintenance
+
+Scope: refresh maintained GitHub Actions implementations while preserving existing
+permissions, triggers, runner routing, cache intent and release/publication gates.
+JavaScript action internals use supported Node24; this is distinct from project Node.
+Project development/build/test tooling targets exact Node26.13.0 LTS. Update
+active pins and exact-version source guards together; compatible broader engine
+floors and immutable historical receipts remain unchanged. Keep Linux libatomic
+prerequisites where Node26 runs in a minimal container.
+Node26 does not bundle Corepack. Install the existing pnpm9.7.0 into a job-local
+RUNNER_TEMP prefix, expose its bin directory through GITHUB_PATH, and keep the
+frozen lockfile and package-manager version unchanged.
+
+Maintained action targets:
+
+- `Swatinem/rust-cache`: `v2.9.3` (`d1527c8f67ef9af357290475d4af4b0fab8f12e0`).
+- `actions/checkout`: `v7.0.1` (`3d3c42e5aac5ba805825da76410c181273ba90b1`).
+- `actions/download-artifact`: `v8.0.2` (`9000827ccba6bdab643e8b6fd33ac0654aef8333`).
+- `actions/setup-go`: `v7.0.0` (`b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`).
+- `actions/upload-artifact`: `v7.0.2` (`cf430e030ddbb5b0abf93d22962f4752f3646cd9`).
+
+Bootstrap regression coverage executes the actual run blocks from all four pnpm
+workflows with a contract fake for npm: normal and Unicode/spaced temp paths,
+install failures, missing RUNNER_TEMP and failed GITHUB_PATH writes. Assert the
+exact pinned package/options, job-local prefix, failure propagation and usable
+exported pnpm shim; no global install or real network is used by these tests.
+
+Milestones:
+
+- [x] Read current source, agent/CI owners, permanent refs and concurrent work.
+- [x] Record scope, compatibility decisions, validation and rollback before code.
+- [x] Apply scoped action/toolchain and directly related source-contract changes.
+- [x] Execute applicable stable checks once at the final gate; report separate
+  known-flaky/stability outcomes and unexecuted native/provider gates.
+- [x] Record the final local source/verification boundary and remaining blockers.
+- [ ] Complete exact-source remote CI and the separately authorized release process.
+
+Planned validation:
+
+- Parse all affected workflow YAML and verify maintained action SHA/runtime identities.
+- Review diffs and preserve permissions, events, routing, signing/publication admission,
+  artifact names/paths and existing non-Node SDK versions.
+- `bash scripts/ci-check-workflow-policy.sh`.
+- `Existing source-contract suites: scripts/tests/test_ci_workflow_policy.py`.
+- `npm run test --prefix app/main`.
+- `python3 -m unittest discover -s scripts/tests -v`.
+- `node --test scripts/tests/*.test.mjs`.
+- `pnpm lint / pnpm ts-check / pnpm exec vitest run in app/main`.
+
+Risk and rollback: action majors may change auth/cache/artifact or build-wrapper
+behavior; Node-major transitions require the existing tooling checks. Revert the
+scoped executable commit and its documentation update separately if needed. This
+maintenance does not authorize protected-branch promotion, tags, store upload,
+runner changes or cloud deployment. Native/device/provider acceptance remains
+independent of local checks. No architecture or application contract changes.
+
+### Final artifact source-contract correction
+
+The final Node source gate found two assertions coupled to the old upload-action reference. Require the maintained exact upload SHA and count actual YAML uses lines, excluding readable pin comments. Preserve the single staging upload, artifact names, retention, source-review/signing/readback and cleanup checks. Rerun the complete affected Node source-contract group; frontend and bootstrap gates already passed.
+
+### Local execution outcome
+
+Applicable local source/tooling gates completed successfully.
+Remote CI, protected release-branch promotion, native/provider/store acceptance and production deployment are not established by this local execution.
+
+Node26.13.0 with bundled npm11.20.0 was used. Non-Node SDK versions were preserved. Application dependency versions were preserved; any required test-tool compatibility correction is documented separately.
+
+Executed commands (paths are relative to this repository; glob notation abbreviates the recorded expanded file list):
+
+- `python3 -m unittest discover -s scripts/tests -v` — exit `0` (STABLE_SOURCE).
+- `bash scripts/ci-check-workflow-policy.sh` — exit `0` (STABLE_SOURCE).
+- `actionlint -config-file .github/actionlint.yaml -shellcheck= -pyflakes= .github/workflows/native-tag-publish.yml .github/workflows/native-apt-refresh.yml .github/workflows/lint.yml .github/workflows/native-gtk-ui.yml` — exit `0` (STABLE_SOURCE).
+- `bash -c 'set -euo pipefail
+pnpm_dir="$RUNNER_TEMP/rquickshare-pnpm"
+npm install --prefix "$pnpm_dir" --no-save --ignore-scripts --no-audit --no-fund pnpm@9.7.0
+echo "$pnpm_dir/node_modules/.bin" >> "$GITHUB_PATH"
+'` — exit `0` (INSTALL).
+- `[app/main] pnpm install --frozen-lockfile` — exit `0` (INSTALL).
+- `[app/main] pnpm lint` — exit `0` (STABLE_NODE).
+- `[app/main] pnpm ts-check` — exit `0` (STABLE_NODE).
+- `[app/main] pnpm exec vitest run` — exit `0` (STABLE_NODE).
+- `node --test scripts/tests/flat-distribution.test.mjs scripts/tests/native-ci-cadence.test.mjs scripts/tests/pr-ci-scope.test.mjs` — exit `0` (STABLE_SOURCE).
+
+New bootstrap regression methods:4, comprising24 parameterized scenarios (Positive8; N3 external install failure8; N7 missing job-local boundary4; N12 failed PATH receipt4). The actual workflow shell blocks execute; only npm is replaced by a contract fake. Frozen pnpm9.7.0 installation and the real frontend gates were also executed independently.
+
+Publication boundary: dev maintenance may be shared with these exact outcomes. Failed gates block completion/release. Main/master, accepted tags, deployment configuration and store identities remain outside this maintenance publication. Rollback uses ordinary reverts of the separate executable commits and this documentation receipt.
+
 ## Build toolchain maintenance integration
 
 The owner approved a scoped integration of the already validated maintenance into the current release branch through a reviewable PR. This authorization supersedes ordinary temporary-branch restrictions for this integration only. Build/CI tool versions change; application behavior, public contracts, data, credentials and immutable release identities remain unchanged. Upstream Actions keep their supported internal runtime; project Node tooling uses the exact maintained LTS pin.
@@ -52,7 +139,7 @@ Plan:
 - [x] Record this plan before executable edits, with documentation and executable changes committed separately.
 - [x] Apply only the reviewed Actions, Node and required compatibility/security corrections; adapt references to existing release workflows. Exclude unrelated accumulated development work.
 - [x] Review complete diff and source invariants, run applicable final stable checks once, and reuse previous suite evidence only with exact source/lock equivalence. Keep native/store and release-only acceptance separate.
-- [ ] Create the scoped PR; integrate only after its exact-head required checks and existing production-admission conditions pass. Preserve concurrent release changes and never bypass branch protection.
+- [x] Create the scoped PR and integrate after its exact-head required checks and production-admission conditions pass (PR #46). Preserve concurrent release changes and never bypass branch protection.
 
 Rollback uses an ordinary revert of the scoped maintenance commits; no tag movement, resource recreation or provider/data rollback is part of this task. Existing automatic Git deployment ownership and triggers are preserved. A source/PR pass alone does not establish effective production Node or native/store acceptance.
 

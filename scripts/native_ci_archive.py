@@ -65,7 +65,8 @@ def restore(store, output, keyring, fingerprint):
         apt.require(architectures in [["amd64"], ["arm64"], ["amd64", "arm64"]], "Invalid channel architectures")
         from email.utils import parsedate_to_datetime
         date = parsedate_to_datetime(fields["Date"])
-        apt.require(apt.read(base / "Release") == apt.release(root, architectures, date),
+        apt.require(apt.read(base / "Release") ==
+                    apt.release(root, architectures, date, legacy_valid_until="Valid-Until" in fields),
                     "Flat indexes differ from signed Release")
         entries = apt.paragraphs(apt.read(base / "Packages"))
         apt.require(len(entries) == len(architectures), "Unexpected flat package inventory")
