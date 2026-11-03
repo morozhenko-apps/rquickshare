@@ -175,3 +175,19 @@ test("Given normal dev changes Then only explicit verification marker or PR can 
   }
   assert.doesNotMatch(core, /if: github\.event_name != 'pull_request'/);
 });
+
+test("Given read-only S3 visibility diagnosis Then protected master admission never signs or publishes", () => {
+  const workflow = read(".github/workflows/native-apt-r2-probe.yml");
+  assert.ok(workflow.includes("workflow_dispatch:"));
+  assert.ok(workflow.includes("expected_sha256:"));
+  assert.ok(workflow.includes("if: github.ref == 'refs/heads/master'"));
+  assert.equal((workflow.match(/^    environment: apt-release$/gm) || []).length, 1);
+  assert.ok(workflow.includes("native_r2_probe.py"));
+  assert.ok(workflow.includes("RQS_R2_ACCESS_KEY_ID:"));
+  assert.ok(workflow.includes("RQS_R2_SECRET_ACCESS_KEY:"));
+  assert.ok(workflow.includes("EXPECTED_SHA256:"));
+  assert.doesNotMatch(workflow, /^  (schedule|push|pull_request):/m);
+  assert.doesNotMatch(workflow, /RQS_APT_SECRET_SUBKEY|RQS_APT_SUBKEY_PASSPHRASE|native_r2\.py publish|native_apt\.py sign|--first-release/);
+  assert.ok(workflow.includes("permissions:\n  contents: read"));
+});
+
