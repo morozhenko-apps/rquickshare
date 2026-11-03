@@ -106,18 +106,22 @@ test("Given a signing keyring path from CI Then it is normalized before strict k
     "A raw argv string must never reach the pathlib-only keyring validator");
 });
 
-test("Given APT refresh When importing the signing subkey Then keyring argv is a Path", () => {
+test("Given metadata reissue Then protected manual master admission preserves original release provenance", () => {
   const workflow = read(".github/workflows/native-apt-refresh.yml");
+  assert.ok(workflow.includes("workflow_dispatch:"));
+  assert.ok(!workflow.includes("  schedule:"));
+  assert.ok(workflow.includes("github.ref == 'refs/heads/master'"));
+  assert.ok(workflow.includes("environment: apt-release"));
+  assert.ok(!workflow.includes("git checkout --detach"));
+  assert.ok(workflow.includes('git rev-parse "refs/tags/$TAG^{commit}"'));
+  assert.ok(workflow.includes('--commit "$RELEASE_COMMIT"'));
   const signingStep = workflow.split("      - name: Import protected release signing subkey only\n")[1]
     ?.split("      - name: Authenticate current R2 and regenerate the same package metadata\n")[0];
-  assert.ok(signingStep, "APT refresh signer admission step must exist");
-  assert.ok(signingStep.includes("from pathlib import Path"), "refresh must import Path");
-  assert.ok(signingStep.includes("apt.public_key(Path(sys.argv[1]), sys.argv[2])"),
-    "refresh must normalize keyring argv to Path before strict validation");
-  assert.ok(!signingStep.includes("apt.public_key(sys.argv[1],"),
-    "the raw argv string must never reach the pathlib-only keyring validator");
-  assert.ok(signingStep.includes("scripts/native_ci_signing_key.py"),
-    "the existing signer-only subkey admission check must remain enforced");
+  assert.ok(signingStep, "Manual reissue signer admission must exist");
+  assert.ok(signingStep.includes("from pathlib import Path"));
+  assert.ok(signingStep.includes("apt.public_key(Path(sys.argv[1]), sys.argv[2])"));
+  assert.ok(!signingStep.includes("apt.public_key(sys.argv[1],"));
+  assert.ok(signingStep.includes("scripts/native_ci_signing_key.py"));
 });
 
 
