@@ -50,7 +50,12 @@ and requires the protected apt-release environment. It verifies the original
 released tag and package identity, keeps the release's original source commit
 in the manifest and does not create a new application binary or tag. No cron
 job may use release signing secrets or silently write R2. Owner approval and
-public signed-index readback remain mandatory.
+public signed-index readback remain mandatory. The manual recovery workflow uses
+one protected job and therefore one deployment approval. Recovery logs may
+report stage names, non-sensitive outcome classes and package counts, never
+credentials, provider internals, package paths or signing material. An uncertain
+prior snapshot blocks publication; do not turn verification errors into a new
+first-release path. Rerun only after the failing stage has been identified.
 
 Local [signing](native-local-signing.md) and [encrypted recovery](native-signing-backup.md)
 remain optional controlled tools. Key possession and source identity do not prove
