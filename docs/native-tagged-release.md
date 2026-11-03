@@ -57,6 +57,13 @@ credentials, provider internals, package paths or signing material. An uncertain
 prior snapshot blocks publication; do not turn verification errors into a new
 first-release path. Rerun only after the failing stage has been identified.
 
+When a manual reissue reports a conflicting S3 NoSuchKey for an existing signed
+index, use the separate protected, read-only R2 visibility diagnostic with the
+SHA256 independently retrieved through Wrangler. It checks repeated S3 GETs
+across fresh SDK connections using the same environment-scoped credentials and
+also checks release-tag selection. It never loads signing material or writes
+storage objects. An absent, mismatching or inconsistent read blocks publication.
+
 Local [signing](native-local-signing.md) and [encrypted recovery](native-signing-backup.md)
 remain optional controlled tools. Key possession and source identity do not prove
 build provenance or authorize release. After accepted publication, corrections
