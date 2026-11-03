@@ -51,8 +51,15 @@ grep -Fq 'git rev-parse refs/release-validation/native-tag^{commit}' .github/wor
   fail 'Native release admission must check the remote tag target commit'
 grep -Fq '== "$GITHUB_SHA"' .github/workflows/native-tag-publish.yml ||
   fail 'Native release admission must match the triggering tag commit'
+grep -Fq 'workflow_dispatch:' .github/workflows/native-apt-refresh.yml ||
+  fail 'APT metadata reissue must remain manually accessible'
+if grep -Eq '^  schedule:' .github/workflows/native-apt-refresh.yml; then
+  fail 'APT metadata reissue must not run unattended'
+fi
 grep -Fq 'native_release_tag.py version "$TAG"' .github/workflows/native-apt-refresh.yml ||
-  fail 'APT refresh does not verify the Native tag namespace'
+  fail 'APT metadata reissue must verify the original Native tag'
+grep -Fq -- '--commit "$RELEASE_COMMIT"' .github/workflows/native-apt-refresh.yml ||
+  fail 'APT metadata reissue must preserve released source provenance'
 grep -Fq 'release_tag.tag_from_version' scripts/native_ci_archive.py ||
   fail 'APT archive does not derive the Native source tag'
 grep -Fq 'needs: admission' .github/workflows/native-tag-publish.yml ||

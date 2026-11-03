@@ -35,8 +35,13 @@ interoperability or Windows/macOS support.
 
 Flat indexes are not a multi-object transaction. APT may reject a transient
 signed-index mismatch during a switch and retry; it must not bypass signatures
-or hashes. Retain the seven-day signed metadata lifetime and scheduled renewal.
-Recovery verifies current InRelease, indexes and the existing immutable package.
+or hashes. New signed Release metadata deliberately has no Valid-Until, so an
+infrequently updated channel does not stop working between releases. This
+forgoes time-bounded replay protection but keeps GPG, exact package hashes and
+scoped trust. A manual, approved reissue can refresh metadata without changing
+the immutable package or its original source identity. Recovery verifies the
+signed InRelease, indexes and existing immutable package; legacy seven-day
+authority is accepted only as an authenticated prior baseline.
 Use the latest pointer only as advisory source discovery, followed by protected
 source and signed-archive verification.
 

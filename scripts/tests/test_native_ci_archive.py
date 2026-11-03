@@ -87,6 +87,28 @@ class NativeCIArchiveTests(unittest.TestCase):
             self.assertTrue(all(body.closed for body in client.bodies))
             self.assertFalse(any("snapshots/" in key or "pool/" in key for key in client.requests))
 
+    def test_given_signed_legacy_channel_when_recovered_then_pre_migration_authority_still_verifies(self):
+        # External S3 transport is fake; the signing key and GPG verification are real.
+        with tempfile.TemporaryDirectory() as temporary:
+            old = Path(temporary) / "legacy"
+            shutil.copytree(self.signed, old)
+            (old / "linux/Release").write_bytes(
+                apt.release(old, ["amd64"], self.now, legacy_valid_until=True))
+            apt.run("gpg", "--no-options", "--homedir", str(self.home), "--batch",
+                    "--yes", "--local-user", self.fingerprint, "--digest-algo", "SHA256",
+                    "--output", str(old / "linux/InRelease"), "--clearsign",
+                    str(old / "linux/Release"))
+            objects, active = r2.publication(old, self.keyring, self.fingerprint, now=self.now)
+            manifest = r2.latest_manifest(old, self.keyring, self.fingerprint, "a" * 40, self.now)
+            client = FakeS3({**{r2.PREFIX + item.key: item.source.read_bytes() for item in objects},
+                             r2.PREFIX + active.key: active.source.read_bytes(),
+                             r2.PREFIX + "latest.json": json.dumps(manifest).encode()})
+            recovered = Path(temporary) / "recovered"
+            self.assertTrue(archive.restore(r2.S3Store(client), recovered, self.keyring, self.fingerprint))
+            self.assertEqual(apt.verify(recovered, self.keyring, self.fingerprint, self.now)["version"], "1.0.0-1")
+            self.assertEqual((recovered / "linux/InRelease").read_bytes(),
+                             (old / "linux/InRelease").read_bytes())
+
     def test_given_flat_manifest_when_source_is_selected_then_only_canonical_native_tag_is_proposed(self):
         client, active = self.channel()
         self.assertEqual(archive.current_tag(r2.S3Store(client)), "native/v1.0.0")
