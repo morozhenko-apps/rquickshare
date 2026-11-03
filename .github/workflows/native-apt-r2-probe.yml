@@ -1,0 +1,41 @@
+name: Diagnose signed rQuickShare APT R2 visibility (read-only)
+
+# A diagnostic only: never signs, puts or deletes any R2 object.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha256:
+        description: SHA256 of the current InRelease from an independent Wrangler read
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    environment: apt-release
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned R2 read client
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/rqs-readonly-r2"
+          "$RUNNER_TEMP/rqs-readonly-r2/bin/python" -m pip install -r scripts/requirements-r2.txt
+      - name: Check S3 object visibility with protected environment credentials
+        env:
+          RQS_R2_ACCOUNT_ID: ${{ vars.RQS_R2_ACCOUNT_ID }}
+          RQS_R2_ACCESS_KEY_ID: ${{ secrets.RQS_R2_ACCESS_KEY_ID }}
+          RQS_R2_SECRET_ACCESS_KEY: ${{ secrets.RQS_R2_SECRET_ACCESS_KEY }}
+          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/rqs-readonly-r2/bin/python" scripts/native_r2_probe.py \
+            --account-id "$RQS_R2_ACCOUNT_ID" --expected-sha256 "$EXPECTED_SHA256"
