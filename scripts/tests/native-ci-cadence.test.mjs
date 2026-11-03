@@ -114,6 +114,8 @@ test("Given metadata reissue Then protected manual master admission preserves or
   assert.ok(workflow.includes("environment: apt-release"));
   assert.ok(!workflow.includes("git checkout --detach"));
   assert.ok(workflow.includes('git rev-parse "refs/tags/$TAG^{commit}"'));
+  assert.ok(workflow.includes('git show "refs/tags/$TAG^{commit}:native_desktop/Cargo.toml"'));
+  assert.ok(!workflow.includes('tomllib.load(open("native_desktop/Cargo.toml"'));
   assert.ok(workflow.includes('--commit "$RELEASE_COMMIT"'));
   const signingStep = workflow.split("      - name: Import protected release signing subkey only\n")[1]
     ?.split("      - name: Authenticate current R2 and regenerate the same package metadata\n")[0];

@@ -69,7 +69,8 @@ jobs:
           git merge-base --is-ancestor "refs/tags/$TAG^{commit}" "origin/master^{commit}"
           test "$(git rev-parse HEAD^{commit})" = "$(git rev-parse origin/master^{commit})"
           echo "RELEASE_COMMIT=$(git rev-parse "refs/tags/$TAG^{commit}")" >> "$GITHUB_ENV"
-          source_version="$(python3 -c 'import tomllib; print(tomllib.load(open("native_desktop/Cargo.toml", "rb"))["package"]["version"])')"
+          source_version="$(git show "refs/tags/$TAG^{commit}:native_desktop/Cargo.toml" |
+            python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
           [[ "$(python3 scripts/native_release_tag.py tag "$source_version")" == "$TAG" ]] || exit 1
       - name: Install pinned SDK before importing keys
         shell: bash
