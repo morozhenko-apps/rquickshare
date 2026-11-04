@@ -64,6 +64,18 @@ across fresh SDK connections using the same environment-scoped credentials and
 also checks release-tag selection. It never loads signing material or writes
 storage objects. An absent, mismatching or inconsistent read blocks publication.
 
+A repeated manual recovery failure is treated as a trust-boundary problem, not
+a reason to downgrade to first-release behavior. Admission should select the
+published native tag and restore the authenticated archive in one R2 client
+session, reusing the exact bounded initial InRelease observation, and verify
+that the manifest tag matches the signed package version. Do this with the
+public APT keyring before importing any private signing subkey. At the end of
+recovery, re-read the active R2 authority and reject any mismatch or absence.
+Only then validate the immutable native tag, import the signer and prepare
+fresh metadata. Preserve existing conditional R2 CAS and public readback.
+The earlier separate-step tag selection is the rollback boundary; no package
+bytes, release tag or publication identity is changed by this reordering.
+
 Local [signing](native-local-signing.md) and [encrypted recovery](native-signing-backup.md)
 remain optional controlled tools. Key possession and source identity do not prove
 build provenance or authorize release. After accepted publication, corrections
