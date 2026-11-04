@@ -296,6 +296,16 @@ class NativeDebTests(unittest.TestCase):
                     else:
                         package.verify(artifact, smoke=False)
 
+    def test_given_valid_archive_when_validated_as_library_then_stdout_stays_empty(self):
+        # Library validation is not the human-facing CLI and must not corrupt caller tokens.
+        with tempfile.TemporaryDirectory() as temporary:
+            artifact = self.create(Path(temporary))
+            captured = io.StringIO()
+            with contextlib.redirect_stdout(captured):
+                result = package.verify(artifact, smoke=False)
+            self.assertEqual(result["Version"], "1.0.0-1")
+            self.assertEqual(captured.getvalue(), "")
+
     def test_given_checksum_when_corrupt_multiple_or_wrong_package_then_reject_before_extraction(self):
         # Arrange / Act / Assert
         with tempfile.TemporaryDirectory() as temporary:

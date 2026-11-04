@@ -86,6 +86,16 @@ The executable owners are native-tag-publish.yml, the manual
 native-apt-refresh.yml and scripts/native_apt.py/native_r2.py. Private credentials, custody locations and
 provider resource wiring belong outside public documentation.
 
+Machine-facing recovery commands must write exactly one result token to stdout:
+`previous` for standalone prior-baseline restore, or a canonical `native/v*`
+tag for combined restoration. Library validation must not write human-readable
+package paths or status lines to stdout. Such output corrupts Bash command
+substitution and must not be interpreted as a missing R2 object. Keep user-facing
+verification messages at the explicit CLI boundary; verify the exact stdout
+contract with a real signed archive fixture and the fake S3 transport before
+requesting another protected run. A green source gate alone does not prove the
+production workflow stdout contract.
+
 [Historical design and operator record](https://github.com/morozhenko-apps/rquickshare/blob/ed0a626807711008e6ed4ddeb8bdcef564f58d59/docs/native-tagged-release.md) remains in Git history; its old nested archive,
 Worker, binary-attachment and pending-publication instructions are superseded.
 
