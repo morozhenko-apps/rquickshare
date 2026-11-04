@@ -252,7 +252,6 @@ def verify(package, smoke=True):
             settings = directory / "fixture.json"
             settings.write_text('{"visibility":0}')
             require("no service started" in run(str(daemon), "--settings", str(settings), "--check", env=clean), "Offline settings check failed")
-    print("Native Debian package verified:", package)
     return fields
 
 
@@ -303,6 +302,7 @@ def build(args):
         subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(stage), str(package)], check=True, env=environment)
     package.with_suffix(".deb.sha256").write_text(checksum(package))
     verify(package)
+    print("Native Debian package verified:", package)
 
 
 def main():
@@ -317,7 +317,11 @@ def main():
     check.add_argument("package", type=Path)
     args = parser.parse_args()
     try:
-        build(args) if args.command == "build" else verify(args.package)
+        if args.command == "build":
+            build(args)
+        else:
+            verify(args.package)
+            print("Native Debian package verified:", args.package.resolve(strict=True))
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print("Native package failed:", error, file=sys.stderr)
         return 1

@@ -1,5 +1,7 @@
+import contextlib
 import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 import shutil
@@ -7,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 import native_apt as apt
@@ -136,6 +139,29 @@ class NativeCIArchiveTests(unittest.TestCase):
             output = Path(temporary) / "previous"
             with self.assertRaises(ValueError):
                 archive.select_and_restore(r2.S3Store(client), output, self.keyring, self.fingerprint)
+
+    def test_given_restored_archive_when_cli_returns_machine_result_then_stdout_is_one_token(self):
+        # Real GPG and Debian validation under a fake S3 boundary.
+        # The exact stdout is consumed by Bash command substitution in Actions.
+        for combined, expected in [(False, "previous\n"), (True, "native/v1.0.0\n")]:
+            with self.subTest(combined=combined), tempfile.TemporaryDirectory() as temporary:
+                client, _ = self.channel()
+                output = Path(temporary) / "restored"
+                arguments = ["native_ci_archive.py", "--account-id", "a" * 32,
+                             "--output", str(output), "--keyring", str(self.keyring),
+                             "--fingerprint", self.fingerprint]
+                if combined:
+                    arguments.append("--restore-and-select-tag")
+                captured = io.StringIO()
+                with (
+                    patch.object(sys, "argv", arguments),
+                    patch.object(r2, "connect", return_value=r2.S3Store(client)),
+                    contextlib.redirect_stdout(captured),
+                ):
+                    self.assertEqual(archive.main(), 0)
+                self.assertEqual(captured.getvalue(), expected)
+                self.assertTrue((output / r2.ACTIVE).is_file())
+                self.assertTrue(all(body.closed for body in client.bodies))
 
     def test_given_signed_legacy_channel_when_recovered_then_pre_migration_authority_still_verifies(self):
         # External S3 transport is fake; the signing key and GPG verification are real.
