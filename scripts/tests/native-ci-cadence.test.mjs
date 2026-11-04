@@ -117,25 +117,35 @@ test("Given metadata reissue Then protected manual master admission preserves or
   assert.ok(!workflow.includes("  discover:"));
   assert.ok(!workflow.includes("needs: discover"));
   assert.ok(workflow.includes("if: github.ref == 'refs/heads/master'"));
-  assert.ok(workflow.includes("Select published source tag from protected R2"));
+  assert.ok(workflow.includes("Authenticate existing signed R2 archive and select its source tag"));
+  assert.ok(workflow.includes("--restore-and-select-tag"));
+  assert.ok(workflow.includes("Import protected public APT keyring before R2 recovery"));
+  assert.ok(workflow.indexOf("Import protected public APT keyring before R2 recovery") <
+    workflow.indexOf("Authenticate existing signed R2 archive and select its source tag"));
   assert.ok(workflow.includes("printf 'TAG=%s"));
-  assert.ok(workflow.indexOf("Select published source tag from protected R2") <
+  assert.ok(workflow.indexOf("Authenticate existing signed R2 archive and select its source tag") <
     workflow.indexOf("Import protected release signing subkey only"));
-  assert.ok(workflow.includes("Previous signed archive authenticated"));
+  assert.ok(workflow.includes("Existing signed APT baseline authenticated and source tag selected"));
   assert.ok(workflow.includes("Recovered package count:"));
-  assert.ok(workflow.includes("Previous signed archive recovery failed; publication blocked"));
+  assert.ok(workflow.includes("Existing signed archive verification failed; publication blocked"));
   assert.ok(!workflow.includes("git checkout --detach"));
   assert.ok(workflow.includes('git rev-parse "refs/tags/$TAG^{commit}"'));
   assert.ok(workflow.includes('git show "refs/tags/$TAG^{commit}:native_desktop/Cargo.toml"'));
   assert.ok(!workflow.includes('tomllib.load(open("native_desktop/Cargo.toml"'));
   assert.ok(workflow.includes('--commit "$RELEASE_COMMIT"'));
+  const publicStep = workflow.split("      - name: Import protected public APT keyring before R2 recovery\n")[1]
+    ?.split("      - name: Authenticate existing signed R2 archive and select its source tag\n")[0];
+  assert.ok(publicStep?.includes("apt.public_key(Path(sys.argv[1]), sys.argv[2])"));
+  assert.ok(!publicStep.includes("SUBKEY_B64"));
   const signingStep = workflow.split("      - name: Import protected release signing subkey only\n")[1]
-    ?.split("      - name: Authenticate current R2 and regenerate the same package metadata\n")[0];
+    ?.split("      - name: Regenerate and verify the existing signed APT snapshot metadata\n")[0];
   assert.ok(signingStep, "Manual reissue signer admission must exist");
-  assert.ok(signingStep.includes("from pathlib import Path"));
-  assert.ok(signingStep.includes("apt.public_key(Path(sys.argv[1]), sys.argv[2])"));
-  assert.ok(!signingStep.includes("apt.public_key(sys.argv[1],"));
+  assert.ok(!signingStep.includes("KEYRING_B64"));
   assert.ok(signingStep.includes("scripts/native_ci_signing_key.py"));
+  assert.ok(workflow.indexOf("Authenticate existing signed R2 archive and select its source tag") <
+    workflow.indexOf("Validate released tag before executing reviewed master tooling"));
+  assert.ok(workflow.indexOf("Validate released tag before executing reviewed master tooling") <
+    workflow.indexOf("Import protected release signing subkey only"));
 });
 
 

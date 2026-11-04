@@ -87,6 +87,56 @@ class NativeCIArchiveTests(unittest.TestCase):
             self.assertTrue(all(body.closed for body in client.bodies))
             self.assertFalse(any("snapshots/" in key or "pool/" in key for key in client.requests))
 
+    def test_given_signed_archive_and_manifest_when_recovered_together_then_single_observation_binds_tag(self):
+        client, active = self.channel()
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "previous"
+            tag = archive.select_and_restore(r2.S3Store(client), output, self.keyring, self.fingerprint)
+            self.assertEqual(tag, "native/v1.0.0")
+            self.assertEqual((output / r2.ACTIVE).read_bytes(), active.source.read_bytes())
+            active_reads = [key for key in client.requests if key == r2.PREFIX + r2.ACTIVE]
+            self.assertEqual(len(active_reads), 2, "One original read and one final CAS baseline read")
+            self.assertTrue(all(body.closed for body in client.bodies))
+
+    def test_given_absent_or_mismatched_authority_when_combined_then_reject_before_signing(self):
+        for kind in ["missing-active", "manifest-version-conflict", "missing-manifest"]:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                client, active = self.channel()
+                if kind == "missing-active":
+                    del client.objects[r2.PREFIX + active.key]
+                elif kind == "missing-manifest":
+                    del client.objects[r2.PREFIX + "latest.json"]
+                else:
+                    key = r2.PREFIX + "latest.json"
+                    manifest = json.loads(client.objects[key])
+                    manifest["version"] = "2.0.0"
+                    manifest["tag"] = "native/v2.0.0"
+                    client.objects[key] = json.dumps(manifest).encode()
+                output = Path(temporary) / "previous"
+                with self.assertRaises(ValueError):
+                    archive.select_and_restore(r2.S3Store(client), output, self.keyring, self.fingerprint)
+                if kind != "manifest-version-conflict":
+                    self.assertFalse(output.exists())
+
+    def test_given_r2_authority_changes_during_restore_then_combined_mode_aborts(self):
+        client, active = self.channel()
+        key = r2.PREFIX + active.key
+        original_get = client.get_object
+        reads = [0]
+
+        def changing_get(Bucket, Key):
+            if Key == key:
+                reads[0] += 1
+                if reads[0] == 2:
+                    del client.objects[key]
+            return original_get(Bucket=Bucket, Key=Key)
+
+        client.get_object = changing_get
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "previous"
+            with self.assertRaises(ValueError):
+                archive.select_and_restore(r2.S3Store(client), output, self.keyring, self.fingerprint)
+
     def test_given_signed_legacy_channel_when_recovered_then_pre_migration_authority_still_verifies(self):
         # External S3 transport is fake; the signing key and GPG verification are real.
         with tempfile.TemporaryDirectory() as temporary:

@@ -40,9 +40,9 @@ def copy_object(client, key, target, maximum):
         body.close()
 
 
-def restore(store, output, keyring, fingerprint):
-    """False only for a confirmed missing InRelease; all other failures are fatal."""
-    current = store.inspect(r2.ACTIVE, 32768, retain=True)
+def restore(store, output, keyring, fingerprint, *, active=None):
+    """False only for confirmed absence; active can reuse a bounded S3 observation."""
+    current = store.inspect(r2.ACTIVE, 32768, retain=True) if active is None else active
     if current is None:
         return False
     apt.require(current.data is not None and hashlib.sha256(current.data).hexdigest() == current.sha256,
@@ -87,9 +87,10 @@ def restore(store, output, keyring, fingerprint):
     return True
 
 
-def current_tag(store):
-    """Advisory source tag; refresh independently authenticates the signed archive."""
-    if store.inspect(r2.ACTIVE, 32768, retain=True) is None:
+def current_tag(store, *, active=None):
+    """Advisory tag; combined recovery supplies the same bounded S3 observation."""
+    observed = store.inspect(r2.ACTIVE, 32768, retain=True) if active is None else active
+    if observed is None:
         return None
     current = store.inspect("latest.json", 32768, retain=True)
     apt.require(current is not None and current.data is not None, "Published manifest is missing")
@@ -105,13 +106,30 @@ def current_tag(store):
     return tag
 
 
+def select_and_restore(store, output, keyring, fingerprint):
+    """One S3 session; same signed InRelease binds the tag lookup and restore."""
+    active = store.inspect(r2.ACTIVE, 32768, retain=True)
+    apt.require(active is not None, "Existing signed APT authority is missing")
+    tag = current_tag(store, active=active)
+    apt.require(tag is not None, "Existing published source tag is missing")
+    apt.require(restore(store, output, keyring, fingerprint, active=active),
+                "Existing signed APT archive was not restored")
+    state = apt.verify(output, keyring, fingerprint, check_time=False)
+    version = state["version"].rsplit("-", 1)[0]
+    apt.require(release_tag.tag_from_version(version) == tag,
+                "Published manifest and signed package version disagree")
+    return tag
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--keyring", type=Path)
     parser.add_argument("--fingerprint")
-    parser.add_argument("--select-tag", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--select-tag", action="store_true")
+    mode.add_argument("--restore-and-select-tag", action="store_true")
     args = parser.parse_args()
     store = None
     try:
@@ -124,8 +142,11 @@ def main():
         apt.require(not args.output.exists(), "Existing restored output is forbidden")
         apt.public_key(args.keyring, args.fingerprint)
         store = r2.connect(args.account_id)
-        has_previous = restore(store, args.output, args.keyring, args.fingerprint)
-        print("previous" if has_previous else "first")
+        if args.restore_and_select_tag:
+            print(select_and_restore(store, args.output, args.keyring, args.fingerprint))
+        else:
+            has_previous = restore(store, args.output, args.keyring, args.fingerprint)
+            print("previous" if has_previous else "first")
         return 0
     except Exception as error:
         print("Prior release recovery failed:", type(error).__name__, file=sys.stderr)
